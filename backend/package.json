@@ -11,7 +11,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:e2e": "jest --config jest.e2e.config.js",
-    "migrate": "ts-node scripts/migrate.ts",
+    "migrate": "node scripts/migrate.js",
     "seed": "ts-node scripts/seed.ts",
     "rollback": "ts-node scripts/rollback.ts",
     "lint": "eslint src/**/*.ts",
