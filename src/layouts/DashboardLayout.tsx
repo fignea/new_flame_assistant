@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   MessageSquare, 
   Users, 
@@ -10,7 +11,8 @@ import {
   X,
   Sun,
   Moon,
-  Flame
+  Flame,
+  LogOut
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useApp } from '../contexts/AppContext';
@@ -21,22 +23,29 @@ interface DashboardLayoutProps {
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const { theme, toggleTheme } = useTheme();
-  const { currentPage, setCurrentPage } = useApp();
+  const { user, logout } = useApp();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const navigation = [
-    { name: 'Dashboard', href: 'dashboard', icon: Zap, current: currentPage === 'dashboard' },
-    { name: 'Inbox', href: 'inbox', icon: MessageSquare, current: currentPage === 'inbox' },
-    { name: 'Contactos', href: 'contacts', icon: Users, current: currentPage === 'contacts' },
-    { name: 'Documentos', href: 'documents', icon: FileText, current: currentPage === 'documents' },
-    { name: 'Asistentes', href: 'assistants', icon: Bot, current: currentPage === 'assistants' },
-    { name: 'Integraciones', href: 'integrations', icon: Zap, current: currentPage === 'integrations' },
-    { name: 'Configuración', href: 'settings', icon: Settings, current: currentPage === 'settings' },
+    { name: 'Dashboard', href: '/dashboard', icon: Zap },
+    { name: 'Inbox', href: '/inbox', icon: MessageSquare },
+    { name: 'Contactos', href: '/contacts', icon: Users },
+    { name: 'Documentos', href: '/documents', icon: FileText },
+    { name: 'Asistentes', href: '/assistants', icon: Bot },
+    { name: 'Integraciones', href: '/integrations', icon: Zap },
+    { name: 'Configuración', href: '/config', icon: Settings },
   ];
 
-  const handleNavigation = (page: string) => {
-    setCurrentPage(page);
+  const handleNavigation = (href: string) => {
+    navigate(href);
     setSidebarOpen(false);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
   };
 
   return (
@@ -76,12 +85,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
           <nav className="flex-1 p-4 space-y-2">
             {navigation.map((item) => {
               const Icon = item.icon;
+              const isActive = location.pathname === item.href;
               return (
                 <button
                   key={item.name}
                   onClick={() => handleNavigation(item.href)}
                   className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-                    item.current
+                    isActive
                       ? 'bg-gradient-to-r from-purple-500/10 to-pink-500/10 dark:from-purple-500/20 dark:to-pink-500/20 border-2 border-purple-500/50 text-purple-600 dark:text-purple-400'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-white/50 dark:hover:bg-dark-surface/50 hover:text-gray-900 dark:hover:text-white'
                   }`}
@@ -93,8 +103,28 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
             })}
           </nav>
 
-          {/* Theme toggle */}
-          <div className="p-4 border-t border-gray-200/50 dark:border-dark-border/50">
+          {/* User info and actions */}
+          <div className="p-4 border-t border-gray-200/50 dark:border-dark-border/50 space-y-3">
+            {/* User info */}
+            {user && (
+              <div className="flex items-center space-x-3 px-4 py-3 rounded-2xl bg-white/50 dark:bg-dark-surface/50 backdrop-blur-sm border border-gray-200/50 dark:border-dark-border/50">
+                <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                  <span className="text-sm font-bold text-white">
+                    {user.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {user.name}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {user.email}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Theme toggle */}
             <button
               onClick={toggleTheme}
               className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl bg-white/50 dark:bg-dark-surface/50 backdrop-blur-sm border border-gray-200/50 dark:border-dark-border/50 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
@@ -107,6 +137,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
               <span className="font-medium">
                 {theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}
               </span>
+            </button>
+
+            {/* Logout button */}
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl bg-red-50 dark:bg-red-900/20 backdrop-blur-sm border border-red-200/50 dark:border-red-800/50 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="font-medium">Cerrar Sesión</span>
             </button>
           </div>
         </div>

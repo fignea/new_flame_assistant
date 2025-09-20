@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Flame, 
   Shield, 
@@ -15,11 +16,10 @@ import {
   Bot 
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { useApp } from '../contexts/AppContext';
 
 const LandingPage: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
-  const { setCurrentPage } = useApp();
+  const navigate = useNavigate();
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -56,7 +56,7 @@ const LandingPage: React.FC = () => {
   ];
 
   const handleGetStarted = () => {
-    setCurrentPage('dashboard');
+    navigate('/login');
   };
 
   return (

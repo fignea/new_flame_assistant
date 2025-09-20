@@ -10,8 +10,6 @@ interface User {
 }
 
 interface AppContextType {
-  currentPage: string;
-  setCurrentPage: (page: string) => void;
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -37,7 +35,6 @@ interface AppProviderProps {
 }
 
 export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
-  const [currentPage, setCurrentPage] = useState('landing');
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -53,7 +50,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
           const response = await apiService.getProfile();
           if (response.success && response.data) {
             setUser(response.data);
-            setCurrentPage('dashboard');
           }
         }
       } catch (error) {
@@ -85,7 +81,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         
         // Actualizar estado
         setUser(userData);
-        setCurrentPage('dashboard');
       } else {
         throw new Error(response.message || 'Error al iniciar sesión');
       }
@@ -114,7 +109,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         
         // Actualizar estado
         setUser(userData);
-        setCurrentPage('dashboard');
       } else {
         throw new Error(response.message || 'Error al registrarse');
       }
@@ -139,7 +133,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       localStorage.removeItem('refreshToken');
       apiService.setToken(null);
       setUser(null);
-      setCurrentPage('landing');
     }
   };
 
@@ -198,8 +191,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   };
 
   const value: AppContextType = {
-    currentPage,
-    setCurrentPage,
     user,
     isAuthenticated,
     isLoading,
