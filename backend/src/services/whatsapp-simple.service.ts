@@ -153,8 +153,16 @@ class WhatsAppSimpleService {
           if (session) {
             session.isConnected = true;
             session.isAuthenticated = true;
-            session.phoneNumber = 'Usuario WhatsApp';
-            session.userName = 'Usuario Conectado';
+            // Obtener información real del usuario si está disponible
+            try {
+              const userInfo = sock.user;
+              session.phoneNumber = userInfo?.id?.split('@')[0] || 'Usuario WhatsApp';
+              session.userName = userInfo?.name || 'Usuario Conectado';
+            } catch (error) {
+              logger.error(`Error getting user info for ${userId}:`, error);
+              session.phoneNumber = 'Usuario WhatsApp';
+              session.userName = 'Usuario Conectado';
+            }
             session.lastSeen = new Date();
             delete session.qrCode;
           }

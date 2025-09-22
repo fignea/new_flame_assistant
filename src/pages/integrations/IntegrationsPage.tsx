@@ -36,15 +36,20 @@ export const IntegrationsPage: React.FC = () => {
     isAuthenticated: boolean;
     phoneNumber?: string;
     userName?: string;
+    lastSeen?: string;
   } | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
 
   const integrations: Integration[] = [
     {
       id: 'whatsapp-web',
       name: 'WhatsApp Web',
       description: whatsappStatus?.isConnected 
-        ? `Conectado como ${whatsappStatus.userName || whatsappStatus.phoneNumber || 'Usuario'}`
+        ? `Conectado como ${whatsappStatus.userName || 'Usuario WhatsApp'}${whatsappStatus.phoneNumber ? ` (${whatsappStatus.phoneNumber})` : ''}${whatsappStatus.lastSeen ? ` - Última conexión: ${new Date(whatsappStatus.lastSeen).toLocaleString()}` : ''}`
         : 'Conecta tu cuenta de WhatsApp Web para enviar y recibir mensajes',
       icon: MessageCircle,
       available: true,
@@ -230,12 +235,23 @@ export const IntegrationsPage: React.FC = () => {
           setWhatsappStatus(response.data);
           setWhatsappQR(null);
           setIsGeneratingQR(false);
+          
+          // Mostrar notificación de conexión exitosa
+          setError(null);
+          setNotification({
+            type: 'success',
+            message: `¡WhatsApp conectado exitosamente! Conectado como ${response.data.userName || 'Usuario WhatsApp'}`
+          });
+          
+          // Limpiar notificación después de 5 segundos
+          setTimeout(() => setNotification(null), 5000);
+          
           clearInterval(interval);
         }
       } catch (error) {
         console.error('Error checking connection status:', error);
       }
-    }, 3000); // Verificar cada 3 segundos
+    }, 2000); // Verificar cada 2 segundos para mayor responsividad
 
     return () => clearInterval(interval);
   }, [isGeneratingQR, whatsappQR]);
@@ -262,6 +278,28 @@ export const IntegrationsPage: React.FC = () => {
             <div className="mt-4 p-4 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg">
               <p className="text-red-800 dark:text-red-200 text-sm">
                 ❌ {error}
+              </p>
+            </div>
+          )}
+          {notification && (
+            <div className={`mt-4 p-4 rounded-lg border ${
+              notification.type === 'success' 
+                ? 'bg-green-100 dark:bg-green-900/20 border-green-300 dark:border-green-700' 
+                : notification.type === 'error'
+                ? 'bg-red-100 dark:bg-red-900/20 border-red-300 dark:border-red-700'
+                : 'bg-blue-100 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
+            }`}>
+              <p className={`text-sm ${
+                notification.type === 'success' 
+                  ? 'text-green-800 dark:text-green-200' 
+                  : notification.type === 'error'
+                  ? 'text-red-800 dark:text-red-200'
+                  : 'text-blue-800 dark:text-blue-200'
+              }`}>
+                {notification.type === 'success' && '✅ '}
+                {notification.type === 'error' && '❌ '}
+                {notification.type === 'info' && 'ℹ️ '}
+                {notification.message}
               </p>
             </div>
           )}
