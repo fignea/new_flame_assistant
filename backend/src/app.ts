@@ -24,6 +24,7 @@ import { generalRateLimit } from './middleware/rateLimit.middleware';
 import authRoutes from './routes/auth.routes';
 import conversationsRoutes from './routes/conversations.routes';
 import assistantsRoutes from './routes/assistants.routes';
+import integrationRoutes from './routes/integration.routes';
 
 // Importar utilidades
 import { logger, logRequest } from './utils/logger';
@@ -141,6 +142,7 @@ class App {
     this.app.use('/api/auth', authRoutes);
     this.app.use('/api/conversations', conversationsRoutes);
     this.app.use('/api/assistants', assistantsRoutes);
+    this.app.use('/api/integrations', integrationRoutes);
 
     // Root endpoint
     this.app.get('/', (req, res) => {

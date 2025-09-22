@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test WhatsApp Web Real</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .button {
+            background: #25D366;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px 5px;
+            font-size: 16px;
+        }
+        .button:hover {
+            background: #128C7E;
+        }
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .success {
+            background: #d1fae5;
+            border: 1px solid #10b981;
+            color: #065f46;
+        }
+        .error {
+            background: #fee2e2;
+            border: 1px solid #ef4444;
+            color: #991b1b;
+        }
+        .info {
+            background: #dbeafe;
+            border: 1px solid #3b82f6;
+            color: #1e40af;
+        }
+        .qr-code {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .qr-code img {
+            max-width: 300px;
+            border: 2px solid #25D366;
+            border-radius: 10px;
+            padding: 10px;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+        .status-dot.connected {
+            background: #10b981;
+        }
+        .status-dot.authenticated {
+            background: #25D366;
+        }
+        .logs {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Test WhatsApp Web Real</h1>
+        <p>Esta página prueba la integración real de WhatsApp Web con QR codes auténticos.</p>
+        
+        <div class="status">
+            <div class="status-dot" id="connectionStatus"></div>
+            <span id="connectionText">Desconectado</span>
+        </div>
+        
+        <div>
+            <button class="button" onclick="testLogin()">1. 🔑 Hacer Login</button>
+            <button class="button" onclick="testCreateSession()" id="sessionBtn" disabled>2. 📱 Crear Sesión WhatsApp</button>
+            <button class="button" onclick="testGetQR()" id="qrBtn" disabled>3. 🔍 Obtener QR Real</button>
+            <button class="button" onclick="testGetStatus()" id="statusBtn" disabled>4. 📊 Verificar Estado</button>
+            <button class="button" onclick="testSendMessage()" id="sendBtn" disabled>5. 💬 Enviar Mensaje</button>
+        </div>
+        
+        <div id="result" class="result" style="display: none;"></div>
+        <div id="qrCode" class="qr-code" style="display: none;"></div>
+        <div id="logs" class="logs" style="display: none;"></div>
+    </div>
+
+    <script>
+        let token = null;
+        let sessionId = null;
+        let isConnected = false;
+        let isAuthenticated = false;
+
+        function log(message) {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            logs.innerHTML += `[${timestamp}] ${message}\n`;
+            logs.scrollTop = logs.scrollHeight;
+            logs.style.display = 'block';
+        }
+
+        function showResult(message, type = 'info') {
+            const result = document.getElementById('result');
+            result.textContent = message;
+            result.className = `result ${type}`;
+            result.style.display = 'block';
+        }
+
+        function showQRCode(qrData) {
+            const qrDiv = document.getElementById('qrCode');
+            qrDiv.innerHTML = `
+                <h3>📱 QR Code Real de WhatsApp Web</h3>
+                <img src="${qrData}" alt="WhatsApp QR Code">
+                <p><strong>⚠️ IMPORTANTE:</strong> Este es un QR code REAL de WhatsApp Web</p>
+                <p>Escanea este código con tu teléfono para conectar tu cuenta real de WhatsApp</p>
+            `;
+            qrDiv.style.display = 'block';
+        }
+
+        function updateStatus(connected, authenticated) {
+            isConnected = connected;
+            isAuthenticated = authenticated;
+            
+            const statusDot = document.getElementById('connectionStatus');
+            const statusText = document.getElementById('connectionText');
+            
+            if (authenticated) {
+                statusDot.className = 'status-dot authenticated';
+                statusText.textContent = 'Conectado y Autenticado';
+            } else if (connected) {
+                statusDot.className = 'status-dot connected';
+                statusText.textContent = 'Conectado';
+            } else {
+                statusDot.className = 'status-dot';
+                statusText.textContent = 'Desconectado';
+            }
+        }
+
+        async function testLogin() {
+            try {
+                log('Iniciando proceso de login...');
+                showResult('🔄 Haciendo login...', 'info');
+                
+                const response = await fetch('http://localhost:3000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@flame.com',
+                        password: 'flame123'
+                    })
+                });
+
+                const data = await response.json();
+                log(`Respuesta del login: ${JSON.stringify(data, null, 2)}`);
+                
+                if (data.success && data.data.accessToken) {
+                    token = data.data.accessToken;
+                    document.getElementById('sessionBtn').disabled = false;
+                    showResult(`✅ Login exitoso!\nUsuario: ${data.data.user.name}\nEmail: ${data.data.user.email}`, 'success');
+                    log('Login exitoso, token obtenido');
+                } else {
+                    throw new Error(data.message || 'Error en el login');
+                }
+            } catch (error) {
+                log(`Error en login: ${error.message}`);
+                showResult(`❌ Error en login: ${error.message}`, 'error');
+            }
+        }
+
+        async function testCreateSession() {
+            try {
+                log('Creando sesión de WhatsApp Web...');
+                showResult('🔄 Creando sesión de WhatsApp Web...', 'info');
+                
+                const response = await fetch('http://localhost:3000/api/integrations/whatsapp/session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const data = await response.json();
+                log(`Respuesta de creación de sesión: ${JSON.stringify(data, null, 2)}`);
+                
+                if (data.success && data.data) {
+                    sessionId = data.data.sessionId;
+                    document.getElementById('qrBtn').disabled = false;
+                    document.getElementById('statusBtn').disabled = false;
+                    
+                    showResult(`✅ Sesión creada!\nSession ID: ${sessionId}\nQR: ${data.data.qrCode ? 'Disponible' : 'Pendiente'}`, 'success');
+                    log(`Sesión creada: ${sessionId}`);
+                    
+                    if (data.data.qrCode) {
+                        showQRCode(data.data.qrCode);
+                        log('QR code recibido inmediatamente');
+                    }
+                } else {
+                    throw new Error(data.message || 'Error creando sesión');
+                }
+            } catch (error) {
+                log(`Error creando sesión: ${error.message}`);
+                showResult(`❌ Error creando sesión: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetQR() {
+            try {
+                log('Obteniendo QR code real de WhatsApp Web...');
+                showResult('🔄 Obteniendo QR code real...', 'info');
+                
+                const response = await fetch('http://localhost:3000/api/integrations/whatsapp/qr', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const data = await response.json();
+                log(`Respuesta de QR: ${JSON.stringify(data, null, 2)}`);
+                
+                if (data.success && data.data.qrCode) {
+                    showQRCode(data.data.qrCode);
+                    showResult(`✅ QR Code REAL obtenido!\nTipo: ${data.data.qrCode.substring(0, 20)}...`, 'success');
+                    log('QR code real de WhatsApp Web obtenido');
+                } else {
+                    throw new Error(data.message || 'QR Code no disponible');
+                }
+            } catch (error) {
+                log(`Error obteniendo QR: ${error.message}`);
+                showResult(`❌ Error obteniendo QR: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetStatus() {
+            try {
+                log('Verificando estado de WhatsApp Web...');
+                showResult('🔄 Verificando estado...', 'info');
+                
+                const response = await fetch('http://localhost:3000/api/integrations/whatsapp/status', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const data = await response.json();
+                log(`Respuesta de estado: ${JSON.stringify(data, null, 2)}`);
+                
+                if (data.success) {
+                    updateStatus(data.data.isConnected, data.data.isAuthenticated);
+                    
+                    let statusMessage = `✅ Estado obtenido!\n`;
+                    statusMessage += `Conectado: ${data.data.isConnected}\n`;
+                    statusMessage += `Autenticado: ${data.data.isAuthenticated}\n`;
+                    statusMessage += `Teléfono: ${data.data.phoneNumber || 'N/A'}\n`;
+                    statusMessage += `Nombre: ${data.data.name || 'N/A'}`;
+                    
+                    showResult(statusMessage, 'success');
+                    
+                    if (data.data.isAuthenticated) {
+                        document.getElementById('sendBtn').disabled = false;
+                        log('WhatsApp Web autenticado, botón de envío habilitado');
+                    }
+                } else {
+                    throw new Error(data.message || 'Error obteniendo estado');
+                }
+            } catch (error) {
+                log(`Error obteniendo estado: ${error.message}`);
+                showResult(`❌ Error obteniendo estado: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSendMessage() {
+            try {
+                const phoneNumber = prompt('Ingresa el número de teléfono (con código de país, ej: +1234567890):');
+                if (!phoneNumber) return;
+                
+                const message = prompt('Ingresa el mensaje a enviar:');
+                if (!message) return;
+                
+                log(`Enviando mensaje a ${phoneNumber}: ${message}`);
+                showResult('🔄 Enviando mensaje...', 'info');
+                
+                const response = await fetch('http://localhost:3000/api/integrations/whatsapp/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        to: phoneNumber,
+                        message: message
+                    })
+                });
+
+                const data = await response.json();
+                log(`Respuesta de envío: ${JSON.stringify(data, null, 2)}`);
+                
+                if (data.success) {
+                    showResult(`✅ Mensaje enviado exitosamente a ${phoneNumber}!`, 'success');
+                    log('Mensaje enviado exitosamente');
+                } else {
+                    throw new Error(data.message || 'Error enviando mensaje');
+                }
+            } catch (error) {
+                log(`Error enviando mensaje: ${error.message}`);
+                showResult(`❌ Error enviando mensaje: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-scroll logs
+        setInterval(() => {
+            const logs = document.getElementById('logs');
+            if (logs.style.display !== 'none') {
+                logs.scrollTop = logs.scrollHeight;
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

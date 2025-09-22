@@ -272,6 +272,45 @@ export class ApiService {
       ...params
     });
   }
+
+  // Métodos para integraciones
+  async getIntegrations() {
+    return this.get(apiConfig.endpoints.integrations.list);
+  }
+
+  // WhatsApp Web methods
+  async createWhatsAppSession() {
+    return this.post(apiConfig.endpoints.integrations.whatsapp.createSession);
+  }
+
+  async getWhatsAppQR() {
+    return this.get(apiConfig.endpoints.integrations.whatsapp.getQR);
+  }
+
+  async getWhatsAppStatus() {
+    return this.get(apiConfig.endpoints.integrations.whatsapp.getStatus);
+  }
+
+  async disconnectWhatsApp() {
+    return this.post(apiConfig.endpoints.integrations.whatsapp.disconnect);
+  }
+
+  async sendWhatsAppMessage(to: string, message: string) {
+    return this.post(apiConfig.endpoints.integrations.whatsapp.sendMessage, {
+      to,
+      message
+    });
+  }
+
+  async getWhatsAppChats() {
+    return this.get(apiConfig.endpoints.integrations.whatsapp.getChats);
+  }
+
+  async getWhatsAppMessages(chatId: string, limit?: number) {
+    return this.get(apiConfig.endpoints.integrations.whatsapp.getMessages(chatId), {
+      limit
+    });
+  }
 }
 
 // Instancia singleton del servicio

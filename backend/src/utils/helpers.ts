@@ -1,6 +1,41 @@
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 
+// Clase personalizada para errores
+export class CustomError extends Error {
+  public statusCode: number;
+  public isOperational: boolean;
+
+  constructor(message: string, statusCode: number = 500, isOperational: boolean = true) {
+    super(message);
+    this.statusCode = statusCode;
+    this.isOperational = isOperational;
+
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+// Función para manejar errores de base de datos
+export const handleDatabaseError = (error: any): CustomError => {
+  if (error.code === '23505') {
+    return new CustomError('El recurso ya existe', 409);
+  }
+  if (error.code === '23503') {
+    return new CustomError('Violación de clave foránea', 400);
+  }
+  if (error.code === '23502') {
+    return new CustomError('Campo requerido faltante', 400);
+  }
+  if (error.code === '42P01') {
+    return new CustomError('Tabla no encontrada', 500);
+  }
+  if (error.code === '42703') {
+    return new CustomError('Columna no encontrada', 500);
+  }
+  
+  return new CustomError('Error de base de datos', 500);
+};
+
 // Función para generar IDs únicos
 export const generateId = (): string => {
   return uuidv4();

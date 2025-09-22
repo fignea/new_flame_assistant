@@ -46,13 +46,15 @@ export const apiConfig = {
     },
     integrations: {
       list: '/api/integrations',
-      create: '/api/integrations',
-      get: (id: string) => `/api/integrations/${id}`,
-      update: (id: string) => `/api/integrations/${id}`,
-      delete: (id: string) => `/api/integrations/${id}`,
-      connect: (id: string) => `/api/integrations/${id}/connect`,
-      disconnect: (id: string) => `/api/integrations/${id}/disconnect`,
-      status: (id: string) => `/api/integrations/${id}/status`
+      whatsapp: {
+        createSession: '/api/integrations/whatsapp/session',
+        getQR: '/api/integrations/whatsapp/qr',
+        getStatus: '/api/integrations/whatsapp/status',
+        disconnect: '/api/integrations/whatsapp/disconnect',
+        sendMessage: '/api/integrations/whatsapp/send',
+        getChats: '/api/integrations/whatsapp/chats',
+        getMessages: (chatId: string) => `/api/integrations/whatsapp/chats/${chatId}/messages`
+      }
     },
     analytics: {
       dashboard: '/api/analytics/dashboard',

@@ -1,15 +1,26 @@
 # Usar Node.js 18 Alpine como imagen base
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Instalar dependencias del sistema necesarias
 RUN apk add --no-cache \
     postgresql-client \
     python3 \
     make \
-    g++
+    g++ \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
 
 # Crear directorio de trabajo
 WORKDIR /app
+
+# Configurar variables de entorno para Puppeteer
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copiar archivos de dependencias
 COPY package*.json ./

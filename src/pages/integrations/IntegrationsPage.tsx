@@ -11,6 +11,8 @@ import {
   Copy,
   RefreshCw
 } from 'lucide-react';
+import { useApp } from '../../contexts/AppContext';
+import { apiService } from '../../services/api.service';
 
 interface Integration {
   id: string;
@@ -24,20 +26,31 @@ interface Integration {
 }
 
 export const IntegrationsPage: React.FC = () => {
+  const { isAuthenticated, user } = useApp();
   const [whatsappQR, setWhatsappQR] = useState<string | null>(null);
   const [isGeneratingQR, setIsGeneratingQR] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [whatsappStatus, setWhatsappStatus] = useState<{
+    isConnected: boolean;
+    isAuthenticated: boolean;
+    phoneNumber?: string;
+    userName?: string;
+  } | null>(null);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(false);
 
   const integrations: Integration[] = [
     {
       id: 'whatsapp-web',
       name: 'WhatsApp Web',
-      description: 'Conecta tu cuenta de WhatsApp Web para enviar y recibir mensajes',
+      description: whatsappStatus?.isConnected 
+        ? `Conectado como ${whatsappStatus.userName || whatsappStatus.phoneNumber || 'Usuario'}`
+        : 'Conecta tu cuenta de WhatsApp Web para enviar y recibir mensajes',
       icon: MessageCircle,
       available: true,
-      connected: false,
-      color: 'text-green-500',
-      bgColor: 'bg-green-500/10'
+      connected: whatsappStatus?.isConnected || false,
+      color: whatsappStatus?.isConnected ? 'text-green-500' : 'text-gray-500',
+      bgColor: whatsappStatus?.isConnected ? 'bg-green-500/10' : 'bg-gray-500/10'
     },
     {
       id: 'facebook',
@@ -72,12 +85,88 @@ export const IntegrationsPage: React.FC = () => {
   ];
 
   const generateWhatsAppQR = async () => {
+    if (!isAuthenticated) {
+      setError('Debes iniciar sesión para conectar WhatsApp Web');
+      return;
+    }
+
     setIsGeneratingQR(true);
-    // Simulamos la generación del QR
-    setTimeout(() => {
-      setWhatsappQR('https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=whatsapp-web-demo');
+    setError(null);
+    setWhatsappQR(null); // Limpiar QR anterior
+    
+    try {
+      console.log('Creating WhatsApp session...');
+      const response = await apiService.createWhatsAppSession();
+      console.log('WhatsApp session response:', response);
+      
+      if (response.success && response.data) {
+        if (response.data.qrCode) {
+          // QR disponible inmediatamente
+          setWhatsappQR(response.data.qrCode);
+          console.log('QR Code received immediately from backend');
+          setIsGeneratingQR(false);
+        } else if (response.data.sessionId) {
+          // QR pendiente, hacer polling
+          console.log('Session created, polling for QR...');
+          // NO cambiar isGeneratingQR aquí, mantener el modal abierto
+          pollForQRCode();
+        }
+      } else {
+        throw new Error(response.message || 'Error creando sesión de WhatsApp');
+      }
+    } catch (error) {
+      console.error('Error calling WhatsApp API:', error);
+      setError(error instanceof Error ? error.message : 'Error conectando con WhatsApp Web');
       setIsGeneratingQR(false);
-    }, 2000);
+    }
+  };
+
+  const pollForQRCode = async () => {
+    const maxAttempts = 60; // 60 intentos = 2 minutos
+    let attempts = 0;
+
+    const poll = async () => {
+      try {
+        attempts++;
+        console.log(`Polling for QR code, attempt ${attempts}/${maxAttempts}`);
+        
+        // Primero verificar el estado de conexión
+        const statusResponse = await apiService.getWhatsAppStatus();
+        if (statusResponse.success && statusResponse.data?.isConnected) {
+          console.log('WhatsApp connected! Closing modal and updating status');
+          setWhatsappStatus(statusResponse.data);
+          setWhatsappQR(null);
+          setIsGeneratingQR(false);
+          return;
+        }
+        
+        // Si no está conectado, verificar si hay QR disponible
+        const qrResponse = await apiService.getWhatsAppQR();
+        if (qrResponse.success && qrResponse.data?.qrCode) {
+          setWhatsappQR(qrResponse.data.qrCode);
+          console.log('QR Code received from polling');
+          setIsGeneratingQR(false); // Detener el estado de carga
+          return;
+        }
+        
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 2000); // Poll cada 2 segundos
+        } else {
+          setError('Timeout esperando el código QR de WhatsApp Web');
+          setIsGeneratingQR(false); // Detener el estado de carga
+        }
+      } catch (error) {
+        console.error('Error polling for QR code:', error);
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 2000);
+        } else {
+          setError('Error obteniendo el código QR de WhatsApp Web');
+          setIsGeneratingQR(false); // Detener el estado de carga
+        }
+      }
+    };
+
+    poll();
   };
 
   const copyToClipboard = (text: string) => {
@@ -85,6 +174,71 @@ export const IntegrationsPage: React.FC = () => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const checkWhatsAppStatus = async () => {
+    if (!isAuthenticated) return;
+    
+    setIsLoadingStatus(true);
+    try {
+      const response = await apiService.getWhatsAppStatus();
+      if (response.success && response.data) {
+        setWhatsappStatus(response.data);
+      }
+    } catch (error) {
+      console.error('Error checking WhatsApp status:', error);
+    } finally {
+      setIsLoadingStatus(false);
+    }
+  };
+
+  const disconnectWhatsApp = async () => {
+    if (!isAuthenticated) return;
+    
+    try {
+      const response = await apiService.disconnectWhatsApp();
+      if (response.success) {
+        setWhatsappStatus({
+          isConnected: false,
+          isAuthenticated: false
+        });
+        setWhatsappQR(null);
+        setIsGeneratingQR(false);
+        console.log('WhatsApp disconnected successfully');
+      }
+    } catch (error) {
+      console.error('Error disconnecting WhatsApp:', error);
+      setError('Error desconectando WhatsApp Web');
+    }
+  };
+
+  // Verificar estado al cargar la página
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      checkWhatsAppStatus();
+    }
+  }, [isAuthenticated]);
+
+  // Polling continuo para detectar cambios de estado cuando el modal está abierto
+  React.useEffect(() => {
+    if (!isGeneratingQR || !whatsappQR) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await apiService.getWhatsAppStatus();
+        if (response.success && response.data?.isConnected) {
+          console.log('WhatsApp connected! Closing modal and updating status');
+          setWhatsappStatus(response.data);
+          setWhatsappQR(null);
+          setIsGeneratingQR(false);
+          clearInterval(interval);
+        }
+      } catch (error) {
+        console.error('Error checking connection status:', error);
+      }
+    }, 3000); // Verificar cada 3 segundos
+
+    return () => clearInterval(interval);
+  }, [isGeneratingQR, whatsappQR]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card p-6">
@@ -97,6 +251,20 @@ export const IntegrationsPage: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400">
             Conecta tu asistente con diferentes plataformas y servicios
           </p>
+          {!isAuthenticated && (
+            <div className="mt-4 p-4 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg">
+              <p className="text-yellow-800 dark:text-yellow-200 text-sm">
+                ⚠️ Debes iniciar sesión para conectar las integraciones
+              </p>
+            </div>
+          )}
+          {error && (
+            <div className="mt-4 p-4 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg">
+              <p className="text-red-800 dark:text-red-200 text-sm">
+                ❌ {error}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Integrations Grid */}
@@ -140,107 +308,145 @@ export const IntegrationsPage: React.FC = () => {
                   {integration.description}
                 </p>
 
-                {/* Action Button */}
-                {integration.available ? (
-                  <button
-                    onClick={integration.id === 'whatsapp-web' ? generateWhatsAppQR : undefined}
-                    disabled={integration.id !== 'whatsapp-web'}
-                    className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {integration.id === 'whatsapp-web' ? 'Conectar' : 'Próximamente'}
-                  </button>
-                ) : (
-                  <button
-                    disabled
-                    className="w-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-4 py-2 rounded-xl font-medium cursor-not-allowed"
-                  >
-                    No disponible
-                  </button>
-                )}
+                    {/* Action Button */}
+                    {integration.available ? (
+                      <div className="space-y-2">
+                        {integration.id === 'whatsapp-web' && whatsappStatus?.isConnected ? (
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={checkWhatsAppStatus}
+                              disabled={isLoadingStatus}
+                              className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-blue-600 transition-colors disabled:opacity-50"
+                            >
+                              {isLoadingStatus ? 'Verificando...' : 'Actualizar Estado'}
+                            </button>
+                            <button
+                              onClick={disconnectWhatsApp}
+                              className="flex-1 bg-red-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-red-600 transition-colors"
+                            >
+                              Desconectar
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={integration.id === 'whatsapp-web' ? generateWhatsAppQR : undefined}
+                            disabled={integration.id !== 'whatsapp-web' || !isAuthenticated}
+                            className={`w-full px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+                              integration.id === 'whatsapp-web' && isAuthenticated
+                                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+                                : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                            }`}
+                          >
+                            {integration.id === 'whatsapp-web' 
+                              ? (isAuthenticated ? 'Conectar' : 'Inicia sesión primero')
+                              : 'Próximamente'
+                            }
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        disabled
+                        className="w-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-4 py-2 rounded-xl font-medium cursor-not-allowed"
+                      >
+                        No disponible
+                      </button>
+                    )}
               </div>
             );
           })}
         </div>
 
-        {/* WhatsApp QR Modal */}
-        {whatsappQR && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-dark-surface rounded-2xl p-8 max-w-md w-full border border-gray-200/50 dark:border-dark-border/50">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <QrCode className="w-8 h-8 text-green-500" />
-                </div>
-                
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  Conectar WhatsApp Web
-                </h3>
-                
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Escanea este código QR con tu teléfono para conectar WhatsApp Web
-                </p>
+            {/* WhatsApp QR Modal */}
+            {(whatsappQR || isGeneratingQR) && (
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-white dark:bg-dark-surface rounded-2xl p-8 max-w-md w-full border border-gray-200/50 dark:border-dark-border/50">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <QrCode className="w-8 h-8 text-green-500" />
+                    </div>
+                    
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                      Conectar WhatsApp Web
+                    </h3>
+                    
+                    <p className="text-gray-600 dark:text-gray-400 mb-6">
+                      {whatsappQR 
+                        ? 'Escanea este código QR con tu teléfono para conectar WhatsApp Web'
+                        : 'Preparando conexión con WhatsApp Web...'
+                      }
+                    </p>
 
-                {/* QR Code */}
-                <div className="bg-white p-4 rounded-xl border border-gray-200 dark:border-dark-border mb-6 inline-block">
-                  <img 
-                    src={whatsappQR} 
-                    alt="WhatsApp QR Code" 
-                    className="w-48 h-48"
-                  />
-                </div>
+                    {isGeneratingQR && !whatsappQR && (
+                      <div className="mb-6 p-4 bg-blue-100 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
+                          <span className="text-blue-800 dark:text-blue-200 text-sm">
+                            Iniciando WhatsApp Web... Esto puede tomar 30-60 segundos
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
-                {/* Instructions */}
-                <div className="bg-gray-50 dark:bg-dark-card rounded-xl p-4 mb-6 text-left">
-                  <h4 className="font-medium text-gray-900 dark:text-white mb-2">
-                    Instrucciones:
-                  </h4>
-                  <ol className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                    <li>1. Abre WhatsApp en tu teléfono</li>
-                    <li>2. Toca los tres puntos (⋮)</li>
-                    <li>3. Selecciona "Dispositivos vinculados"</li>
-                    <li>4. Toca "Vincular un dispositivo"</li>
-                    <li>5. Escanea este código QR</li>
-                  </ol>
-                </div>
+                    {/* QR Code */}
+                    {whatsappQR ? (
+                      <div className="bg-white p-4 rounded-xl border border-gray-200 dark:border-dark-border mb-6 inline-block">
+                        <img 
+                          src={whatsappQR} 
+                          alt="WhatsApp QR Code" 
+                          className="w-48 h-48"
+                        />
+                      </div>
+                    ) : (
+                      <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-dark-border mb-6 inline-block">
+                        <div className="w-48 h-48 flex items-center justify-center">
+                          <RefreshCw className="w-12 h-12 text-gray-400 animate-spin" />
+                        </div>
+                      </div>
+                    )}
 
-                {/* Actions */}
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => setWhatsappQR(null)}
-                    className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => copyToClipboard(whatsappQR)}
-                    className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center justify-center space-x-2"
-                  >
-                    <Copy className="w-4 h-4" />
-                    <span>{copied ? 'Copiado!' : 'Copiar URL'}</span>
-                  </button>
+                    {/* Instructions */}
+                    {whatsappQR && (
+                      <div className="bg-gray-50 dark:bg-dark-card rounded-xl p-4 mb-6 text-left">
+                        <h4 className="font-medium text-gray-900 dark:text-white mb-2">
+                          Instrucciones:
+                        </h4>
+                        <ol className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                          <li>1. Abre WhatsApp en tu teléfono</li>
+                          <li>2. Toca los tres puntos (⋮)</li>
+                          <li>3. Selecciona "Dispositivos vinculados"</li>
+                          <li>4. Toca "Vincular un dispositivo"</li>
+                          <li>5. Escanea este código QR</li>
+                        </ol>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => {
+                          setWhatsappQR(null);
+                          setIsGeneratingQR(false);
+                        }}
+                        className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      {whatsappQR && (
+                        <button
+                          onClick={() => copyToClipboard(whatsappQR)}
+                          className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center justify-center space-x-2"
+                        >
+                          <Copy className="w-4 h-4" />
+                          <span>{copied ? 'Copiado!' : 'Copiar URL'}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* Loading State */}
-        {isGeneratingQR && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-dark-surface rounded-2xl p-8 border border-gray-200/50 dark:border-dark-border/50">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-purple-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <RefreshCw className="w-8 h-8 text-purple-500 animate-spin" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  Generando código QR...
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Por favor espera mientras preparamos tu conexión
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
