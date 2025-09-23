@@ -20,6 +20,7 @@ router.post('/session', authenticate, whatsappController.createSession.bind(what
 router.get('/qr', authenticate, whatsappController.getQRCode.bind(whatsappController));
 router.get('/status', authenticate, whatsappController.getStatus.bind(whatsappController));
 router.post('/disconnect', authenticate, whatsappController.disconnect.bind(whatsappController));
+router.post('/reconnect', authenticate, whatsappController.forceReconnect.bind(whatsappController));
 
 // Mensajes (con autenticación)
 router.post('/send', authenticate, whatsappController.sendMessage.bind(whatsappController));

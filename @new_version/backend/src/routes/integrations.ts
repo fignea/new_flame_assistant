@@ -12,6 +12,7 @@ router.post('/whatsapp/session', whatsappController.createSession.bind(whatsappC
 router.get('/whatsapp/qr', whatsappController.getQRCode.bind(whatsappController));
 router.get('/whatsapp/status', whatsappController.getStatus.bind(whatsappController));
 router.post('/whatsapp/disconnect', whatsappController.disconnect.bind(whatsappController));
+router.post('/whatsapp/reconnect', whatsappController.forceReconnect.bind(whatsappController));
 
 // Mensajes
 router.post('/whatsapp/send', whatsappController.sendMessage.bind(whatsappController));

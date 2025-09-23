@@ -33,11 +33,14 @@ export class WhatsAppService extends EventEmitter {
   }> = new Map();
 
   private connectionMonitors: Map<number, NodeJS.Timeout> = new Map();
+  private reconnectAttempts: Map<number, number> = new Map();
+  private maxReconnectAttempts = 5;
 
   constructor() {
     super();
     logger.info('🔄 WhatsAppService initialized');
     this.setupCleanupInterval();
+    this.restoreExistingSessions();
   }
 
   private setupCleanupInterval(): void {
@@ -45,6 +48,83 @@ export class WhatsAppService extends EventEmitter {
     setInterval(() => {
       this.cleanupInactiveSessions();
     }, 30 * 60 * 1000);
+  }
+
+  private async restoreExistingSessions(): Promise<void> {
+    try {
+      logger.info('🔄 Restoring existing WhatsApp sessions...');
+      
+      // Obtener sesiones existentes de la base de datos
+      const result = await database.query(
+        `SELECT user_id, session_id, phone_number, name, is_connected, created_at 
+         FROM whatsapp_sessions 
+         WHERE created_at > NOW() - INTERVAL '24 hours'
+         ORDER BY created_at DESC`
+      );
+
+      for (const row of result.rows) {
+        const userId = row.user_id;
+        const sessionId = row.session_id;
+        
+        logger.info(`🔄 Restoring session for user ${userId}: ${sessionId}`);
+        
+        // Crear sesión en memoria
+        const session = {
+          socket: null,
+          isConnected: false,
+          isAuthenticated: false,
+          sessionId,
+          userId,
+          phoneNumber: row.phone_number,
+          userName: row.name
+        };
+
+        this.sessions.set(userId, session);
+
+        // Intentar reconectar si estaba conectada
+        if (row.is_connected) {
+          logger.info(`🔄 Attempting to reconnect user ${userId}...`);
+          setTimeout(() => {
+            this.initializeBaileysSocket(userId).catch(error => {
+              logger.error(`❌ Failed to restore session for user ${userId}:`, error);
+            });
+          }, 2000 + (Math.random() * 3000)); // Delay aleatorio para evitar sobrecarga
+        }
+      }
+
+      logger.info(`✅ Restored ${result.rows.length} existing sessions`);
+    } catch (error) {
+      logger.error('❌ Error restoring existing sessions:', error);
+    }
+  }
+
+  private scheduleReconnect(userId: number): void {
+    const attempts = this.reconnectAttempts.get(userId) || 0;
+    
+    if (attempts >= this.maxReconnectAttempts) {
+      logger.error(`❌ Max reconnection attempts reached for user ${userId}`);
+      this.reconnectAttempts.delete(userId);
+      return;
+    }
+
+    const delay = Math.min(1000 * Math.pow(2, attempts), 30000); // Backoff exponencial, máximo 30 segundos
+    this.reconnectAttempts.set(userId, attempts + 1);
+
+    logger.info(`🔄 Scheduling reconnect for user ${userId} in ${delay}ms (attempt ${attempts + 1}/${this.maxReconnectAttempts})`);
+
+    const timeout = setTimeout(async () => {
+      try {
+        await this.initializeBaileysSocket(userId);
+        this.reconnectAttempts.delete(userId); // Reset on successful connection
+        logger.info(`✅ Successfully reconnected user ${userId}`);
+      } catch (error) {
+        logger.error(`❌ Reconnection failed for user ${userId}:`, error);
+        // Schedule another attempt
+        this.scheduleReconnect(userId);
+      }
+    }, delay);
+
+    this.connectionMonitors.set(userId, timeout);
   }
 
   public async createSession(userId: number): Promise<{ sessionId: string; qrCode?: string }> {
@@ -263,20 +343,17 @@ export class WhatsAppService extends EventEmitter {
         const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
 
         if (shouldReconnect) {
-          console.log(`🔄 Attempting to reconnect user ${userId} in 5 seconds...`);
-          setTimeout(() => {
-            this.initializeBaileysSocket(userId).catch(console.error);
-          }, 5000);
+          this.scheduleReconnect(userId);
         } else {
           console.log(`🚫 Session logged out for user ${userId}`);
           await this.cleanupSession(userId);
           this.emit('disconnected', userId);
         }
 
-        // Actualizar base de datos
-        await database.run(
-          `UPDATE whatsapp_sessions SET is_connected = 0, updated_at = CURRENT_TIMESTAMP 
-           WHERE user_id = ?`,
+        // Actualizar base de datos - mantener la sesión pero marcar como desconectada
+        await database.query(
+          `UPDATE whatsapp_sessions SET is_connected = false, updated_at = CURRENT_TIMESTAMP 
+           WHERE user_id = $1`,
           [userId]
         );
       }
@@ -619,6 +696,31 @@ export class WhatsAppService extends EventEmitter {
       connectedSessions: Array.from(this.sessions.values()).filter(s => s.isConnected).length,
       activeMonitors: this.connectionMonitors.size
     };
+  }
+
+  public async forceReconnect(userId: number): Promise<void> {
+    logger.info(`🔄 Force reconnecting user ${userId}`);
+    
+    // Limpiar intentos de reconexión anteriores
+    this.reconnectAttempts.delete(userId);
+    
+    // Cancelar monitor de conexión existente
+    const existingMonitor = this.connectionMonitors.get(userId);
+    if (existingMonitor) {
+      clearTimeout(existingMonitor);
+      this.connectionMonitors.delete(userId);
+    }
+
+    // Forzar nueva conexión
+    try {
+      await this.initializeBaileysSocket(userId);
+      logger.info(`✅ Force reconnection successful for user ${userId}`);
+    } catch (error) {
+      logger.error(`❌ Force reconnection failed for user ${userId}:`, error);
+      // Programar reconexión automática
+      this.scheduleReconnect(userId);
+      throw error;
+    }
   }
 }
 

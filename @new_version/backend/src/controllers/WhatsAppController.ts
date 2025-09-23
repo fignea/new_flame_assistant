@@ -374,6 +374,35 @@ export class WhatsAppController {
       });
     }
   }
+
+  public async forceReconnect(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+    try {
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      // Forzar reconexión
+      await whatsappService.forceReconnect(userId);
+      
+      return res.json({
+        success: true,
+        message: 'Reconexión forzada iniciada'
+      });
+
+    } catch (error) {
+      console.error('Force reconnect error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al forzar reconexión',
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    }
+  }
 }
 
 export const whatsappController = new WhatsAppController();
