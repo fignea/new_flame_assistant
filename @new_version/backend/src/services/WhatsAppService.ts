@@ -373,6 +373,14 @@ export class WhatsAppService extends EventEmitter {
       try {
         const whatsappMessage = this.convertBaileysMessage(message);
         if (whatsappMessage) {
+          // Log del mensaje recibido
+          console.log(`💬 New message for user ${userId}:`);
+          console.log(`   📱 From: ${whatsappMessage.senderName} (${whatsappMessage.senderId})`);
+          console.log(`   💬 Content: ${whatsappMessage.content}`);
+          console.log(`   📅 Timestamp: ${new Date(whatsappMessage.timestamp * 1000).toLocaleString()}`);
+          console.log(`   🔄 Type: ${whatsappMessage.messageType}`);
+          console.log(`   📤 From Me: ${whatsappMessage.isFromMe ? 'Yes' : 'No'}`);
+          
           // Guardar mensaje en base de datos
           await this.saveMessage(whatsappMessage, userId);
           
