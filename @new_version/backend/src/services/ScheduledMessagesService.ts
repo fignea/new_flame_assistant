@@ -32,16 +32,18 @@ export class ScheduledMessagesService {
   private async processPendingMessages(): Promise<void> {
     try {
       // Obtener mensajes programados pendientes que ya deben enviarse
-      const pendingMessages = await database.query(
+      const result = await database.query(
         `SELECT sm.*, c.whatsapp_id, c.name as contact_name
          FROM scheduled_messages sm
-         JOIN contacts c ON sm.contact_id = c.id
+         LEFT JOIN contacts c ON sm.chat_id = c.whatsapp_id
          WHERE sm.status = 'pending' 
-         AND sm.scheduled_time <= datetime('now')
+         AND sm.scheduled_time <= NOW()
          ORDER BY sm.scheduled_time ASC
          LIMIT 10`, // Procesar máximo 10 mensajes por vez
         []
-      ) as (ScheduledMessage & { whatsapp_id: string; contact_name: string })[];
+      );
+
+      const pendingMessages = result.rows as (ScheduledMessage & { whatsapp_id: string; contact_name: string })[];
 
       if (pendingMessages.length === 0) {
         return;
@@ -73,7 +75,7 @@ export class ScheduledMessagesService {
            SET status = 'failed', 
                error_message = 'WhatsApp no conectado', 
                updated_at = CURRENT_TIMESTAMP 
-           WHERE id = ?`,
+           WHERE id = $1`,
           [message.id]
         );
         return;
@@ -93,7 +95,7 @@ export class ScheduledMessagesService {
            SET status = 'sent', 
                sent_at = CURRENT_TIMESTAMP, 
                updated_at = CURRENT_TIMESTAMP 
-           WHERE id = ?`,
+           WHERE id = $1`,
           [message.id]
         );
 
@@ -109,9 +111,9 @@ export class ScheduledMessagesService {
       await database.run(
         `UPDATE scheduled_messages 
          SET status = 'failed', 
-             error_message = ?, 
+             error_message = $1, 
              updated_at = CURRENT_TIMESTAMP 
-         WHERE id = ?`,
+         WHERE id = $2`,
         [error instanceof Error ? error.message : 'Error desconocido', message.id]
       );
     }
@@ -119,17 +121,18 @@ export class ScheduledMessagesService {
 
   public async getUpcomingMessages(userId: number, limit: number = 5): Promise<any[]> {
     try {
-      return await database.query(
+      const result = await database.query(
         `SELECT sm.*, c.name as contact_name, c.whatsapp_id
          FROM scheduled_messages sm
-         JOIN contacts c ON sm.contact_id = c.id
-         WHERE sm.user_id = ? 
+         LEFT JOIN contacts c ON sm.chat_id = c.whatsapp_id
+         WHERE sm.user_id = $1 
          AND sm.status = 'pending'
-         AND sm.scheduled_time > datetime('now')
+         AND sm.scheduled_time > NOW()
          ORDER BY sm.scheduled_time ASC
-         LIMIT ?`,
+         LIMIT $2`,
         [userId, limit]
       );
+      return result.rows;
     } catch (error) {
       console.error('Error getting upcoming messages:', error);
       return [];
@@ -138,16 +141,17 @@ export class ScheduledMessagesService {
 
   public async getRecentSentMessages(userId: number, limit: number = 10): Promise<any[]> {
     try {
-      return await database.query(
+      const result = await database.query(
         `SELECT sm.*, c.name as contact_name, c.whatsapp_id
          FROM scheduled_messages sm
-         JOIN contacts c ON sm.contact_id = c.id
-         WHERE sm.user_id = ? 
+         LEFT JOIN contacts c ON sm.chat_id = c.whatsapp_id
+         WHERE sm.user_id = $1 
          AND sm.status = 'sent'
          ORDER BY sm.sent_at DESC
-         LIMIT ?`,
+         LIMIT $2`,
         [userId, limit]
       );
+      return result.rows;
     } catch (error) {
       console.error('Error getting recent sent messages:', error);
       return [];
@@ -156,16 +160,17 @@ export class ScheduledMessagesService {
 
   public async getFailedMessages(userId: number, limit: number = 10): Promise<any[]> {
     try {
-      return await database.query(
+      const result = await database.query(
         `SELECT sm.*, c.name as contact_name, c.whatsapp_id
          FROM scheduled_messages sm
-         JOIN contacts c ON sm.contact_id = c.id
-         WHERE sm.user_id = ? 
+         LEFT JOIN contacts c ON sm.chat_id = c.whatsapp_id
+         WHERE sm.user_id = $1 
          AND sm.status = 'failed'
          ORDER BY sm.updated_at DESC
-         LIMIT ?`,
+         LIMIT $2`,
         [userId, limit]
       );
+      return result.rows;
     } catch (error) {
       console.error('Error getting failed messages:', error);
       return [];
@@ -176,8 +181,8 @@ export class ScheduledMessagesService {
     try {
       // Verificar que el mensaje existe, pertenece al usuario y está fallido
       const message = await database.get(
-        'SELECT * FROM scheduled_messages WHERE id = ? AND user_id = ? AND status = "failed"',
-        [messageId, userId]
+        'SELECT * FROM scheduled_messages WHERE id = $1 AND user_id = $2 AND status = $3',
+        [messageId, userId, 'failed']
       );
 
       if (!message) {
@@ -190,7 +195,7 @@ export class ScheduledMessagesService {
          SET status = 'pending', 
              error_message = NULL, 
              updated_at = CURRENT_TIMESTAMP 
-         WHERE id = ?`,
+         WHERE id = $1`,
         [messageId]
       );
 

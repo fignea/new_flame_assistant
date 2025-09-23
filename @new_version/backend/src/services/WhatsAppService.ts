@@ -482,14 +482,14 @@ export class WhatsAppService extends EventEmitter {
     try {
       // Buscar o crear contacto
       let contact = await database.get(
-        `SELECT id FROM contacts WHERE user_id = ? AND whatsapp_id = ?`,
+        `SELECT id FROM contacts WHERE user_id = $1 AND whatsapp_id = $2`,
         [userId, message.chatId]
       );
 
       if (!contact) {
         const result = await database.run(
           `INSERT INTO contacts (user_id, whatsapp_id, name, phone_number, is_group) 
-           VALUES (?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, $4, $5)`,
           [
             userId,
             message.chatId,
@@ -504,20 +504,17 @@ export class WhatsAppService extends EventEmitter {
       // Guardar mensaje
       await database.run(
         `INSERT INTO messages 
-         (user_id, whatsapp_message_id, contact_id, chat_id, content, message_type, 
-          is_from_me, timestamp, status, media_url) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (user_id, message_id, chat_id, content, message_type, 
+          is_from_me, timestamp) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           userId,
           message.id,
-          contact.id,
           message.chatId,
           message.content,
           message.messageType,
           message.isFromMe,
-          new Date(message.timestamp * 1000).toISOString(),
-          message.status,
-          message.mediaUrl
+          new Date(message.timestamp * 1000).toISOString()
         ]
       );
     } catch (error) {
@@ -528,9 +525,16 @@ export class WhatsAppService extends EventEmitter {
   private async saveContact(contact: WhatsAppContact, userId: number): Promise<void> {
     try {
       await database.run(
-        `INSERT OR REPLACE INTO contacts 
+        `INSERT INTO contacts 
          (user_id, whatsapp_id, name, phone_number, is_group, avatar_url, updated_at) 
-         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+         ON CONFLICT (user_id, whatsapp_id) 
+         DO UPDATE SET 
+           name = EXCLUDED.name,
+           phone_number = EXCLUDED.phone_number,
+           is_group = EXCLUDED.is_group,
+           avatar_url = EXCLUDED.avatar_url,
+           updated_at = CURRENT_TIMESTAMP`,
         [
           userId,
           contact.id,
@@ -579,8 +583,8 @@ export class WhatsAppService extends EventEmitter {
 
         // Actualizar base de datos
         database.run(
-          `UPDATE whatsapp_sessions SET is_connected = 1, phone_number = ?, name = ?, 
-           updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
+          `UPDATE whatsapp_sessions SET is_connected = true, phone_number = $1, name = $2, 
+           updated_at = CURRENT_TIMESTAMP WHERE user_id = $3`,
           [session.phoneNumber, session.userName, userId]
         ).catch(console.error);
       }
@@ -670,8 +674,8 @@ export class WhatsAppService extends EventEmitter {
 
     // Actualizar base de datos
     await database.run(
-      `UPDATE whatsapp_sessions SET is_connected = 0, updated_at = CURRENT_TIMESTAMP 
-       WHERE user_id = ?`,
+      `UPDATE whatsapp_sessions SET is_connected = false, updated_at = CURRENT_TIMESTAMP 
+       WHERE user_id = $1`,
       [userId]
     );
 
