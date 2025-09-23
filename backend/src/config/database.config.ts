@@ -4,11 +4,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const dbConfig: PoolConfig = {
-  host: process.env.DB_HOST || 'db', // Usar el nombre del servicio Docker
+  host: process.env.DB_HOST || 'localhost', // Usar localhost para desarrollo local
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || 'flame_assistant',
   user: process.env.DB_USER || 'flame_user',
-  password: process.env.DB_PASSWORD || 'flame_password',
+  password: process.env.DB_PASSWORD || 'password',
   max: 20, // máximo de conexiones en el pool
   idleTimeoutMillis: 30000, // tiempo de inactividad antes de cerrar conexión
   connectionTimeoutMillis: 2000, // tiempo máximo para establecer conexión

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { whatsappSimpleService } from '../services/whatsapp-simple.service';
+import { whatsappMessageService } from '../services/whatsapp-message.service';
 import { logger } from '../utils/logger';
 import { CustomError } from '../utils/helpers';
 
@@ -33,7 +34,7 @@ export class IntegrationController {
 
       logger.info(`Creating WhatsApp session for user: ${userId}`);
 
-      // Crear nueva sesión
+      // Crear nueva sesión usando el servicio simplificado
       logger.info(`Creating new session for user: ${userId}`);
       const result = await whatsappSimpleService.createSession(userId);
       logger.info(`Session created successfully: ${result.sessionId}, QR available: ${!!result.qrCode}`);
@@ -43,6 +44,7 @@ export class IntegrationController {
         data: {
           sessionId: result.sessionId,
           qrCode: result.qrCode || null,
+          qrCodeDataURL: result.qrCodeDataURL || null,
           message: result.qrCode ? 'Sesión creada con QR disponible' : 'Sesión creada, QR pendiente'
         },
         message: 'Sesión de WhatsApp creada exitosamente'
@@ -67,15 +69,54 @@ export class IntegrationController {
         throw new CustomError('Usuario no autenticado', 401);
       }
 
-      const qrCode = await whatsappSimpleService.getQRCode(userId);
-      if (!qrCode) {
+      // Intentar obtener el QR del cache primero
+      let qrData = whatsappSimpleService.getQRCodeFromCache(userId);
+      
+      // Si no está en cache, intentar obtener de la sesión
+      if (!qrData) {
+        const qrCode = await whatsappSimpleService.getQRCode(userId);
+        const qrCodeDataURL = await whatsappSimpleService.getQRCodeDataURL(userId);
+        
+        if (qrCode) {
+          qrData = { qr: qrCode, dataURL: qrCodeDataURL || '' };
+        }
+      }
+      
+      // Si no está disponible, esperar un poco y reintentar
+      if (!qrData) {
+        logger.info(`QR not immediately available for user ${userId}, waiting...`);
+        
+        // Esperar hasta 30 segundos con polling cada 1 segundo
+        for (let i = 0; i < 30; i++) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          qrData = whatsappSimpleService.getQRCodeFromCache(userId);
+          if (!qrData) {
+            const qrCode = await whatsappSimpleService.getQRCode(userId);
+            const qrCodeDataURL = await whatsappSimpleService.getQRCodeDataURL(userId);
+            
+            if (qrCode) {
+              qrData = { qr: qrCode, dataURL: qrCodeDataURL || '' };
+            }
+          }
+          
+          if (qrData) {
+            logger.info(`QR obtained after ${(i + 1)} seconds for user ${userId}`);
+            break;
+          }
+          logger.info(`QR polling attempt ${i + 1}/30 for user ${userId}`);
+        }
+      }
+
+      if (!qrData) {
         throw new CustomError('QR Code no disponible', 404);
       }
 
       return res.status(200).json({
         success: true,
         data: {
-          qrCode,
+          qrCode: qrData.qr,
+          qrCodeDataURL: qrData.dataURL,
           sessionId: `whatsapp_${userId}_${Date.now()}`
         },
         message: 'QR Code obtenido exitosamente'
@@ -136,14 +177,20 @@ export class IntegrationController {
         throw new CustomError('Sesión de WhatsApp no conectada', 400);
       }
 
-      const success = await whatsappSimpleService.sendMessage(userId, to, message);
+      const sentMessage = await whatsappSimpleService.sendMessage(userId, to, message);
       
-      if (!success) {
+      if (!sentMessage) {
         throw new CustomError('Error al enviar mensaje', 500);
       }
 
       res.status(200).json({
         success: true,
+        data: {
+          messageId: sentMessage.id,
+          chatId: sentMessage.chatId,
+          timestamp: sentMessage.messageTimestamp,
+          status: sentMessage.status
+        },
         message: 'Mensaje enviado exitosamente'
       });
 
@@ -208,12 +255,17 @@ export class IntegrationController {
 
       const messages = await whatsappSimpleService.getMessages(
         userId, 
-        chatId
+        chatId,
+        parseInt(limit as string)
       );
 
       res.status(200).json({
         success: true,
-        data: messages,
+        data: {
+          messages,
+          total: messages.length,
+          limit: parseInt(limit as string)
+        },
         message: 'Mensajes obtenidos exitosamente'
       });
 
@@ -243,6 +295,37 @@ export class IntegrationController {
 
     } catch (error) {
       logger.error('Error disconnecting WhatsApp session:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Forzar reconexión de WhatsApp
+  async forceReconnectWhatsApp(req: Request, res: Response) {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        throw new CustomError('Usuario no autenticado', 401);
+      }
+
+      const reconnected = await whatsappSimpleService.forceReconnect(userId);
+
+      if (reconnected) {
+        res.status(200).json({
+          success: true,
+          message: 'Reconexión de WhatsApp iniciada exitosamente'
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: 'No se pudo iniciar la reconexión'
+        });
+      }
+
+    } catch (error) {
+      logger.error('Error forcing WhatsApp reconnection:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Error interno del servidor'
@@ -302,7 +385,7 @@ export class IntegrationController {
           res.status(200).json({
             success: true,
             data: {
-              messageId: sentMessage?.key?.id || 'unknown',
+              messageId: sentMessage?.id || 'unknown',
               timestamp: sentMessage?.messageTimestamp || Date.now(),
               to: to,
               message: message
@@ -410,8 +493,7 @@ export class IntegrationController {
   // Limpiar sesiones expiradas
   async cleanupExpiredSessions(req: Request, res: Response) {
     try {
-      await whatsappSimpleService.cleanupExpiredSessions();
-      const cleanedCount = 0; // Por ahora retornamos 0, se implementará el conteo más adelante
+      const cleanedCount = await whatsappSimpleService.cleanupExpiredSessions();
       
       return res.status(200).json({
         success: true,

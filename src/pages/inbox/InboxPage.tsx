@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   MessageSquare, 
   Search, 
@@ -23,8 +23,15 @@ import {
   Zap,
   MessageCircle,
   Mail,
-  Calendar
+  Calendar,
+  RefreshCw,
+  Image as ImageIcon,
+  FileText,
+  Mic,
+  Video
 } from 'lucide-react';
+import { useApp } from '../../contexts/AppContext';
+import { apiService } from '../../services/api.service';
 
 interface Message {
   id: string;
@@ -38,6 +45,45 @@ interface Message {
     fileSize?: string;
     fileType?: string;
   };
+}
+
+interface WhatsAppMessage {
+  id: string;
+  key: any;
+  message: any;
+  messageTimestamp: number;
+  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+  fromMe: boolean;
+  chatId: string;
+  senderId: string;
+  senderName?: string;
+  body?: string;
+  type: string;
+  hasMedia: boolean;
+  media?: {
+    mimetype?: string;
+    filename?: string;
+    caption?: string;
+    url?: string;
+  };
+  quotedMessage?: WhatsAppMessage;
+  contextInfo?: any;
+}
+
+interface WhatsAppChat {
+  id: string;
+  name: string;
+  isGroup: boolean;
+  isReadOnly: boolean;
+  unreadCount: number;
+  lastMessage?: WhatsAppMessage;
+  participants: string[];
+  createdAt: number;
+  updatedAt: number;
+  archived: boolean;
+  pinned: boolean;
+  ephemeralExpiration?: number;
+  ephemeralSettingTimestamp?: number;
 }
 
 interface Conversation {
@@ -59,12 +105,117 @@ interface Conversation {
 }
 
 export const InboxPage: React.FC = () => {
+  const { isAuthenticated, user } = useApp();
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [newMessage, setNewMessage] = useState('');
+  const [whatsappChats, setWhatsappChats] = useState<WhatsAppChat[]>([]);
+  const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
+  const [isLoadingWhatsApp, setIsLoadingWhatsApp] = useState(false);
+  const [whatsappStatus, setWhatsappStatus] = useState<{
+    isConnected: boolean;
+    isAuthenticated: boolean;
+    phoneNumber?: string;
+    userName?: string;
+  } | null>(null);
+  const [showWhatsAppOnly, setShowWhatsAppOnly] = useState(false);
+
+  // Cargar estado de WhatsApp al montar el componente
+  useEffect(() => {
+    if (isAuthenticated) {
+      checkWhatsAppStatus();
+    }
+  }, [isAuthenticated]);
+
+  // Cargar chats de WhatsApp cuando esté conectado
+  useEffect(() => {
+    if (whatsappStatus?.isConnected) {
+      loadWhatsAppChats();
+    }
+  }, [whatsappStatus?.isConnected]);
+
+  // Cargar mensajes cuando se selecciona un chat de WhatsApp
+  useEffect(() => {
+    if (selectedConversation && whatsappStatus?.isConnected) {
+      loadWhatsAppMessages(selectedConversation);
+    }
+  }, [selectedConversation, whatsappStatus?.isConnected]);
+
+  // Verificar estado de WhatsApp
+  const checkWhatsAppStatus = async () => {
+    try {
+      const response = await apiService.getWhatsAppStatus();
+      if (response.success && response.data) {
+        setWhatsappStatus(response.data);
+      }
+    } catch (error) {
+      console.error('Error checking WhatsApp status:', error);
+    }
+  };
+
+  // Cargar chats de WhatsApp
+  const loadWhatsAppChats = async () => {
+    try {
+      setIsLoadingWhatsApp(true);
+      const response = await apiService.getWhatsAppChatsNew();
+      if (response.success && response.data) {
+        setWhatsappChats(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading WhatsApp chats:', error);
+    } finally {
+      setIsLoadingWhatsApp(false);
+    }
+  };
+
+  // Cargar mensajes de WhatsApp
+  const loadWhatsAppMessages = async (chatId: string) => {
+    try {
+      setIsLoadingWhatsApp(true);
+      const response = await apiService.getWhatsAppMessagesNew(chatId, { limit: 50 });
+      if (response.success && response.data) {
+        setWhatsappMessages(response.data.messages || []);
+      }
+    } catch (error) {
+      console.error('Error loading WhatsApp messages:', error);
+    } finally {
+      setIsLoadingWhatsApp(false);
+    }
+  };
+
+  // Enviar mensaje de WhatsApp
+  const sendWhatsAppMessage = async () => {
+    if (!newMessage.trim() || !selectedConversation || !whatsappStatus?.isConnected) return;
+
+    try {
+      const response = await apiService.sendMessage(selectedConversation, newMessage.trim());
+      if (response.success && response.data) {
+        // Agregar mensaje a la lista local
+        const sentMessage: WhatsAppMessage = {
+          id: response.data.messageId,
+          key: { id: response.data.messageId, remoteJid: selectedConversation, fromMe: true },
+          message: { conversation: newMessage },
+          messageTimestamp: response.data.timestamp,
+          status: 'sent',
+          fromMe: true,
+          chatId: selectedConversation,
+          senderId: user?.id || '',
+          senderName: 'Tú',
+          body: newMessage.trim(),
+          type: 'text',
+          hasMedia: false
+        };
+
+        setWhatsappMessages(prev => [...prev, sentMessage]);
+        setNewMessage('');
+      }
+    } catch (error) {
+      console.error('Error sending WhatsApp message:', error);
+    }
+  };
 
   const [conversations, setConversations] = useState<Conversation[]>([
     {
@@ -494,17 +645,46 @@ export const InboxPage: React.FC = () => {
     }
   ]);
 
-  const filteredConversations = conversations.filter(conversation => {
+  // Combinar conversaciones normales con chats de WhatsApp
+  const allConversations = [
+    ...conversations.map(conv => ({
+      ...conv,
+      isWhatsApp: false,
+      whatsappChat: null
+    })),
+    ...whatsappChats.map(chat => ({
+      id: `whatsapp_${chat.id}`,
+      contactName: chat.name,
+      contactPhone: chat.id.includes('@g.us') ? 'Grupo' : chat.id.split('@')[0],
+      platform: 'whatsapp' as const,
+      status: 'active' as const,
+      priority: 'medium' as const,
+      assignedAssistant: 'WhatsApp Assistant',
+      lastMessage: chat.lastMessage?.body || 'Sin mensajes',
+      lastMessageTime: new Date(chat.lastMessage?.messageTimestamp * 1000 || chat.updatedAt).toISOString(),
+      unreadCount: chat.unreadCount,
+      tags: chat.isGroup ? ['grupo'] : ['individual'],
+      messages: [],
+      createdAt: new Date(chat.createdAt).toISOString(),
+      updatedAt: new Date(chat.updatedAt).toISOString(),
+      isWhatsApp: true,
+      whatsappChat: chat
+    }))
+  ];
+
+  const filteredConversations = allConversations.filter(conversation => {
     const matchesSearch = conversation.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          conversation.lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || conversation.status === statusFilter;
     const matchesPriority = priorityFilter === 'all' || conversation.priority === priorityFilter;
     const matchesPlatform = platformFilter === 'all' || conversation.platform === platformFilter;
+    const matchesWhatsApp = !showWhatsAppOnly || conversation.isWhatsApp;
     
-    return matchesSearch && matchesStatus && matchesPriority && matchesPlatform;
+    return matchesSearch && matchesStatus && matchesPriority && matchesPlatform && matchesWhatsApp;
   });
 
-  const selectedConv = conversations.find(c => c.id === selectedConversation);
+  const selectedConv = allConversations.find(c => c.id === selectedConversation);
+  const isWhatsAppConversation = selectedConv?.isWhatsApp || false;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -582,28 +762,34 @@ export const InboxPage: React.FC = () => {
   const handleSendMessage = () => {
     if (!newMessage.trim() || !selectedConv) return;
     
-    const newMsg: Message = {
-      id: Date.now().toString(),
-      content: newMessage,
-      sender: 'agent',
-      timestamp: new Date().toISOString(),
-      type: 'text',
-      status: 'sent'
-    };
+    if (isWhatsAppConversation) {
+      // Enviar mensaje de WhatsApp
+      sendWhatsAppMessage();
+    } else {
+      // Enviar mensaje normal
+      const newMsg: Message = {
+        id: Date.now().toString(),
+        content: newMessage,
+        sender: 'agent',
+        timestamp: new Date().toISOString(),
+        type: 'text',
+        status: 'sent'
+      };
 
-    setConversations(conversations.map(conv => 
-      conv.id === selectedConv.id 
-        ? { 
-            ...conv, 
-            messages: [...conv.messages, newMsg],
-            lastMessage: newMessage,
-            lastMessageTime: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }
-        : conv
-    ));
+      setConversations(conversations.map(conv => 
+        conv.id === selectedConv.id 
+          ? { 
+              ...conv, 
+              messages: [...conv.messages, newMsg],
+              lastMessage: newMessage,
+              lastMessageTime: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }
+          : conv
+      ));
 
-    setNewMessage('');
+      setNewMessage('');
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -676,6 +862,42 @@ export const InboxPage: React.FC = () => {
                 <option value="telegram">Telegram</option>
               </select>
             </div>
+
+            {/* WhatsApp Status and Toggle */}
+            {whatsappStatus && (
+              <div className="mt-4 p-3 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <MessageCircle className={`w-4 h-4 ${whatsappStatus.isConnected ? 'text-green-500' : 'text-gray-400'}`} />
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      WhatsApp {whatsappStatus.isConnected ? 'Conectado' : 'Desconectado'}
+                    </span>
+                    {whatsappStatus.isConnected && whatsappStatus.userName && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        ({whatsappStatus.userName})
+                      </span>
+                    )}
+                  </div>
+                  {whatsappStatus.isConnected && (
+                    <button
+                      onClick={() => setShowWhatsAppOnly(!showWhatsAppOnly)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        showWhatsAppOnly 
+                          ? 'bg-green-500 text-white' 
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                      }`}
+                    >
+                      {showWhatsAppOnly ? 'Solo WhatsApp' : 'Ver WhatsApp'}
+                    </button>
+                  )}
+                </div>
+                {whatsappStatus.isConnected && (
+                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    {whatsappChats.length} chats disponibles
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Conversations List */}
@@ -794,39 +1016,107 @@ export const InboxPage: React.FC = () => {
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {selectedConv.messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.sender === 'user' ? 'justify-start' : 'justify-end'}`}
-                  >
-                    <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
-                      message.sender === 'user'
-                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
-                        : message.sender === 'assistant'
-                        ? 'bg-purple-500 text-white'
-                        : 'bg-blue-500 text-white'
-                    }`}>
-                      <p className="text-sm">{message.content}</p>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs opacity-70">
-                          {formatTimeForBubble(message.timestamp)}
-                        </span>
-                        {message.sender !== 'user' && (
-                          <div className="flex items-center space-x-1">
-                            {message.status === 'sent' && <Clock className="w-3 h-3" />}
-                            {message.status === 'delivered' && <CheckCircle className="w-3 h-3" />}
-                            {message.status === 'read' && <CheckCircle className="w-3 h-3 text-blue-400" />}
-                            {message.status === 'failed' && <AlertCircle className="w-3 h-3 text-red-400" />}
+                {isLoadingWhatsApp ? (
+                  <div className="flex items-center justify-center h-32">
+                    <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
+                    <span className="ml-2 text-gray-500">Cargando mensajes...</span>
+                  </div>
+                ) : isWhatsAppConversation ? (
+                  // Mostrar mensajes de WhatsApp
+                  whatsappMessages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-32 text-center">
+                      <MessageCircle className="w-8 h-8 text-gray-400 mb-2" />
+                      <p className="text-gray-500">No hay mensajes en este chat</p>
+                    </div>
+                  ) : (
+                    whatsappMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${message.fromMe ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                          message.fromMe
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                        }`}>
+                          {!message.fromMe && (
+                            <div className="text-xs opacity-75 mb-1">
+                              {message.senderName}
+                            </div>
+                          )}
+                          <p className="text-sm">{message.body}</p>
+                          {message.hasMedia && (
+                            <div className="mt-2 flex items-center space-x-1">
+                              {message.type === 'image' && <ImageIcon className="w-4 h-4" />}
+                              {message.type === 'video' && <Video className="w-4 h-4" />}
+                              {message.type === 'audio' && <Mic className="w-4 h-4" />}
+                              {message.type === 'document' && <FileText className="w-4 h-4" />}
+                              <span className="text-xs opacity-75">
+                                {message.media?.filename || 'Archivo'}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xs opacity-70">
+                              {formatTimeForBubble(new Date(message.messageTimestamp * 1000).toISOString())}
+                            </span>
+                            {message.fromMe && (
+                              <div className="flex items-center space-x-1">
+                                {message.status === 'sent' && <Clock className="w-3 h-3" />}
+                                {message.status === 'delivered' && <CheckCircle className="w-3 h-3" />}
+                                {message.status === 'read' && <CheckCircle className="w-3 h-3 text-blue-400" />}
+                                {message.status === 'failed' && <AlertCircle className="w-3 h-3 text-red-400" />}
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
+                      </div>
+                    ))
+                  )
+                ) : (
+                  // Mostrar mensajes normales
+                  selectedConv.messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`flex ${message.sender === 'user' ? 'justify-start' : 'justify-end'}`}
+                    >
+                      <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                        message.sender === 'user'
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                          : message.sender === 'assistant'
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-blue-500 text-white'
+                      }`}>
+                        <p className="text-sm">{message.content}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-xs opacity-70">
+                            {formatTimeForBubble(message.timestamp)}
+                          </span>
+                          {message.sender !== 'user' && (
+                            <div className="flex items-center space-x-1">
+                              {message.status === 'sent' && <Clock className="w-3 h-3" />}
+                              {message.status === 'delivered' && <CheckCircle className="w-3 h-3" />}
+                              {message.status === 'read' && <CheckCircle className="w-3 h-3 text-blue-400" />}
+                              {message.status === 'failed' && <AlertCircle className="w-3 h-3 text-red-400" />}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
 
               {/* Message Input */}
               <div className="p-6 border-t border-gray-200/50 dark:border-dark-border/50 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl">
+                {isWhatsAppConversation && !whatsappStatus?.isConnected && (
+                  <div className="mb-4 p-3 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg">
+                    <p className="text-yellow-800 dark:text-yellow-200 text-sm">
+                      ⚠️ WhatsApp no está conectado. Ve a Integraciones para conectar tu cuenta.
+                    </p>
+                  </div>
+                )}
+                
                 <div className="flex items-end space-x-3">
                   <button className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                     <Paperclip className="w-5 h-5 text-gray-500" />
@@ -837,9 +1127,16 @@ export const InboxPage: React.FC = () => {
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
                       onKeyPress={handleKeyPress}
-                      placeholder="Escribe tu mensaje..."
+                      placeholder={
+                        isWhatsAppConversation 
+                          ? whatsappStatus?.isConnected 
+                            ? "Escribe un mensaje de WhatsApp..." 
+                            : "Conecta WhatsApp para enviar mensajes"
+                          : "Escribe tu mensaje..."
+                      }
                       rows={1}
-                      className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                      disabled={isWhatsAppConversation && !whatsappStatus?.isConnected}
+                      className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <button className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                       <Smile className="w-5 h-5 text-gray-500" />
@@ -848,12 +1145,23 @@ export const InboxPage: React.FC = () => {
                   
                   <button
                     onClick={handleSendMessage}
-                    disabled={!newMessage.trim()}
-                    className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-3 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!newMessage.trim() || (isWhatsAppConversation && !whatsappStatus?.isConnected)}
+                    className={`p-3 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      isWhatsAppConversation
+                        ? 'bg-green-500 text-white hover:bg-green-600'
+                        : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+                    }`}
                   >
                     <Send className="w-5 h-5" />
                   </button>
                 </div>
+                
+                {isWhatsAppConversation && whatsappStatus?.isConnected && (
+                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
+                    <MessageCircle className="w-3 h-3" />
+                    <span>Enviando a través de WhatsApp</span>
+                  </div>
+                )}
               </div>
             </>
           ) : (

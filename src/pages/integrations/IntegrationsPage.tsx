@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Zap, 
   MessageCircle, 
@@ -9,10 +9,13 @@ import {
   XCircle, 
   ExternalLink,
   Copy,
-  RefreshCw
+  RefreshCw,
+  MessageSquare
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { apiService } from '../../services/api.service';
+import { useNavigate } from 'react-router-dom';
+// Importación dinámica de QRCode para evitar problemas con Vite
 
 interface Integration {
   id: string;
@@ -27,7 +30,9 @@ interface Integration {
 
 export const IntegrationsPage: React.FC = () => {
   const { isAuthenticated, user } = useApp();
+  const navigate = useNavigate();
   const [whatsappQR, setWhatsappQR] = useState<string | null>(null);
+  const [qrImageData, setQrImageData] = useState<string | null>(null);
   const [isGeneratingQR, setIsGeneratingQR] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +48,34 @@ export const IntegrationsPage: React.FC = () => {
     type: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
+
+  // Generar imagen QR cuando se reciba el código
+  useEffect(() => {
+    if (whatsappQR) {
+      generateQRImage(whatsappQR);
+    } else {
+      setQrImageData(null);
+    }
+  }, [whatsappQR]);
+
+  const generateQRImage = async (qrString: string) => {
+    try {
+      // Importación dinámica de QRCode
+      const QRCode = await import('qrcode');
+      const qrImageUrl = await QRCode.toDataURL(qrString, {
+        width: 256,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+      setQrImageData(qrImageUrl);
+    } catch (error) {
+      console.error('Error generating QR image:', error);
+      setError('Error generando la imagen del código QR');
+    }
+  };
 
   const integrations: Integration[] = [
     {
@@ -105,12 +138,12 @@ export const IntegrationsPage: React.FC = () => {
       console.log('WhatsApp session response:', response);
       
       if (response.success && response.data) {
-        if (response.data.qrCode) {
+        if (response.data?.qrCode) {
           // QR disponible inmediatamente
           setWhatsappQR(response.data.qrCode);
           console.log('QR Code received immediately from backend');
           setIsGeneratingQR(false);
-        } else if (response.data.sessionId) {
+        } else if (response.data?.sessionId) {
           // QR pendiente, hacer polling
           console.log('Session created, polling for QR...');
           // NO cambiar isGeneratingQR aquí, mantener el modal abierto
@@ -137,9 +170,9 @@ export const IntegrationsPage: React.FC = () => {
         
         // Primero verificar el estado de conexión
         const statusResponse = await apiService.getWhatsAppStatus();
-        if (statusResponse.success && statusResponse.data?.isConnected) {
+        if (statusResponse.success && statusResponse.data && 'isConnected' in statusResponse.data && statusResponse.data.isConnected) {
           console.log('WhatsApp connected! Closing modal and updating status');
-          setWhatsappStatus(statusResponse.data);
+          setWhatsappStatus(statusResponse.data as any);
           setWhatsappQR(null);
           setIsGeneratingQR(false);
           return;
@@ -147,7 +180,7 @@ export const IntegrationsPage: React.FC = () => {
         
         // Si no está conectado, verificar si hay QR disponible
         const qrResponse = await apiService.getWhatsAppQR();
-        if (qrResponse.success && qrResponse.data?.qrCode) {
+        if (qrResponse.success && qrResponse.data && 'qrCode' in qrResponse.data && qrResponse.data.qrCode) {
           setWhatsappQR(qrResponse.data.qrCode);
           console.log('QR Code received from polling');
           setIsGeneratingQR(false); // Detener el estado de carga
@@ -187,7 +220,7 @@ export const IntegrationsPage: React.FC = () => {
     try {
       const response = await apiService.getWhatsAppStatus();
       if (response.success && response.data) {
-        setWhatsappStatus(response.data);
+        setWhatsappStatus(response.data as any);
       }
     } catch (error) {
       console.error('Error checking WhatsApp status:', error);
@@ -350,20 +383,31 @@ export const IntegrationsPage: React.FC = () => {
                     {integration.available ? (
                       <div className="space-y-2">
                         {integration.id === 'whatsapp-web' && whatsappStatus?.isConnected ? (
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={checkWhatsAppStatus}
-                              disabled={isLoadingStatus}
-                              className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-blue-600 transition-colors disabled:opacity-50"
-                            >
-                              {isLoadingStatus ? 'Verificando...' : 'Actualizar Estado'}
-                            </button>
-                            <button
-                              onClick={disconnectWhatsApp}
-                              className="flex-1 bg-red-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-red-600 transition-colors"
-                            >
-                              Desconectar
-                            </button>
+                          <div className="space-y-2">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => navigate('/inbox')}
+                                className="flex-1 bg-green-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-green-600 transition-colors flex items-center justify-center space-x-2"
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                                <span>Gestionar Mensajes</span>
+                              </button>
+                            </div>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={checkWhatsAppStatus}
+                                disabled={isLoadingStatus}
+                                className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-blue-600 transition-colors disabled:opacity-50"
+                              >
+                                {isLoadingStatus ? 'Verificando...' : 'Actualizar Estado'}
+                              </button>
+                              <button
+                                onClick={disconnectWhatsApp}
+                                className="flex-1 bg-red-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-red-600 transition-colors"
+                              >
+                                Desconectar
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <button
@@ -429,11 +473,17 @@ export const IntegrationsPage: React.FC = () => {
                     {/* QR Code */}
                     {whatsappQR ? (
                       <div className="bg-white p-4 rounded-xl border border-gray-200 dark:border-dark-border mb-6 inline-block">
-                        <img 
-                          src={whatsappQR} 
-                          alt="WhatsApp QR Code" 
-                          className="w-48 h-48"
-                        />
+                        {qrImageData ? (
+                          <img 
+                            src={qrImageData} 
+                            alt="WhatsApp QR Code" 
+                            className="w-48 h-48"
+                          />
+                        ) : (
+                          <div className="w-48 h-48 flex items-center justify-center">
+                            <RefreshCw className="w-12 h-12 text-gray-400 animate-spin" />
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-dark-border mb-6 inline-block">
@@ -464,6 +514,7 @@ export const IntegrationsPage: React.FC = () => {
                       <button
                         onClick={() => {
                           setWhatsappQR(null);
+                          setQrImageData(null);
                           setIsGeneratingQR(false);
                         }}
                         className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
@@ -476,7 +527,7 @@ export const IntegrationsPage: React.FC = () => {
                           className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center justify-center space-x-2"
                         >
                           <Copy className="w-4 h-4" />
-                          <span>{copied ? 'Copiado!' : 'Copiar URL'}</span>
+                          <span>{copied ? 'Copiado!' : 'Copiar Código'}</span>
                         </button>
                       )}
                     </div>
@@ -484,6 +535,7 @@ export const IntegrationsPage: React.FC = () => {
                 </div>
               </div>
             )}
+
 
       </div>
     </div>

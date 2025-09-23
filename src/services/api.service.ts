@@ -178,7 +178,7 @@ export class ApiService {
     return this.delete(apiConfig.endpoints.conversations.delete(id));
   }
 
-  async getMessages(conversationId: string, params?: {
+  async getConversationMessages(conversationId: string, params?: {
     page?: number;
     limit?: number;
     sender?: string;
@@ -190,7 +190,7 @@ export class ApiService {
     );
   }
 
-  async sendMessage(conversationId: string, messageData: {
+  async sendConversationMessage(conversationId: string, messageData: {
     content: string;
     type?: string;
     metadata?: any;
@@ -302,13 +302,75 @@ export class ApiService {
     });
   }
 
-  async getWhatsAppChats() {
+  async getWhatsAppChatsLegacy() {
     return this.get(apiConfig.endpoints.integrations.whatsapp.getChats);
   }
 
-  async getWhatsAppMessages(chatId: string, limit?: number) {
+  async getWhatsAppMessagesLegacy(chatId: string, limit?: number) {
     return this.get(apiConfig.endpoints.integrations.whatsapp.getMessages(chatId), {
       limit
+    });
+  }
+
+  // Métodos para gestión de mensajes WhatsApp
+  async sendMessage(to: string, message: string, type: string = 'text') {
+    return this.post('/api/messages/send', {
+      to,
+      message,
+      type
+    });
+  }
+
+  async sendMediaMessage(to: string, file: File, caption?: string, mediaType?: string) {
+    const formData = new FormData();
+    formData.append('media', file);
+    formData.append('to', to);
+    if (caption) formData.append('caption', caption);
+    if (mediaType) formData.append('mediaType', mediaType);
+
+    return this.request('/api/messages/send-media', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...this.getHeaders(),
+        // No incluir Content-Type para FormData, el navegador lo establecerá automáticamente
+      }
+    });
+  }
+
+  async getWhatsAppChatsNew(params?: { limit?: number; offset?: number }) {
+    return this.get('/api/messages/chats', params);
+  }
+
+  async getWhatsAppMessagesNew(chatId: string, params?: { limit?: number; offset?: number }) {
+    return this.get(`/api/messages/chats/${chatId}/messages`, params);
+  }
+
+  async markAsRead(chatId: string, messageIds?: string[]) {
+    return this.post(`/api/messages/chats/${chatId}/mark-read`, {
+      messageIds
+    });
+  }
+
+  async getRecentMessages(limit?: number) {
+    return this.get('/api/messages/recent', { limit });
+  }
+
+  async searchMessages(query: string, params?: { chatId?: string; limit?: number }) {
+    return this.get('/api/messages/search', {
+      query,
+      ...params
+    });
+  }
+
+  async getMessageStats() {
+    return this.get('/api/messages/stats');
+  }
+
+  async setupMessageWebhook(webhookUrl: string, events?: string[]) {
+    return this.post('/api/messages/webhook', {
+      webhookUrl,
+      events: events || ['message', 'messageUpdate']
     });
   }
 }

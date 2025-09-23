@@ -4,11 +4,11 @@ const path = require('path');
 
 // Configuración de la base de datos
 const pool = new Pool({
-  host: process.env.DB_HOST || 'postgres',
+  host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || 'flame_assistant',
   user: process.env.DB_USER || 'flame_user',
-  password: process.env.DB_PASSWORD || 'flame_password',
+  password: process.env.DB_PASSWORD || 'password',
   ssl: false
 });
 

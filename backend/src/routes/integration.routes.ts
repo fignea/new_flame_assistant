@@ -33,6 +33,7 @@ router.post('/whatsapp/session', integrationController.createWhatsAppSession);
 router.get('/whatsapp/qr', integrationController.getWhatsAppQR);
 router.get('/whatsapp/status', integrationController.getWhatsAppStatus);
 router.post('/whatsapp/disconnect', integrationController.disconnectWhatsApp);
+router.post('/whatsapp/reconnect', integrationController.forceReconnectWhatsApp);
 
 // Enviar mensaje de WhatsApp
 router.post('/whatsapp/send', 

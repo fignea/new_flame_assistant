@@ -25,9 +25,13 @@ import authRoutes from './routes/auth.routes';
 import conversationsRoutes from './routes/conversations.routes';
 import assistantsRoutes from './routes/assistants.routes';
 import integrationRoutes from './routes/integration.routes';
+import messagesRoutes from './routes/messages.routes';
 
 // Importar utilidades
 import { logger, logRequest } from './utils/logger';
+
+// Importar servicios para inicialización
+import './services/whatsapp-simple.service';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -143,6 +147,7 @@ class App {
     this.app.use('/api/conversations', conversationsRoutes);
     this.app.use('/api/assistants', assistantsRoutes);
     this.app.use('/api/integrations', integrationRoutes);
+    this.app.use('/api/messages', messagesRoutes);
 
     // Root endpoint
     this.app.get('/', (req, res) => {

@@ -14,25 +14,9 @@ import { Boom } from '@hapi/boom';
 import path from 'path';
 import { logger } from '../utils/logger';
 import { EventEmitter } from 'events';
-import QRCode from 'qrcode';
-import pino from 'pino';
 
-// Interfaces simplificadas
-export interface SimpleWhatsAppSession {
-  sessionId: string;
-  userId: string;
-  socket: WASocket | null;
-  isConnected: boolean;
-  isAuthenticated: boolean;
-  phoneNumber?: string;
-  userName?: string;
-  lastSeen?: Date;
-  createdAt: Date;
-  qrCode?: string;
-  qrCodeDataURL?: string;
-}
-
-export interface SimpleWhatsAppMessage {
+// Interfaces para mensajes y chats
+export interface WhatsAppMessage {
   id: string;
   key: WAMessageKey;
   message: WAMessageContent;
@@ -51,32 +35,53 @@ export interface SimpleWhatsAppMessage {
     caption?: string;
     url?: string;
   };
+  quotedMessage?: WhatsAppMessage;
+  contextInfo?: any;
 }
 
-export interface SimpleWhatsAppChat {
+export interface WhatsAppChat {
   id: string;
   name: string;
   isGroup: boolean;
   isReadOnly: boolean;
   unreadCount: number;
-  lastMessage?: SimpleWhatsAppMessage;
+  lastMessage?: WhatsAppMessage;
   participants: string[];
   createdAt: number;
   updatedAt: number;
   archived: boolean;
   pinned: boolean;
+  ephemeralExpiration?: number;
+  ephemeralSettingTimestamp?: number;
 }
 
-export class SimpleWhatsAppService extends EventEmitter {
-  private sessions: Map<string, SimpleWhatsAppSession> = new Map();
-  private messageHandlers: Map<string, Function[]> = new Map();
-  private chatCache: Map<string, SimpleWhatsAppChat> = new Map();
-  private messageCache: Map<string, SimpleWhatsAppMessage[]> = new Map();
-  private qrCodeCache: Map<string, { qr: string; dataURL: string; timestamp: number }> = new Map();
+export interface WhatsAppSession {
+  sessionId: string;
+  userId: string;
+  socket: WASocket | null;
+  isConnected: boolean;
+  isAuthenticated: boolean;
+  phoneNumber?: string;
+  userName?: string;
+  lastSeen?: Date;
+  createdAt: Date;
+  qrCode?: string;
+}
+
+export interface MessageHandler {
+  (message: WhatsAppMessage): void | Promise<void>;
+}
+
+export class WhatsAppMessageService extends EventEmitter {
+  private sessions: Map<string, WhatsAppSession> = new Map();
+  private messageHandlers: Map<string, MessageHandler[]> = new Map();
+
+  private chatCache: Map<string, WhatsAppChat> = new Map();
+  private messageCache: Map<string, WhatsAppMessage[]> = new Map();
 
   constructor() {
     super();
-    logger.info('SimpleWhatsAppService initialized');
+    logger.info('WhatsAppMessageService initialized');
     this.setupGlobalEventHandlers();
   }
 
@@ -85,18 +90,13 @@ export class SimpleWhatsAppService extends EventEmitter {
     setInterval(() => {
       this.cleanupCache();
     }, 5 * 60 * 1000); // Cada 5 minutos
-
-    // Limpiar QR codes expirados
-    setInterval(() => {
-      this.cleanupExpiredQRCodes();
-    }, 2 * 60 * 1000); // Cada 2 minutos
   }
 
-  // Crear nueva sesión simplificada
-  async createSession(userId: string): Promise<{ sessionId: string; qrCode?: string; qrCodeDataURL?: string }> {
+  // Crear nueva sesión con gestión de mensajes
+  async createSession(userId: string): Promise<{ sessionId: string; qrCode?: string }> {
     const sessionId = `whatsapp_${userId}_${Date.now()}`;
     
-    logger.info(`Creating simple WhatsApp session for user: ${userId}`);
+    logger.info(`Creating WhatsApp session with message management for user: ${userId}`);
     
     // Verificar si ya hay una sesión activa
     const existingSession = this.sessions.get(userId);
@@ -104,13 +104,12 @@ export class SimpleWhatsAppService extends EventEmitter {
       logger.info(`Session ${userId} already active and connected`);
       return { 
         sessionId: existingSession.sessionId, 
-        qrCode: existingSession.qrCode,
-        qrCodeDataURL: existingSession.qrCodeDataURL
+        qrCode: existingSession.qrCode 
       };
     }
 
     try {
-      // Limpiar sesión anterior si existe
+      // Solo limpiar sesión anterior si no está conectada
       if (this.sessions.has(userId)) {
         const currentSession = this.sessions.get(userId);
         if (currentSession && !currentSession.isConnected) {
@@ -120,14 +119,13 @@ export class SimpleWhatsAppService extends EventEmitter {
           logger.info(`Session ${userId} is already connected, returning existing session`);
           return { 
             sessionId: currentSession.sessionId, 
-            qrCode: currentSession.qrCode,
-            qrCodeDataURL: currentSession.qrCodeDataURL
+            qrCode: currentSession.qrCode 
           };
         }
       }
 
       // Crear nueva sesión
-      const session: SimpleWhatsAppSession = {
+      const session: WhatsAppSession = {
         sessionId,
         userId,
         socket: null,
@@ -150,20 +148,13 @@ export class SimpleWhatsAppService extends EventEmitter {
     }
   }
 
-  // Inicializar sesión de Baileys simplificada
+  // Inicializar sesión de Baileys con gestión de mensajes
   private async initializeBaileysSession(userId: string, sessionId: string): Promise<void> {
     try {
-      logger.info(`Initializing simple Baileys session for user ${userId}`);
+      logger.info(`Initializing Baileys session with message handling for user ${userId}`);
       
       const authFolder = path.resolve(process.cwd(), `sessions/${userId}`);
       logger.info(`Auth folder: ${authFolder}`);
-      
-      // Crear directorio si no existe
-      const fs = await import('fs');
-      if (!fs.existsSync(authFolder)) {
-        fs.mkdirSync(authFolder, { recursive: true });
-      }
-      
       const { state, saveCreds } = await useMultiFileAuthState(authFolder);
       logger.info(`Auth state loaded for user ${userId}`);
 
@@ -172,28 +163,15 @@ export class SimpleWhatsAppService extends EventEmitter {
         auth: state,
         printQRInTerminal: false,
         browser: ['FlameAI', 'Chrome', '110.0.0.0'],
-        connectTimeoutMs: 120000, // 2 minutos
-        keepAliveIntervalMs: 10000, // 10 segundos
-        retryRequestDelayMs: 1000, // 1 segundo
-        generateHighQualityLinkPreview: false,
+        connectTimeoutMs: 120000, // Aumentar timeout a 2 minutos
+        keepAliveIntervalMs: 10000, // Reducir intervalo de keep alive
+        retryRequestDelayMs: 1000, // Reducir delay entre reintentos
+        generateHighQualityLinkPreview: true,
         markOnlineOnConnect: true,
         syncFullHistory: false,
-        defaultQueryTimeoutMs: 60000, // 1 minuto
-        qrTimeout: 120000, // 2 minutos
-        logger: pino({ level: 'silent' }), // Logger silencioso para reducir spam
-        shouldIgnoreJid: (jid) => false, // No ignorar ningún JID
-        shouldSyncHistoryMessage: () => false, // No sincronizar historial
-        getMessage: async (key) => {
-          return {
-            conversation: 'Mensaje no disponible'
-          };
-        },
-        // Configuraciones adicionales para mejorar la conexión
-        fireInitQueries: true,
-        transactionOpts: {
-          maxCommitRetries: 3,
-          delayBetweenTriesMs: 1000
-        }
+        defaultQueryTimeoutMs: 60000, // Timeout para queries
+        qrTimeout: 120000, // Timeout específico para QR
+        logger: undefined // Deshabilitar logger para reducir spam
       });
       logger.info(`Baileys socket created for user ${userId}`);
 
@@ -213,7 +191,7 @@ export class SimpleWhatsAppService extends EventEmitter {
     }
   }
 
-  // Configurar event handlers del socket simplificados
+  // Configurar event handlers del socket
   private setupSocketEventHandlers(sock: WASocket, userId: string) {
     // Conexión
     sock.ev.on('connection.update', (update) => {
@@ -221,8 +199,7 @@ export class SimpleWhatsAppService extends EventEmitter {
     });
 
     // Credenciales
-    sock.ev.on('creds.update', (creds) => {
-      logger.info(`Credentials updated for user ${userId}`);
+    sock.ev.on('creds.update', () => {
       // saveCreds se maneja automáticamente
     });
 
@@ -231,105 +208,49 @@ export class SimpleWhatsAppService extends EventEmitter {
       this.handleMessagesUpsert(m, userId);
     });
 
+    // Actualizaciones de mensajes (estados, etc.)
+    sock.ev.on('messages.update', (updates) => {
+      this.handleMessagesUpdate(updates, userId);
+    });
+
     // Chats
     sock.ev.on('chats.upsert', (chats: Chat[]) => {
       this.handleChatsUpsert(chats, userId);
     });
 
+    // Actualizaciones de chats
+    sock.ev.on('chats.update', (updates) => {
+      this.handleChatsUpdate(updates, userId);
+    });
+
     // Presencia
-    sock.ev.on('presence.update', (presence) => {
-      logger.info(`Presence update for user ${userId}:`, presence);
+    sock.ev.on('presence.update', (update) => {
+      this.handlePresenceUpdate(update, userId);
     });
 
     // Grupos
     sock.ev.on('groups.update', (updates) => {
-      logger.info(`Groups update for user ${userId}:`, updates.length);
+      this.handleGroupsUpdate(updates, userId);
     });
-
-    // Verificar conexión periódicamente
-    this.startConnectionMonitor(userId, sock);
-
-    // Manejar errores del socket (usando un try-catch en lugar del evento)
-    // sock.ev.on('error', ...) no está disponible en BaileysEventMap
   }
 
-  // Monitorear conexión periódicamente
-  private startConnectionMonitor(userId: string, sock: WASocket) {
-    const checkInterval = setInterval(() => {
-      const session = this.sessions.get(userId);
-      if (!session || !session.socket) {
-        clearInterval(checkInterval);
-        return;
-      }
-
-      // Verificar si el socket tiene usuario (indica conexión exitosa)
-      if (sock.user && !session.isConnected) {
-        logger.info(`Connection detected via user object for user ${userId}`);
-        session.isConnected = true;
-        session.isAuthenticated = true;
-        session.phoneNumber = sock.user.id.split('@')[0];
-        session.userName = sock.user.name || 'Usuario Conectado';
-        session.lastSeen = new Date();
-        session.qrCode = undefined;
-        session.qrCodeDataURL = undefined;
-        
-        // Limpiar QR del cache
-        this.qrCodeCache.delete(userId);
-        
-        this.emit('connected', userId);
-        clearInterval(checkInterval);
-      }
-    }, 2000); // Verificar cada 2 segundos
-
-    // Limpiar el intervalo después de 5 minutos
-    setTimeout(() => {
-      clearInterval(checkInterval);
-    }, 5 * 60 * 1000);
-  }
-
-  // Manejar actualizaciones de conexión simplificadas
-  private async handleConnectionUpdate(update: any, userId: string) {
+  // Manejar actualizaciones de conexión
+  private handleConnectionUpdate(update: any, userId: string) {
     const { connection, lastDisconnect, qr } = update;
     const session = this.sessions.get(userId);
     
     if (!session) return;
 
-    logger.info(`Connection update for user ${userId}: ${connection}, QR: ${!!qr}, lastDisconnect: ${!!lastDisconnect}`);
+    logger.info(`Connection update for user ${userId}: ${connection}, QR: ${!!qr}`);
 
-    // Manejar QR code
     if (qr) {
       logger.info(`QR code received for user ${userId} - Length: ${qr.length}`);
       session.qrCode = qr;
       session.isConnected = false;
       session.isAuthenticated = false;
-      
-      // Generar QR code como Data URL
-      try {
-        const qrDataURL = await QRCode.toDataURL(qr, {
-          width: 300,
-          margin: 2,
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF'
-          }
-        });
-        session.qrCodeDataURL = qrDataURL;
-        
-        // Guardar en cache
-        this.qrCodeCache.set(userId, {
-          qr,
-          dataURL: qrDataURL,
-          timestamp: Date.now()
-        });
-        
-        this.emit('qr', userId, qr, qrDataURL);
-      } catch (error) {
-        logger.error(`Error generating QR data URL for user ${userId}:`, error);
-        this.emit('qr', userId, qr);
-      }
+      this.emit('qr', userId, qr);
     }
 
-    // Manejar cierre de conexión
     if (connection === 'close') {
       logger.info(`Connection closed for user ${userId}`);
       session.isConnected = false;
@@ -338,23 +259,21 @@ export class SimpleWhatsAppService extends EventEmitter {
       const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
       
       if (shouldReconnect) {
-        logger.info(`Reconnecting session for user ${userId} in 5 seconds`);
+        logger.info(`Reconnecting session for user ${userId} in 3 seconds`);
         setTimeout(() => {
           this.initializeBaileysSession(userId, session.sessionId);
-        }, 5000);
+        }, 3000);
       } else {
         logger.info(`Session permanently closed for user ${userId}`);
         this.cleanupSession(userId);
       }
     }
 
-    // Manejar conexión abierta - ESTE ES EL ESTADO CRÍTICO
     if (connection === 'open') {
       logger.info(`WhatsApp connected for user ${userId}`);
       session.isConnected = true;
       session.isAuthenticated = true;
       
-      // Obtener información del usuario del socket
       if (session.socket?.user) {
         session.phoneNumber = session.socket.user.id.split('@')[0];
         session.userName = session.socket.user.name || 'Usuario Conectado';
@@ -363,48 +282,23 @@ export class SimpleWhatsAppService extends EventEmitter {
       
       session.lastSeen = new Date();
       session.qrCode = undefined;
-      session.qrCodeDataURL = undefined;
-      
-      // Limpiar QR del cache
-      this.qrCodeCache.delete(userId);
       
       this.emit('connected', userId);
     }
 
-    // Manejar estado de conexión
     if (connection === 'connecting') {
       logger.info(`Connecting to WhatsApp for user ${userId}`);
     }
-
-    // Manejar estado de autenticación - ESTE TAMBIÉN ES IMPORTANTE
-    if (connection === 'authenticated') {
-      logger.info(`WhatsApp authenticated for user ${userId}`);
-      session.isAuthenticated = true;
-      this.emit('authenticated', userId);
-    }
-
-    // Manejar errores de conexión
-    if (lastDisconnect?.error) {
-      const error = lastDisconnect.error as Boom;
-      logger.error(`Connection error for user ${userId}:`, {
-        statusCode: error.output?.statusCode,
-        message: error.message,
-        data: error.data
-      });
-    }
-
-    // Log del estado actual de la sesión
-    logger.info(`Session state for user ${userId}: connected=${session.isConnected}, authenticated=${session.isAuthenticated}`);
   }
 
-  // Manejar mensajes entrantes simplificados
+  // Manejar mensajes entrantes
   private async handleMessagesUpsert(m: { messages: WAMessage[]; type: MessageUpsertType }, userId: string) {
     const session = this.sessions.get(userId);
     if (!session || !session.socket) return;
 
     for (const message of m.messages) {
       try {
-        const whatsappMessage = await this.convertToSimpleMessage(message, session.socket);
+        const whatsappMessage = await this.convertToWhatsAppMessage(message, session.socket);
         if (whatsappMessage) {
           // Guardar en cache
           this.saveMessageToCache(whatsappMessage);
@@ -428,17 +322,60 @@ export class SimpleWhatsAppService extends EventEmitter {
     }
   }
 
-  // Manejar chats simplificados
+  // Manejar actualizaciones de mensajes
+  private handleMessagesUpdate(updates: proto.IWebMessageInfo[], userId: string) {
+    for (const update of updates) {
+      if (update.key) {
+        const messageId = this.getMessageId(update.key);
+        const cachedMessages = this.messageCache.get(update.key.remoteJid || '') || [];
+        const messageIndex = cachedMessages.findIndex(msg => msg.id === messageId);
+        
+        if (messageIndex !== -1) {
+          // Actualizar estado del mensaje
+          if (update.status) {
+            cachedMessages[messageIndex].status = update.status as any;
+          }
+          
+          this.emit('messageUpdate', userId, cachedMessages[messageIndex]);
+        }
+      }
+    }
+  }
+
+  // Manejar chats
   private handleChatsUpsert(chats: Chat[], userId: string) {
     for (const chat of chats) {
-      const whatsappChat = this.convertToSimpleChat(chat);
+      const whatsappChat = this.convertToWhatsAppChat(chat);
       this.chatCache.set(chat.id, whatsappChat);
       this.emit('chat', userId, whatsappChat);
     }
   }
 
-  // Convertir mensaje de Baileys a formato simplificado
-  private async convertToSimpleMessage(message: WAMessage, socket: WASocket): Promise<SimpleWhatsAppMessage | null> {
+  // Manejar actualizaciones de chats
+  private handleChatsUpdate(updates: Partial<Chat>[], userId: string) {
+    for (const update of updates) {
+      if (update.id) {
+        const existingChat = this.chatCache.get(update.id);
+        if (existingChat) {
+          Object.assign(existingChat, update);
+          this.emit('chatUpdate', userId, existingChat);
+        }
+      }
+    }
+  }
+
+  // Manejar actualizaciones de presencia
+  private handlePresenceUpdate(update: any, userId: string) {
+    this.emit('presence', userId, update);
+  }
+
+  // Manejar actualizaciones de grupos
+  private handleGroupsUpdate(updates: any[], userId: string) {
+    this.emit('groups', userId, updates);
+  }
+
+  // Convertir mensaje de Baileys a formato interno
+  private async convertToWhatsAppMessage(message: WAMessage, socket: WASocket): Promise<WhatsAppMessage | null> {
     try {
       const key = message.key;
       const content = message.message;
@@ -454,6 +391,7 @@ export class SimpleWhatsAppService extends EventEmitter {
       let senderName = 'Usuario';
       if (!fromMe && senderId) {
         try {
+          // Usar el ID del remitente como nombre por defecto
           senderName = senderId.split('@')[0] || 'Usuario';
         } catch (error) {
           logger.error('Error getting contact name:', error);
@@ -535,7 +473,14 @@ export class SimpleWhatsAppService extends EventEmitter {
         body,
         type,
         hasMedia,
-        media
+        media,
+        quotedMessage: content.extendedTextMessage?.contextInfo?.quotedMessage ? 
+          await this.convertToWhatsAppMessage({
+            key: (content.extendedTextMessage.contextInfo.quotedMessage as any).key,
+            message: (content.extendedTextMessage.contextInfo.quotedMessage as any).message,
+            messageTimestamp: message.messageTimestamp
+          } as WAMessage, socket) || undefined : undefined,
+        contextInfo: content.extendedTextMessage?.contextInfo
       };
     } catch (error) {
       logger.error('Error converting message:', error);
@@ -543,8 +488,8 @@ export class SimpleWhatsAppService extends EventEmitter {
     }
   }
 
-  // Convertir chat de Baileys a formato simplificado
-  private convertToSimpleChat(chat: Chat): SimpleWhatsAppChat {
+  // Convertir chat de Baileys a formato interno
+  private convertToWhatsAppChat(chat: Chat): WhatsAppChat {
     return {
       id: chat.id,
       name: chat.name || 'Chat sin nombre',
@@ -555,7 +500,9 @@ export class SimpleWhatsAppService extends EventEmitter {
       createdAt: Number(chat.conversationTimestamp || Date.now()),
       updatedAt: Date.now(),
       archived: Boolean(chat.archived),
-      pinned: Boolean(chat.pinned)
+      pinned: Boolean(chat.pinned),
+      ephemeralExpiration: chat.ephemeralExpiration ? Number(chat.ephemeralExpiration) : undefined,
+      ephemeralSettingTimestamp: chat.ephemeralSettingTimestamp ? Number(chat.ephemeralSettingTimestamp) : undefined
     };
   }
 
@@ -565,7 +512,7 @@ export class SimpleWhatsAppService extends EventEmitter {
   }
 
   // Guardar mensaje en cache
-  private saveMessageToCache(message: SimpleWhatsAppMessage) {
+  private saveMessageToCache(message: WhatsAppMessage) {
     const chatId = message.chatId;
     if (!this.messageCache.has(chatId)) {
       this.messageCache.set(chatId, []);
@@ -578,9 +525,9 @@ export class SimpleWhatsAppService extends EventEmitter {
       messages[existingIndex] = message;
     } else {
       messages.push(message);
-      // Mantener solo los últimos 500 mensajes por chat
-      if (messages.length > 500) {
-        messages.splice(0, messages.length - 500);
+      // Mantener solo los últimos 1000 mensajes por chat
+      if (messages.length > 1000) {
+        messages.splice(0, messages.length - 1000);
       }
     }
   }
@@ -603,21 +550,8 @@ export class SimpleWhatsAppService extends EventEmitter {
     }
   }
 
-  // Limpiar QR codes expirados
-  private cleanupExpiredQRCodes() {
-    const now = Date.now();
-    const maxAge = 5 * 60 * 1000; // 5 minutos
-
-    for (const [userId, qrData] of this.qrCodeCache.entries()) {
-      if ((now - qrData.timestamp) > maxAge) {
-        this.qrCodeCache.delete(userId);
-        logger.info(`Expired QR code cleaned up for user ${userId}`);
-      }
-    }
-  }
-
-  // Enviar mensaje simplificado
-  async sendMessage(userId: string, to: string, message: string): Promise<SimpleWhatsAppMessage | null> {
+  // Enviar mensaje
+  async sendMessage(userId: string, to: string, message: string): Promise<WhatsAppMessage | null> {
     const session = this.sessions.get(userId);
     if (!session || !session.socket || !session.isConnected) {
       throw new Error('Sesión no conectada');
@@ -632,7 +566,7 @@ export class SimpleWhatsAppService extends EventEmitter {
       
       // Convertir mensaje enviado a formato interno
       if (sentMessage) {
-        const whatsappMessage = await this.convertToSimpleMessage(sentMessage, session.socket);
+        const whatsappMessage = await this.convertToWhatsAppMessage(sentMessage, session.socket);
         if (whatsappMessage) {
           this.saveMessageToCache(whatsappMessage);
         }
@@ -646,14 +580,60 @@ export class SimpleWhatsAppService extends EventEmitter {
     }
   }
 
-  // Obtener chats simplificados
-  async getChats(userId: string): Promise<SimpleWhatsAppChat[]> {
+  // Enviar mensaje con media
+  async sendMediaMessage(userId: string, to: string, media: any, caption?: string): Promise<WhatsAppMessage | null> {
+    const session = this.sessions.get(userId);
+    if (!session || !session.socket || !session.isConnected) {
+      throw new Error('Sesión no conectada');
+    }
+
+    try {
+      const formattedNumber = to.includes('@') ? to : `${to}@s.whatsapp.net`;
+      
+      let messageContent: any = {};
+      
+      if (media.mimetype?.startsWith('image/')) {
+        messageContent.image = media;
+      } else if (media.mimetype?.startsWith('video/')) {
+        messageContent.video = media;
+      } else if (media.mimetype?.startsWith('audio/')) {
+        messageContent.audio = media;
+      } else {
+        messageContent.document = media;
+      }
+      
+      if (caption) {
+        messageContent.caption = caption;
+      }
+      
+      const sentMessage = await session.socket.sendMessage(formattedNumber, messageContent);
+      
+      logger.info(`Media message sent to ${formattedNumber} via session ${userId}`);
+      
+      if (sentMessage) {
+        const whatsappMessage = await this.convertToWhatsAppMessage(sentMessage, session.socket);
+        if (whatsappMessage) {
+          this.saveMessageToCache(whatsappMessage);
+        }
+        return whatsappMessage;
+      }
+      
+      return null;
+    } catch (error) {
+      logger.error('Error sending media message:', error);
+      throw error;
+    }
+  }
+
+  // Obtener chats
+  async getChats(userId: string): Promise<WhatsAppChat[]> {
     const session = this.sessions.get(userId);
     if (!session || !session.socket || !session.isConnected) {
       return Array.from(this.chatCache.values());
     }
 
     try {
+      // Usar el cache por ahora, ya que getChats no está disponible en la versión actual
       return Array.from(this.chatCache.values());
     } catch (error) {
       logger.error('Error getting chats:', error);
@@ -661,14 +641,15 @@ export class SimpleWhatsAppService extends EventEmitter {
     }
   }
 
-  // Obtener mensajes de un chat simplificados
-  async getMessages(userId: string, chatId: string, limit: number = 50): Promise<SimpleWhatsAppMessage[]> {
+  // Obtener mensajes de un chat
+  async getMessages(userId: string, chatId: string, limit: number = 50): Promise<WhatsAppMessage[]> {
     const session = this.sessions.get(userId);
     if (!session || !session.socket || !session.isConnected) {
       return this.messageCache.get(chatId)?.slice(-limit) || [];
     }
 
     try {
+      // Usar el cache por ahora, ya que getMessages no está disponible en la versión actual
       return this.messageCache.get(chatId)?.slice(-limit) || [];
     } catch (error) {
       logger.error('Error getting messages:', error);
@@ -676,8 +657,30 @@ export class SimpleWhatsAppService extends EventEmitter {
     }
   }
 
+  // Marcar mensajes como leídos
+  async markAsRead(userId: string, chatId: string, messageIds?: string[]): Promise<boolean> {
+    const session = this.sessions.get(userId);
+    if (!session || !session.socket || !session.isConnected) {
+      return false;
+    }
+
+    try {
+      if (messageIds && messageIds.length > 0) {
+        await session.socket.readMessages(messageIds.map(id => ({ remoteJid: chatId, id })));
+      } else {
+        await session.socket.readMessages([{ remoteJid: chatId, id: 'all' }]);
+      }
+      
+      logger.info(`Messages marked as read in chat ${chatId} for user ${userId}`);
+      return true;
+    } catch (error) {
+      logger.error('Error marking messages as read:', error);
+      return false;
+    }
+  }
+
   // Registrar handler de mensajes
-  onMessage(userId: string, handler: Function) {
+  onMessage(userId: string, handler: MessageHandler) {
     if (!this.messageHandlers.has(userId)) {
       this.messageHandlers.set(userId, []);
     }
@@ -695,42 +698,13 @@ export class SimpleWhatsAppService extends EventEmitter {
       };
     }
 
-    // Verificar estado real del socket si existe
-    let socketConnected = false;
-    let socketAuthenticated = false;
-    
-    if (session.socket) {
-      try {
-        // Verificar si el socket está realmente conectado
-        socketConnected = session.socket.user ? true : false;
-        socketAuthenticated = session.socket.user ? true : false;
-        
-        // Si el socket está conectado pero la sesión no lo refleja, actualizar
-        if (socketConnected && !session.isConnected) {
-          logger.info(`Updating session state for user ${userId} - socket is connected`);
-          session.isConnected = true;
-          session.isAuthenticated = true;
-          
-          if (session.socket.user) {
-            session.phoneNumber = session.socket.user.id.split('@')[0];
-            session.userName = session.socket.user.name || 'Usuario Conectado';
-            session.lastSeen = new Date();
-          }
-        }
-      } catch (error) {
-        logger.error(`Error checking socket state for user ${userId}:`, error);
-      }
-    }
-
     return {
-      isConnected: session.isConnected || socketConnected,
-      isAuthenticated: session.isAuthenticated || socketAuthenticated,
+      isConnected: session.isConnected,
+      isAuthenticated: session.isAuthenticated,
       sessionId: session.sessionId,
       phoneNumber: session.phoneNumber,
       userName: session.userName,
-      lastSeen: session.lastSeen,
-      hasSocket: !!session.socket,
-      socketConnected: socketConnected
+      lastSeen: session.lastSeen
     };
   }
 
@@ -738,24 +712,6 @@ export class SimpleWhatsAppService extends EventEmitter {
   async getQRCode(userId: string): Promise<string | null> {
     const session = this.sessions.get(userId);
     return session?.qrCode || null;
-  }
-
-  // Obtener QR code como Data URL
-  async getQRCodeDataURL(userId: string): Promise<string | null> {
-    const session = this.sessions.get(userId);
-    return session?.qrCodeDataURL || null;
-  }
-
-  // Obtener QR code del cache
-  getQRCodeFromCache(userId: string): { qr: string; dataURL: string } | null {
-    const cached = this.qrCodeCache.get(userId);
-    if (cached) {
-      return {
-        qr: cached.qr,
-        dataURL: cached.dataURL
-      };
-    }
-    return null;
   }
 
   // Desconectar sesión
@@ -780,91 +736,21 @@ export class SimpleWhatsAppService extends EventEmitter {
   private cleanupSession(userId: string): void {
     this.sessions.delete(userId);
     this.messageHandlers.delete(userId);
-    this.qrCodeCache.delete(userId);
     this.emit('disconnected', userId);
   }
 
-  // Limpiar sesiones expiradas
-  async cleanupExpiredSessions(): Promise<number> {
-    const now = Date.now();
-    const maxAge = 24 * 60 * 60 * 1000; // 24 horas
-    let cleanedCount = 0;
-
-    for (const [userId, session] of this.sessions.entries()) {
-      if ((now - session.createdAt.getTime()) > maxAge && !session.isConnected) {
-        this.cleanupSession(userId);
-        cleanedCount++;
-      }
-    }
-
-    return cleanedCount;
-  }
-
-  // Forzar reconexión
-  async forceReconnect(userId: string): Promise<boolean> {
-    const session = this.sessions.get(userId);
-    if (!session) {
-      logger.warn(`No session found for user ${userId} to reconnect`);
-      return false;
-    }
-
-    try {
-      logger.info(`Forcing reconnection for user ${userId}`);
-      
-      // Cerrar socket actual si existe
-      if (session.socket) {
-        try {
-          await session.socket.logout();
-        } catch (error) {
-          logger.error(`Error logging out socket for user ${userId}:`, error);
-        }
-      }
-
-      // Limpiar estado
-      session.socket = null;
-      session.isConnected = false;
-      session.isAuthenticated = false;
-      session.qrCode = undefined;
-      session.qrCodeDataURL = undefined;
-
-      // Reinicializar sesión
-      await this.initializeBaileysSession(userId, session.sessionId);
-      
-      logger.info(`Reconnection initiated for user ${userId}`);
-      return true;
-    } catch (error) {
-      logger.error(`Error forcing reconnection for user ${userId}:`, error);
-      return false;
-    }
-  }
-
-  // Verificar y reconectar si es necesario
-  async checkAndReconnect(userId: string): Promise<boolean> {
-    const session = this.sessions.get(userId);
-    if (!session) return false;
-
-    // Si no hay socket o no está conectado, intentar reconectar
-    if (!session.socket || !session.isConnected) {
-      logger.info(`Session ${userId} needs reconnection`);
-      return await this.forceReconnect(userId);
-    }
-
-    return true;
-  }
-
   // Obtener estadísticas
-  getSessionStats() {
+  getStats() {
     return {
       activeSessions: this.sessions.size,
       connectedSessions: Array.from(this.sessions.values()).filter(s => s.isConnected).length,
       totalChats: this.chatCache.size,
-      totalMessages: Array.from(this.messageCache.values()).reduce((sum, messages) => sum + messages.length, 0),
-      qrCodesInCache: this.qrCodeCache.size
+      totalMessages: Array.from(this.messageCache.values()).reduce((sum, messages) => sum + messages.length, 0)
     };
   }
 }
 
 // Instancia singleton
-logger.info('Creating SimpleWhatsAppService instance...');
-export const whatsappSimpleService = new SimpleWhatsAppService();
-logger.info('SimpleWhatsAppService instance created');
+logger.info('Creating WhatsAppMessageService instance...');
+export const whatsappMessageService = new WhatsAppMessageService();
+logger.info('WhatsAppMessageService instance created');
