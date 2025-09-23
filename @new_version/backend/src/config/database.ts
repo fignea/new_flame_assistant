@@ -182,8 +182,8 @@ class DatabaseConfig {
   private async createDefaultUser(): Promise<void> {
     try {
       const bcrypt = require('bcryptjs');
-      const email = 'admin@whatsapp-manager.com';
-      const password = bcrypt.hashSync('admin123', 10);
+      const email = 'admin@flame.com';
+      const password = bcrypt.hashSync('flame123', 10);
       const name = 'Administrator';
 
       const result = await this.pool.query(
@@ -195,7 +195,7 @@ class DatabaseConfig {
       );
 
       if (result.rowCount && result.rowCount > 0) {
-        logger.info('✅ Usuario por defecto creado: admin@whatsapp-manager.com / admin123');
+        logger.info('✅ Usuario por defecto creado: admin@flame.com / flame123');
       } else {
         logger.info('ℹ️ Usuario por defecto ya existe');
       }

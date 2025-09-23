@@ -12,8 +12,8 @@ async function testWhatsAppManager() {
     // Test 2: Login con credenciales por defecto
     console.log('\n2️⃣ Probando login...');
     const loginResponse = await axios.post('http://localhost:3001/api/auth/login', {
-      email: 'admin@whatsapp-manager.com',
-      password: 'admin123'
+      email: 'admin@flame.com',
+      password: 'flame123'
     });
     
     if (loginResponse.data.success) {
@@ -87,8 +87,8 @@ async function testWhatsAppManager() {
     console.log('   🔧 Backend: http://localhost:3001');
     console.log('   🏥 Health: http://localhost:3001/health');
     console.log('\n🔑 Credenciales:');
-    console.log('   📧 Email: admin@whatsapp-manager.com');
-    console.log('   🔒 Password: admin123');
+    console.log('   📧 Email: admin@flame.com');
+    console.log('   🔒 Password: flame123');
 
   } catch (error) {
     console.error('❌ Error durante las pruebas:', error.response?.data || error.message);

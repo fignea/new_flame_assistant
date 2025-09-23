@@ -112,8 +112,8 @@ const bcrypt = require('bcryptjs');
 
 setTimeout(async () => {
   try {
-    const email = 'admin@whatsapp-manager.com';
-    const password = bcrypt.hashSync('admin123', 10);
+    const email = 'admin@flame.com';
+    const password = bcrypt.hashSync('flame123', 10);
     const name = 'Administrator';
 
     await database.run(
@@ -157,8 +157,8 @@ echo "   🔧 Backend API: http://localhost:3001"
 echo "   🏥 Health Check: http://localhost:3001/health"
 echo ""
 echo "🔑 Credenciales por defecto:"
-echo "   📧 Email: admin@whatsapp-manager.com"
-echo "   🔒 Contraseña: admin123"
+echo "   📧 Email: admin@flame.com"
+echo "   🔒 Contraseña: flame123"
 echo ""
 echo "📊 Comandos útiles:"
 echo "   📋 Ver logs backend:    docker-compose logs -f backend"

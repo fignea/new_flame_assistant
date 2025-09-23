@@ -80,8 +80,8 @@ npm run dev
 
 ## 🔑 Credenciales por Defecto
 
-- **Email**: `admin@whatsapp-manager.com`
-- **Contraseña**: `admin123`
+- **Email**: `admin@flame.com`
+- **Contraseña**: `flame123`
 
 ## 📁 Estructura del Proyecto
 

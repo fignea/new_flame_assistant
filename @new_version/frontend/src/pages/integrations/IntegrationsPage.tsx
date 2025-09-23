@@ -60,7 +60,13 @@ export const IntegrationsPage: React.FC = () => {
 
   const generateQRImage = async (qrString: string) => {
     try {
-      // Importación dinámica de QRCode
+      // Si el QR ya es un Data URL, usarlo directamente
+      if (qrString.startsWith('data:image/')) {
+        setQrImageData(qrString);
+        return;
+      }
+
+      // Si es un string QR, generar la imagen
       const QRCode = await import('qrcode');
       const qrImageUrl = await QRCode.toDataURL(qrString, {
         width: 256,

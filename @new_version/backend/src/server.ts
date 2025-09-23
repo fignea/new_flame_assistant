@@ -346,8 +346,8 @@ class WhatsAppManagerServer {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🔑 Default Login:
-   Email: admin@whatsapp-manager.com
-   Password: admin123
+   Email: admin@flame.com
+   Password: flame123
         `);
       });
 

@@ -72,8 +72,8 @@ docker-compose down --rmi all --volumes
 
 ## 🔑 Credenciales por Defecto
 
-- **Email**: `admin@whatsapp-manager.com`
-- **Contraseña**: `admin123`
+- **Email**: `admin@flame.com`
+- **Contraseña**: `flame123`
 
 ## 📱 Cómo Conectar WhatsApp
 

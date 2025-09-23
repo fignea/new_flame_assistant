@@ -79,6 +79,21 @@ export class WhatsAppService extends EventEmitter {
 
     this.sessions.set(userId, session);
 
+    // Crear sesión en base de datos
+    try {
+      await database.query(
+        `INSERT INTO whatsapp_sessions (user_id, session_id, is_connected, created_at, updated_at) 
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT (session_id) 
+         DO UPDATE SET updated_at = CURRENT_TIMESTAMP`,
+        [userId, sessionId, false]
+      );
+    } catch (error) {
+      console.error(`❌ Error creating session in database for user ${userId}:`, error);
+      this.sessions.delete(userId);
+      throw error;
+    }
+
     // Inicializar socket de Baileys
     try {
       await this.initializeBaileysSocket(userId);

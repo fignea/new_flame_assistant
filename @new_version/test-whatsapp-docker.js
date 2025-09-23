@@ -7,8 +7,8 @@ async function testWhatsAppWithDocker() {
     // Login
     console.log('1️⃣ Haciendo login...');
     const loginResponse = await axios.post('http://localhost:3001/api/auth/login', {
-      email: 'admin@whatsapp-manager.com',
-      password: 'admin123'
+      email: 'admin@flame.com',
+      password: 'flame123'
     });
 
     if (!loginResponse.data.success) {

@@ -28,8 +28,8 @@ async function finalSystemTest() {
     // Test 3: Autenticación
     console.log('\n3️⃣ Sistema de Autenticación...');
     const loginResponse = await axios.post('http://localhost:3001/api/auth/login', {
-      email: 'admin@whatsapp-manager.com',
-      password: 'admin123'
+      email: 'admin@flame.com',
+      password: 'flame123'
     });
 
     if (loginResponse.data.success) {
@@ -111,7 +111,7 @@ async function finalSystemTest() {
     console.log('\n✅ SISTEMA 100% FUNCIONAL');
     console.log('\n📱 Para usar WhatsApp:');
     console.log('   1. Ve a: http://localhost');
-    console.log('   2. Login: admin@whatsapp-manager.com / admin123');
+    console.log('   2. Login: admin@flame.com / flame123');
     console.log('   3. Ve a Integraciones');
     console.log('   4. Conecta WhatsApp Web');
     console.log('   5. Escanea el QR con tu teléfono');

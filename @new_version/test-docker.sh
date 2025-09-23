@@ -89,7 +89,7 @@ fi
 echo "   🔐 Probando login..."
 LOGIN_RESPONSE=$(curl -s -X POST \
     -H "Content-Type: application/json" \
-    -d '{"email":"admin@whatsapp-manager.com","password":"admin123"}' \
+    -d '{"email":"admin@flame.com","password":"flame123"}' \
     http://localhost:3001/api/auth/login)
 
 if echo "$LOGIN_RESPONSE" | grep -q '"success":true'; then
@@ -169,8 +169,8 @@ echo "   🔧 Backend: http://localhost:3001"
 echo "   🏥 Health: http://localhost:3001/health"
 echo ""
 echo "🔑 Credenciales:"
-echo "   📧 Email: admin@whatsapp-manager.com"
-echo "   🔒 Password: admin123"
+echo "   📧 Email: admin@flame.com"
+echo "   🔒 Password: flame123"
 echo ""
 echo "📊 Para monitorear:"
 echo "   docker-compose logs -f"
