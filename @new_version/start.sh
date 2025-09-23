@@ -41,9 +41,9 @@ echo "✅ Directorios creados"
 echo "🛑 Deteniendo contenedores existentes..."
 docker-compose down > /dev/null 2>&1
 
-# Limpiar imágenes anteriores (opcional)
-echo "🧹 Limpiando imágenes anteriores..."
-docker-compose down --rmi all --volumes --remove-orphans > /dev/null 2>&1
+# Limpiar solo imágenes anteriores (mantener volúmenes)
+echo "🧹 Limpiando imágenes anteriores (manteniendo datos)..."
+docker-compose down --rmi all --remove-orphans > /dev/null 2>&1
 
 # Construir contenedores
 echo "🔨 Construyendo contenedores..."
@@ -117,7 +117,7 @@ setTimeout(async () => {
     const name = 'Administrator';
 
     await database.run(
-      'INSERT OR REPLACE INTO users (email, password, name) VALUES (?, ?, ?)',
+      'INSERT INTO users (email, password, name) VALUES (\$1, \$2, \$3) ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, name = EXCLUDED.name',
       [email, password, name]
     );
     
@@ -164,13 +164,17 @@ echo "📊 Comandos útiles:"
 echo "   📋 Ver logs backend:    docker-compose logs -f backend"
 echo "   📋 Ver logs frontend:   docker-compose logs -f frontend"
 echo "   📋 Ver estado:          docker-compose ps"
-echo "   🛑 Detener servicios:   docker-compose down"
-echo "   🗑️  Limpiar todo:        docker-compose down --rmi all --volumes"
+echo "   🛑 Detener servicios:   ./stop.sh"
+echo "   🗑️  Limpiar todo:      ./clean.sh"
 echo ""
 echo "💾 Datos persistentes en: ./docker-data/"
 echo "   📊 Base de datos:       ./docker-data/backend/"
 echo "   📱 Sesiones WhatsApp:   ./docker-data/sessions/"
 echo "   📝 Logs:               ./docker-data/logs/"
+echo ""
+echo "⚠️  IMPORTANTE: Los datos se mantienen entre reinicios"
+echo "   🔄 start/stop: Los datos se conservan"
+echo "   🗑️  clean.sh: Solo esto borra los datos permanentemente"
 echo ""
 echo "🎯 ¡Todo listo! Abre http://localhost en tu navegador"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
