@@ -102,3 +102,21 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECU
 CREATE TRIGGER update_whatsapp_sessions_updated_at BEFORE UPDATE ON whatsapp_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_contacts_updated_at BEFORE UPDATE ON contacts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_scheduled_messages_updated_at BEFORE UPDATE ON scheduled_messages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Insertar usuario de demostración por defecto
+-- Email: admin@flame.com
+-- Contraseña: flame123 (hash bcrypt)
+INSERT INTO users (email, password, name) VALUES (
+    'admin@flame.com',
+    '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', -- flame123
+    'Administrator'
+) ON CONFLICT (email) DO NOTHING;
+
+-- Insertar un asistente de demostración por defecto
+INSERT INTO assistants (user_id, name, description, prompt, is_active) VALUES (
+    (SELECT id FROM users WHERE email = 'admin@flame.com'),
+    'Asistente General',
+    'Asistente de WhatsApp para responder consultas generales',
+    'Eres un asistente virtual de WhatsApp. Responde de manera amable y profesional a las consultas de los usuarios. Si no sabes algo, admítelo y ofrece ayuda alternativa.',
+    true
+) ON CONFLICT DO NOTHING;
