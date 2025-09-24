@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: whatsapp-manager-backend-dev
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - JWT_SECRET=whatsapp-manager-dev-secret-2024
+      - JWT_EXPIRES_IN=7d
+      - CORS_ORIGIN=http://localhost:5173
+      - DB_PATH=/app/data/whatsapp_manager.db
+      - WHATSAPP_SESSION_PATH=/app/sessions
+      - WHATSAPP_QR_TIMEOUT=120000
+      - WHATSAPP_CONNECT_TIMEOUT=60000
+      - LOG_LEVEL=debug
+    volumes:
+      - ./backend/src:/app/src:ro
+      - backend_data_dev:/app/data
+      - backend_sessions_dev:/app/sessions
+      - backend_logs_dev:/app/logs
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-dev-network
+    command: ["npm", "run", "dev"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: whatsapp-manager-frontend-dev
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/public:/app/public:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-dev-network
+
+volumes:
+  backend_data_dev:
+    driver: local
+  backend_sessions_dev:
+    driver: local
+  backend_logs_dev:
+    driver: local
+
+networks:
+  whatsapp-manager-dev-network:
+    driver: bridge
