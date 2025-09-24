@@ -314,10 +314,10 @@ export class ApiService {
 
   // Métodos para gestión de mensajes WhatsApp
   async sendMessage(to: string, message: string, type: string = 'text') {
-    return this.post('/api/messages/send', {
-      to,
-      message,
-      type
+    return this.post('/api/whatsapp/send', {
+      contactId: to,
+      content: message,
+      messageType: type
     });
   }
 

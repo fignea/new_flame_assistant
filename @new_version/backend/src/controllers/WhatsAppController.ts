@@ -134,8 +134,8 @@ export class WhatsAppController {
 
       // Verificar que el contacto existe y pertenece al usuario
       const contact = await database.get(
-        'SELECT whatsapp_id FROM contacts WHERE user_id = $1 AND (id = $2 OR whatsapp_id = $3)',
-        [userId, contactId, contactId]
+        'SELECT whatsapp_id FROM contacts WHERE user_id = $1 AND whatsapp_id = $2',
+        [userId, contactId]
       );
 
       if (!contact) {

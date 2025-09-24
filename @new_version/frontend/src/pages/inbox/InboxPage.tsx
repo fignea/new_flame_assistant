@@ -200,7 +200,7 @@ export const InboxPage: React.FC = () => {
         ? selectedConversation.replace('whatsapp_', '') 
         : selectedConversation;
       
-      const response = await apiService.sendMessage(chatId, newMessage.trim());
+      const response = await apiService.sendMessage(chatId, newMessage.trim(), 'text');
       if (response.success && response.data) {
         // Agregar mensaje a la lista local
         const sentMessage: WhatsAppMessage = {
