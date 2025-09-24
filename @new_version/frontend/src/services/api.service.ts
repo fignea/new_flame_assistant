@@ -339,11 +339,11 @@ export class ApiService {
   }
 
   async getWhatsAppChatsNew(params?: { limit?: number; offset?: number }) {
-    return this.get('/api/messages/chats', params);
+    return this.get('/api/whatsapp/chats', params);
   }
 
   async getWhatsAppMessagesNew(chatId: string, params?: { limit?: number; offset?: number }) {
-    return this.get(`/api/messages/chats/${chatId}/messages`, params);
+    return this.get(`/api/whatsapp/chats/${chatId}/messages`, params);
   }
 
   async markAsRead(chatId: string, messageIds?: string[]) {

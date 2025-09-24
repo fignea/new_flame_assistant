@@ -524,11 +524,23 @@ export class WhatsAppService extends EventEmitter {
         messageType = 'unknown';
       }
 
+      // Determinar el nombre del remitente
+      let senderName = 'Unknown';
+      if (key.fromMe) {
+        senderName = 'Tú';
+      } else if (key.participant) {
+        // Mensaje de grupo
+        senderName = key.participant.split('@')[0];
+      } else if (key.remoteJid) {
+        // Mensaje individual
+        senderName = key.remoteJid.split('@')[0];
+      }
+
       return {
         id: key.id || '',
         chatId: key.remoteJid,
         senderId: key.participant || key.remoteJid,
-        senderName: key.participant?.split('@')[0] || 'Unknown',
+        senderName: senderName,
         content: messageContent,
         messageType,
         timestamp: Number(message.messageTimestamp || Date.now() / 1000),

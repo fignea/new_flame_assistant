@@ -48,8 +48,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         if (token) {
           apiService.setToken(token);
           const response = await apiService.getProfile();
-          if (response.success && response.data) {
-            setUser(response.data);
+          if (response.success && response.data && response.data.user) {
+            setUser(response.data.user);
           }
         }
       } catch (error) {

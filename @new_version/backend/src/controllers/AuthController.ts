@@ -146,7 +146,7 @@ export class AuthController {
       }
 
       const user = await database.get(
-        'SELECT id, email, name, created_at, updated_at FROM users WHERE id = ?',
+        'SELECT id, email, name, created_at, updated_at FROM users WHERE id = $1',
         [userId]
       ) as User;
 
@@ -186,7 +186,7 @@ export class AuthController {
 
       // Obtener usuario actual
       const user = await database.get(
-        'SELECT * FROM users WHERE id = ?',
+        'SELECT * FROM users WHERE id = $1',
         [userId]
       ) as User;
 
@@ -200,7 +200,7 @@ export class AuthController {
       // Actualizar nombre si se proporciona
       if (name && name !== user.name) {
         await database.run(
-          'UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          'UPDATE users SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           [name, userId]
         );
       }
@@ -233,14 +233,14 @@ export class AuthController {
         const hashedNewPassword = await bcrypt.hash(newPassword, 10);
         
         await database.run(
-          'UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           [hashedNewPassword, userId]
         );
       }
 
       // Obtener usuario actualizado
       const updatedUser = await database.get(
-        'SELECT id, email, name, created_at, updated_at FROM users WHERE id = ?',
+        'SELECT id, email, name, created_at, updated_at FROM users WHERE id = $1',
         [userId]
       ) as User;
 

@@ -134,7 +134,7 @@ export class WhatsAppController {
 
       // Verificar que el contacto existe y pertenece al usuario
       const contact = await database.get(
-        'SELECT whatsapp_id FROM contacts WHERE user_id = ? AND (id = ? OR whatsapp_id = ?)',
+        'SELECT whatsapp_id FROM contacts WHERE user_id = $1 AND (id = $2 OR whatsapp_id = $3)',
         [userId, contactId, contactId]
       );
 
@@ -188,20 +188,20 @@ export class WhatsAppController {
       const offset = (page - 1) * limit;
 
       let query = `
-        SELECT id, whatsapp_id, name, phone_number, is_group, avatar_url, created_at, updated_at
+        SELECT id, whatsapp_id, name, phone_number, is_group, created_at, updated_at
         FROM contacts 
-        WHERE user_id = ?
+        WHERE user_id = $1
       `;
-      let countQuery = 'SELECT COUNT(*) as total FROM contacts WHERE user_id = ?';
+      let countQuery = 'SELECT COUNT(*) as total FROM contacts WHERE user_id = $1';
       let params: any[] = [userId];
 
       if (search) {
-        query += ' AND (name LIKE ? OR phone_number LIKE ?)';
-        countQuery += ' AND (name LIKE ? OR phone_number LIKE ?)';
+        query += ' AND (name LIKE $2 OR phone_number LIKE $3)';
+        countQuery += ' AND (name LIKE $2 OR phone_number LIKE $3)';
         params.push(`%${search}%`, `%${search}%`);
       }
 
-      query += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?';
+      query += ' ORDER BY updated_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
       params.push(limit, offset);
 
       const [contacts, totalResult] = await Promise.all([
@@ -258,7 +258,7 @@ export class WhatsAppController {
 
       // Verificar que el contacto existe y pertenece al usuario
       const contact = await database.get(
-        'SELECT id, whatsapp_id FROM contacts WHERE user_id = ? AND (id = ? OR whatsapp_id = ?)',
+        'SELECT id, whatsapp_id FROM contacts WHERE user_id = $1 AND (id = $2 OR whatsapp_id = $3)',
         [userId, contactId, contactId]
       );
 
@@ -271,17 +271,17 @@ export class WhatsAppController {
 
       const [messages, totalResult] = await Promise.all([
         database.query(
-          `SELECT id, whatsapp_message_id, content, message_type, is_from_me, 
-                  timestamp, status, media_url, created_at
+          `SELECT id, message_id, content, message_type, is_from_me, 
+                  timestamp, created_at
            FROM messages 
-           WHERE user_id = ? AND contact_id = ?
+           WHERE user_id = $1 AND chat_id = $2
            ORDER BY timestamp DESC 
-           LIMIT ? OFFSET ?`,
-          [userId, contact.id, limit, offset]
+           LIMIT $3 OFFSET $4`,
+          [userId, contactId, limit, offset]
         ),
         database.get(
-          'SELECT COUNT(*) as total FROM messages WHERE user_id = ? AND contact_id = ?',
-          [userId, contact.id]
+          'SELECT COUNT(*) as total FROM messages WHERE user_id = $1 AND chat_id = $2',
+          [userId, contactId]
         )
       ]);
 
@@ -348,9 +348,9 @@ export class WhatsAppController {
       }
 
       const [contactsCount, messagesCount, scheduledCount] = await Promise.all([
-        database.get('SELECT COUNT(*) as count FROM contacts WHERE user_id = ?', [userId]),
-        database.get('SELECT COUNT(*) as count FROM messages WHERE user_id = ?', [userId]),
-        database.get('SELECT COUNT(*) as count FROM scheduled_messages WHERE user_id = ? AND status = "pending"', [userId])
+        database.get('SELECT COUNT(*) as count FROM contacts WHERE user_id = $1', [userId]),
+        database.get('SELECT COUNT(*) as count FROM messages WHERE user_id = $1', [userId]),
+        database.get('SELECT COUNT(*) as count FROM scheduled_messages WHERE user_id = $1 AND status = $2', [userId, 'pending'])
       ]);
 
       const whatsappStats = whatsappService.getStats();
@@ -399,6 +399,154 @@ export class WhatsAppController {
       return res.status(500).json({
         success: false,
         message: 'Error al forzar reconexión',
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    }
+  }
+
+  public async getChats(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+    try {
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      // Obtener chats únicos basados en los mensajes
+      const chats = await database.query(
+        `SELECT 
+           m.chat_id as id,
+           c.name,
+           c.phone_number,
+           c.is_group,
+           COUNT(m.id) as message_count,
+           MAX(m.timestamp) as last_message_time
+         FROM messages m
+         LEFT JOIN contacts c ON c.whatsapp_id = m.chat_id AND c.user_id = m.user_id
+         WHERE m.user_id = $1
+         GROUP BY m.chat_id, c.name, c.phone_number, c.is_group
+         ORDER BY last_message_time DESC NULLS LAST
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset]
+      );
+
+      // Formatear los chats para el frontend
+      const formattedChats = chats.rows.map((chat: any) => ({
+        id: chat.id,
+        name: chat.name || chat.phone_number || chat.id.split('@')[0],
+        isGroup: chat.is_group,
+        isReadOnly: false,
+        unreadCount: 0, // TODO: Implementar conteo de mensajes no leídos
+        lastMessage: undefined, // Se cargará por separado si es necesario
+        participants: chat.is_group ? [] : [chat.id],
+        createdAt: Date.now(),
+        updatedAt: chat.last_message_time ? new Date(chat.last_message_time).getTime() : Date.now(),
+        archived: false,
+        pinned: false
+      }));
+
+      return res.json({
+        success: true,
+        data: formattedChats,
+        message: 'Chats obtenidos exitosamente'
+      });
+
+    } catch (error) {
+      console.error('Get chats error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al obtener los chats',
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    }
+  }
+
+  public async getChatMessages(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+    try {
+      const userId = req.user?.id;
+      const { chatId } = req.params;
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!chatId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del chat es requerido'
+        });
+      }
+
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      // Obtener mensajes del chat
+      const messages = await database.query(
+        `SELECT 
+           m.id,
+           m.message_id,
+           m.content,
+           m.message_type,
+           m.is_from_me,
+           m.timestamp,
+           m.created_at,
+           c.name as contact_name,
+           c.whatsapp_id
+         FROM messages m
+         LEFT JOIN contacts c ON c.whatsapp_id = m.chat_id AND c.user_id = m.user_id
+         WHERE m.user_id = $1 AND m.chat_id = $2
+         ORDER BY m.timestamp ASC
+         LIMIT $3 OFFSET $4`,
+        [userId, chatId, limit, offset]
+      );
+
+      // Formatear los mensajes para el frontend
+      const formattedMessages = messages.rows.map((msg: any) => ({
+        id: msg.message_id,
+        key: {
+          id: msg.message_id,
+          remoteJid: chatId,
+          fromMe: msg.is_from_me
+        },
+        message: {
+          conversation: msg.content
+        },
+        messageTimestamp: new Date(msg.timestamp).getTime() / 1000,
+        status: 'delivered', // Estado por defecto
+        fromMe: msg.is_from_me,
+        chatId: chatId,
+        senderId: msg.is_from_me ? userId : chatId,
+        senderName: msg.is_from_me ? 'Tú' : (msg.contact_name || chatId.split('@')[0]),
+        body: msg.content,
+        type: msg.message_type,
+        hasMedia: false, // Por ahora sin media
+        media: undefined
+      }));
+
+      return res.json({
+        success: true,
+        data: {
+          messages: formattedMessages,
+          chatId: chatId,
+          total: formattedMessages.length
+        },
+        message: 'Mensajes obtenidos exitosamente'
+      });
+
+    } catch (error) {
+      console.error('Get chat messages error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al obtener los mensajes del chat',
         error: error instanceof Error ? error.message : 'Error desconocido'
       });
     }

@@ -140,7 +140,11 @@ export const InboxPage: React.FC = () => {
   // Cargar mensajes cuando se selecciona un chat de WhatsApp
   useEffect(() => {
     if (selectedConversation && whatsappStatus?.isConnected) {
-      loadWhatsAppMessages(selectedConversation);
+      // Si es un chat de WhatsApp, extraer el ID real del chat
+      const chatId = selectedConversation.startsWith('whatsapp_') 
+        ? selectedConversation.replace('whatsapp_', '') 
+        : selectedConversation;
+      loadWhatsAppMessages(chatId);
     }
   }, [selectedConversation, whatsappStatus?.isConnected]);
 
@@ -191,17 +195,22 @@ export const InboxPage: React.FC = () => {
     if (!newMessage.trim() || !selectedConversation || !whatsappStatus?.isConnected) return;
 
     try {
-      const response = await apiService.sendMessage(selectedConversation, newMessage.trim());
+      // Si es un chat de WhatsApp, extraer el ID real del chat
+      const chatId = selectedConversation.startsWith('whatsapp_') 
+        ? selectedConversation.replace('whatsapp_', '') 
+        : selectedConversation;
+      
+      const response = await apiService.sendMessage(chatId, newMessage.trim());
       if (response.success && response.data) {
         // Agregar mensaje a la lista local
         const sentMessage: WhatsAppMessage = {
           id: response.data.messageId,
-          key: { id: response.data.messageId, remoteJid: selectedConversation, fromMe: true },
+          key: { id: response.data.messageId, remoteJid: chatId, fromMe: true },
           message: { conversation: newMessage },
           messageTimestamp: response.data.timestamp,
           status: 'sent',
           fromMe: true,
-          chatId: selectedConversation,
+          chatId: chatId,
           senderId: user?.id || '',
           senderName: 'Tú',
           body: newMessage.trim(),

@@ -173,23 +173,16 @@ class WhatsAppManagerServer {
     this.app.use('/api/scheduled', scheduledRoutes);
     this.app.use('/api/integrations', integrationsRoutes);
 
-    // Catch-all handler para SPA en producción
-    if (process.env.NODE_ENV === 'production') {
-      this.app.get('*', (req, res) => {
-        res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
+    // Root endpoint
+    this.app.get('/', (req, res) => {
+      res.json({
+        message: '🔥 WhatsApp Manager API',
+        version: '1.0.0',
+        status: 'running',
+        timestamp: new Date().toISOString(),
+        docs: '/api/docs'
       });
-    } else {
-      // Root endpoint en desarrollo
-      this.app.get('/', (req, res) => {
-        res.json({
-          message: '🔥 WhatsApp Manager API',
-          version: '1.0.0',
-          status: 'running',
-          timestamp: new Date().toISOString(),
-          docs: '/api/docs'
-        });
-      });
-    }
+    });
 
     // 404 handler
     this.app.use('*', (req, res) => {

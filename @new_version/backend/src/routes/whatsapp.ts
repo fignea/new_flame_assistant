@@ -26,6 +26,10 @@ router.post('/reconnect', authenticate, whatsappController.forceReconnect.bind(w
 router.post('/send', authenticate, whatsappController.sendMessage.bind(whatsappController));
 router.get('/messages/:contactId', authenticate, whatsappController.getMessages.bind(whatsappController));
 
+// Chats y mensajes (con autenticación)
+router.get('/chats', authenticate, whatsappController.getChats.bind(whatsappController));
+router.get('/chats/:chatId/messages', authenticate, whatsappController.getChatMessages.bind(whatsappController));
+
 // Contactos (con autenticación)
 router.get('/contacts', authenticate, whatsappController.getContacts.bind(whatsappController));
 
