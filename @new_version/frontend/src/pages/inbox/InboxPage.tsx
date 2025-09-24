@@ -207,7 +207,7 @@ export const InboxPage: React.FC = () => {
           id: response.data.messageId,
           key: { id: response.data.messageId, remoteJid: chatId, fromMe: true },
           message: { conversation: newMessage },
-          messageTimestamp: response.data.timestamp,
+          messageTimestamp: response.data.timestamp || Date.now() / 1000,
           status: 'sent',
           fromMe: true,
           chatId: chatId,
@@ -744,6 +744,20 @@ export const InboxPage: React.FC = () => {
     return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatWhatsAppTimestamp = (timestamp: number) => {
+    try {
+      // Si el timestamp es muy grande, probablemente ya está en milisegundos
+      if (timestamp > 1000000000000) {
+        return new Date(timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      }
+      // Si es menor, está en segundos, convertir a milisegundos
+      return new Date(timestamp * 1000).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    } catch (error) {
+      console.error('Error formatting timestamp:', timestamp, error);
+      return '--:--';
+    }
+  };
+
   const formatDateForList = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -1067,7 +1081,7 @@ export const InboxPage: React.FC = () => {
                           )}
                           <div className="flex items-center justify-between mt-1">
                             <span className="text-xs opacity-70">
-                              {formatTimeForBubble(new Date(message.messageTimestamp * 1000).toISOString())}
+                              {formatWhatsAppTimestamp(message.messageTimestamp)}
                             </span>
                             {message.fromMe && (
                               <div className="flex items-center space-x-1">
