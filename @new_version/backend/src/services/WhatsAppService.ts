@@ -448,8 +448,80 @@ export class WhatsAppService extends EventEmitter {
         messageContent = '[Sticker]';
         messageType = 'sticker';
         mediaUrl = content.stickerMessage.url || undefined;
+      } else if (content.contactMessage) {
+        messageContent = `[Contact] ${content.contactMessage.displayName || 'Unknown'}`;
+        messageType = 'contact';
+      } else if (content.locationMessage) {
+        messageContent = `[Location] ${content.locationMessage.degreesLatitude}, ${content.locationMessage.degreesLongitude}`;
+        messageType = 'location';
+      } else if (content.liveLocationMessage) {
+        messageContent = `[Live Location] ${content.liveLocationMessage.degreesLatitude}, ${content.liveLocationMessage.degreesLongitude}`;
+        messageType = 'location';
+      } else if (content.groupInviteMessage) {
+        messageContent = `[Group Invite] ${content.groupInviteMessage.groupName || 'Unknown Group'}`;
+        messageType = 'group_invite';
+      } else if (content.pollCreationMessage) {
+        messageContent = `[Poll] ${content.pollCreationMessage.name || 'Poll'}`;
+        messageType = 'poll';
+      } else if (content.pollUpdateMessage) {
+        messageContent = '[Poll Update]';
+        messageType = 'poll_update';
+      } else if (content.reactionMessage) {
+        messageContent = `[Reaction] ${content.reactionMessage.text || '👍'}`;
+        messageType = 'reaction';
+      } else if (content.senderKeyDistributionMessage) {
+        messageContent = '[Security Update]';
+        messageType = 'security_update';
+      } else if (content.protocolMessage) {
+        // Manejar actualizaciones de protocolo (leído, recibido, etc.)
+        messageContent = '[Protocol Update]';
+        messageType = 'protocol_update';
+      } else if (content.listMessage) {
+        messageContent = `[List] ${content.listMessage.description || 'List Message'}`;
+        messageType = 'list';
+      } else if (content.listResponseMessage) {
+        messageContent = `[List Response] ${content.listResponseMessage.singleSelectReply?.selectedRowId || 'Selected'}`;
+        messageType = 'list_response';
+      } else if (content.buttonsMessage) {
+        messageContent = `[Buttons] ${content.buttonsMessage.contentText || 'Interactive Message'}`;
+        messageType = 'buttons';
+      } else if (content.buttonsResponseMessage) {
+        messageContent = `[Button Response] ${content.buttonsResponseMessage.selectedButtonId || 'Selected'}`;
+        messageType = 'button_response';
+      } else if (content.templateMessage) {
+        messageContent = `[Template] ${content.templateMessage.hydratedTemplate?.hydratedContentText || 'Template Message'}`;
+        messageType = 'template';
+      } else if (content.orderMessage) {
+        messageContent = '[Order Message]';
+        messageType = 'order';
+      } else if (content.productMessage) {
+        messageContent = `[Product] ${content.productMessage.product?.title || 'Product'}`;
+        messageType = 'product';
+      } else if (content.callLogMesssage) {
+        messageContent = '[Call Log]';
+        messageType = 'call_log';
+      } else if (content.viewOnceMessage) {
+        // Mensajes que se ven una sola vez
+        if (content.viewOnceMessage.message?.imageMessage) {
+          messageContent = '[View Once Image]';
+          messageType = 'view_once_image';
+        } else if (content.viewOnceMessage.message?.videoMessage) {
+          messageContent = '[View Once Video]';
+          messageType = 'view_once_video';
+        } else {
+          messageContent = '[View Once Message]';
+          messageType = 'view_once';
+        }
+      } else if (content.ephemeralMessage) {
+        // Mensajes temporales
+        messageContent = '[Ephemeral Message]';
+        messageType = 'ephemeral';
       } else {
-        messageContent = '[Unknown message type]';
+        // Log del tipo de mensaje desconocido para debugging
+        const unknownType = Object.keys(content)[0];
+        console.log(`🔍 Unknown message type: ${unknownType}`);
+        messageContent = `[Unknown: ${unknownType}]`;
+        messageType = 'unknown';
       }
 
       return {

@@ -79,7 +79,13 @@ export interface WhatsAppMessage {
   senderId: string;
   senderName?: string;
   content: string;
-  messageType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker';
+  messageType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 
+              'contact' | 'location' | 'group_invite' | 'poll' | 'poll_update' | 
+              'reaction' | 'security_update' | 'revoked' | 'read_receipt' | 
+              'delivery_receipt' | 'protocol_update' | 'list' | 'list_response' | 
+              'buttons' | 'button_response' | 'template' | 'order' | 'product' | 
+              'call_log' | 'view_once' | 'view_once_image' | 'view_once_video' | 
+              'ephemeral' | 'unknown';
   timestamp: number;
   isFromMe: boolean;
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';

@@ -264,7 +264,8 @@ export const IntegrationsPage: React.FC = () => {
 
   // Polling continuo para detectar cambios de estado cuando el modal está abierto
   React.useEffect(() => {
-    if (!isGeneratingQR || !whatsappQR) return;
+    // Solo hacer polling si el modal está abierto (hay QR o se está generando)
+    if (!whatsappQR && !isGeneratingQR) return;
 
     const interval = setInterval(async () => {
       try {
@@ -293,7 +294,7 @@ export const IntegrationsPage: React.FC = () => {
     }, 2000); // Verificar cada 2 segundos para mayor responsividad
 
     return () => clearInterval(interval);
-  }, [isGeneratingQR, whatsappQR]);
+  }, [whatsappQR, isGeneratingQR]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card p-6">
@@ -464,6 +465,18 @@ export const IntegrationsPage: React.FC = () => {
                         : 'Preparando conexión con WhatsApp Web...'
                       }
                     </p>
+
+                    {/* Indicador de conexión en progreso */}
+                    {whatsappQR && whatsappStatus && !whatsappStatus.isConnected && (
+                      <div className="mb-6 p-4 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <RefreshCw className="w-4 h-4 text-yellow-500 animate-spin" />
+                          <span className="text-yellow-800 dark:text-yellow-200 text-sm">
+                            Esperando conexión... Escanea el QR con tu teléfono
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                     {isGeneratingQR && !whatsappQR && (
                       <div className="mb-6 p-4 bg-blue-100 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg">
