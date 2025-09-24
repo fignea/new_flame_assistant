@@ -202,13 +202,13 @@ export const InboxPage: React.FC = () => {
       
       const response = await apiService.sendMessage(chatId, newMessage.trim(), 'text');
       if (response.success && response.data) {
-        // Agregar mensaje a la lista local
+        // Agregar mensaje a la lista local con el estado correcto del backend
         const sentMessage: WhatsAppMessage = {
-          id: response.data.messageId,
-          key: { id: response.data.messageId, remoteJid: chatId, fromMe: true },
+          id: response.data.message?.id || response.data.messageId,
+          key: { id: response.data.message?.id || response.data.messageId, remoteJid: chatId, fromMe: true },
           message: { conversation: newMessage },
-          messageTimestamp: response.data.timestamp || Date.now() / 1000,
-          status: 'sent',
+          messageTimestamp: response.data.message?.timestamp || response.data.timestamp || Date.now() / 1000,
+          status: response.data.message?.status || 'delivered', // Usar el estado del backend
           fromMe: true,
           chatId: chatId,
           senderId: user?.id || '',
