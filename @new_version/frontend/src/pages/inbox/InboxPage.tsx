@@ -116,6 +116,7 @@ export const InboxPage: React.FC = () => {
   const [whatsappChats, setWhatsappChats] = useState<WhatsAppChat[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
   const [isLoadingWhatsApp, setIsLoadingWhatsApp] = useState(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [whatsappStatus, setWhatsappStatus] = useState<{
     isConnected: boolean;
     isAuthenticated: boolean;
@@ -253,7 +254,17 @@ export const InboxPage: React.FC = () => {
       if (response.success && response.data) {
         // Filtrar mensajes de status y grupos
         const filteredMessages = (response.data.messages || []).filter((message: WhatsAppMessage) => {
-          return !isStatusMessage(message) && !isGroupMessage(message.chatId);
+          const isStatus = isStatusMessage(message);
+          const isGroup = isGroupMessage(message.chatId);
+          
+          if (isStatus) {
+            console.log('🚫 Filtering status message:', message.body || message.message?.conversation);
+          }
+          if (isGroup) {
+            console.log('🚫 Filtering group message:', message.chatId);
+          }
+          
+          return !isStatus && !isGroup;
         });
         setWhatsappMessages(filteredMessages);
       }
@@ -276,7 +287,12 @@ export const InboxPage: React.FC = () => {
       /^\[Ephemeral\]/i,
       /^\[Temporal\]/i,
       /^\[Protocol Update\]/i,
-      /^\[Security Update\]/i
+      /^\[Security Update\]/i,
+      /^\[Audio\]/i,
+      /^\[Image\]/i,
+      /^\[Video\]/i,
+      /^\[Document\]/i,
+      /^\[Sticker\]/i
     ];
 
     const statusContent = [
@@ -289,7 +305,12 @@ export const InboxPage: React.FC = () => {
       'Ephemeral',
       'Temporal',
       'Protocol Update',
-      'Security Update'
+      'Security Update',
+      '[Audio]',
+      '[Image]',
+      '[Video]',
+      '[Document]',
+      '[Sticker]'
     ];
 
     const statusMessageTypes = [
@@ -298,14 +319,27 @@ export const InboxPage: React.FC = () => {
       'view_once_image',
       'view_once_video',
       'protocol_update',
-      'security_update'
+      'security_update',
+      'audio',
+      'image',
+      'video',
+      'document',
+      'sticker'
     ];
 
     const messageContent = message.body || message.message?.conversation || '';
     
+    // Filtrar mensajes que son solo emojis o símbolos
+    const isOnlyEmojis = /^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F0FF}\u{1F200}-\u{1F2FF}\s*]+$/u.test(messageContent);
+    
+    // Filtrar mensajes muy cortos que podrían ser estados
+    const isVeryShort = messageContent.trim().length <= 3 && !messageContent.includes(' ');
+    
     return statusPatterns.some(pattern => pattern.test(messageContent)) ||
            statusContent.some(status => messageContent.includes(status)) ||
-           statusMessageTypes.includes(message.type);
+           statusMessageTypes.includes(message.type) ||
+           isOnlyEmojis ||
+           isVeryShort;
   };
 
   // Función para detectar mensajes de grupos
@@ -315,8 +349,9 @@ export const InboxPage: React.FC = () => {
 
   // Enviar mensaje de WhatsApp
   const sendWhatsAppMessage = async () => {
-    if (!newMessage.trim() || !selectedConversation || !whatsappStatus?.isConnected) return;
+    if (!newMessage.trim() || !selectedConversation || !whatsappStatus?.isConnected || isSendingMessage) return;
 
+    setIsSendingMessage(true);
     try {
       // Si es un chat de WhatsApp, extraer el ID real del chat
       const chatId = selectedConversation.startsWith('whatsapp_') 
@@ -346,6 +381,8 @@ export const InboxPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Error sending WhatsApp message:', error);
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
