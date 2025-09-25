@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { apiService } from '../../services/api.service';
+import { useSocketIO } from '../../hooks/useSocketIO';
 
 interface Message {
   id: string;
@@ -123,6 +124,75 @@ export const InboxPage: React.FC = () => {
   } | null>(null);
   const [showWhatsAppOnly, setShowWhatsAppOnly] = useState(false);
 
+  // Configurar Socket.IO para recibir mensajes en tiempo real
+  const { isConnected: wsConnected, joinUserRoom, leaveUserRoom } = useSocketIO({
+    onMessage: (message) => {
+      console.log('Socket.IO message received:', message);
+      
+      if (message.type === 'whatsapp:message') {
+        // Agregar nuevo mensaje a la lista
+        const newMessage = message.data;
+        setWhatsappMessages(prev => [...prev, newMessage]);
+        
+        // Actualizar la lista de chats si es necesario
+        if (newMessage.chatId) {
+          setWhatsappChats(prev => {
+            const existingChat = prev.find(chat => chat.id === newMessage.chatId);
+            if (existingChat) {
+              // Actualizar el chat existente
+              return prev.map(chat => 
+                chat.id === newMessage.chatId 
+                  ? { ...chat, lastMessage: newMessage.content, lastMessageTime: new Date(newMessage.timestamp * 1000) }
+                  : chat
+              );
+            } else {
+              // Crear nuevo chat si no existe
+              const newChat = {
+                id: newMessage.chatId,
+                name: newMessage.senderName || newMessage.chatId.split('@')[0],
+                phoneNumber: newMessage.chatId.includes('@s.whatsapp.net') ? newMessage.chatId.split('@')[0] : undefined,
+                lastMessage: newMessage.content,
+                lastMessageTime: new Date(newMessage.timestamp * 1000),
+                unreadCount: 0,
+                isGroup: newMessage.chatId.includes('@g.us'),
+                avatar: undefined
+              };
+              return [newChat, ...prev];
+            }
+          });
+        }
+      } else if (message.type === 'whatsapp:connected') {
+        // Actualizar estado de conexión
+        setWhatsappStatus(prev => ({
+          ...prev,
+          isConnected: true,
+          isAuthenticated: true,
+          phoneNumber: message.data.phoneNumber,
+          userName: message.data.userName
+        }));
+      } else if (message.type === 'whatsapp:disconnected') {
+        // Actualizar estado de desconexión
+        setWhatsappStatus(prev => ({
+          ...prev,
+          isConnected: false,
+          isAuthenticated: false
+        }));
+      }
+    },
+    onConnect: () => {
+      console.log('Socket.IO connected');
+      if (user?.id) {
+        joinUserRoom(user.id.toString());
+      }
+    },
+    onDisconnect: () => {
+      console.log('Socket.IO disconnected');
+    },
+    onError: (error) => {
+      console.error('Socket.IO error:', error);
+    }
+  });
+
   // Cargar estado de WhatsApp al montar el componente
   useEffect(() => {
     if (isAuthenticated) {
@@ -181,13 +251,66 @@ export const InboxPage: React.FC = () => {
       setIsLoadingWhatsApp(true);
       const response = await apiService.getWhatsAppMessagesNew(chatId, { limit: 50 });
       if (response.success && response.data) {
-        setWhatsappMessages(response.data.messages || []);
+        // Filtrar mensajes de status y grupos
+        const filteredMessages = (response.data.messages || []).filter((message: WhatsAppMessage) => {
+          return !isStatusMessage(message) && !isGroupMessage(message.chatId);
+        });
+        setWhatsappMessages(filteredMessages);
       }
     } catch (error) {
       console.error('Error loading WhatsApp messages:', error);
     } finally {
       setIsLoadingWhatsApp(false);
     }
+  };
+
+  // Función para detectar mensajes de status
+  const isStatusMessage = (message: WhatsAppMessage): boolean => {
+    const statusPatterns = [
+      /^\[Status\]/i,
+      /^\[Estado\]/i,
+      /^\[Story\]/i,
+      /^\[Historia\]/i,
+      /^\[View Once\]/i,
+      /^\[Ver una vez\]/i,
+      /^\[Ephemeral\]/i,
+      /^\[Temporal\]/i,
+      /^\[Protocol Update\]/i,
+      /^\[Security Update\]/i
+    ];
+
+    const statusContent = [
+      'Status',
+      'Estado',
+      'Story',
+      'Historia',
+      'View Once',
+      'Ver una vez',
+      'Ephemeral',
+      'Temporal',
+      'Protocol Update',
+      'Security Update'
+    ];
+
+    const statusMessageTypes = [
+      'ephemeral',
+      'view_once',
+      'view_once_image',
+      'view_once_video',
+      'protocol_update',
+      'security_update'
+    ];
+
+    const messageContent = message.body || message.message?.conversation || '';
+    
+    return statusPatterns.some(pattern => pattern.test(messageContent)) ||
+           statusContent.some(status => messageContent.includes(status)) ||
+           statusMessageTypes.includes(message.type);
+  };
+
+  // Función para detectar mensajes de grupos
+  const isGroupMessage = (chatId: string): boolean => {
+    return chatId.includes('@g.us');
   };
 
   // Enviar mensaje de WhatsApp

@@ -133,7 +133,11 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
       const response = await apiService.getWhatsAppMessagesNew(chatId, { limit: 50 });
       
       if (response.success && response.data) {
-        setMessages(response.data.messages || []);
+        // Filtrar mensajes de status y grupos
+        const filteredMessages = (response.data.messages || []).filter((message: WhatsAppMessage) => {
+          return !isStatusMessage(message) && !isGroupMessage(message.chatId);
+        });
+        setMessages(filteredMessages);
       } else {
         throw new Error(response.message || 'Error al cargar mensajes');
       }
@@ -143,6 +147,55 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Función para detectar mensajes de status
+  const isStatusMessage = (message: WhatsAppMessage): boolean => {
+    const statusPatterns = [
+      /^\[Status\]/i,
+      /^\[Estado\]/i,
+      /^\[Story\]/i,
+      /^\[Historia\]/i,
+      /^\[View Once\]/i,
+      /^\[Ver una vez\]/i,
+      /^\[Ephemeral\]/i,
+      /^\[Temporal\]/i,
+      /^\[Protocol Update\]/i,
+      /^\[Security Update\]/i
+    ];
+
+    const statusContent = [
+      'Status',
+      'Estado',
+      'Story',
+      'Historia',
+      'View Once',
+      'Ver una vez',
+      'Ephemeral',
+      'Temporal',
+      'Protocol Update',
+      'Security Update'
+    ];
+
+    const statusMessageTypes = [
+      'ephemeral',
+      'view_once',
+      'view_once_image',
+      'view_once_video',
+      'protocol_update',
+      'security_update'
+    ];
+
+    const messageContent = message.body || message.message?.conversation || '';
+    
+    return statusPatterns.some(pattern => pattern.test(messageContent)) ||
+           statusContent.some(status => messageContent.includes(status)) ||
+           statusMessageTypes.includes(message.type);
+  };
+
+  // Función para detectar mensajes de grupos
+  const isGroupMessage = (chatId: string): boolean => {
+    return chatId.includes('@g.us');
   };
 
   // Enviar mensaje
