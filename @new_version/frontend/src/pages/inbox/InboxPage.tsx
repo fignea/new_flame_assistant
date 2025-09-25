@@ -126,7 +126,7 @@ export const InboxPage: React.FC = () => {
   const [showWhatsAppOnly, setShowWhatsAppOnly] = useState(false);
 
   // Configurar Socket.IO para recibir mensajes en tiempo real
-  const { isConnected: wsConnected, joinUserRoom, leaveUserRoom } = useSocketIO({
+  const { isConnected: wsConnected, joinUserRoom, leaveUserRoom, reconnectWithNewToken } = useSocketIO({
     onMessage: (message) => {
       console.log('Socket.IO message received:', message);
       
@@ -198,6 +198,8 @@ export const InboxPage: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated) {
       checkWhatsAppStatus();
+      // Reconectar Socket.IO cuando el usuario se autentique
+      reconnectWithNewToken();
     }
   }, [isAuthenticated]);
 

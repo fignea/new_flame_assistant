@@ -41,16 +41,29 @@ export const useSocketIO = (options: UseSocketIOOptions = {}) => {
     }
 
     try {
+      // Obtener token de autenticación
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        setError('No authentication token available');
+        onError?.('No authentication token available');
+        return;
+      }
+
       const socket = io(wsConfig.url, {
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         upgrade: true,
         rememberUpgrade: true,
+        auth: {
+          token: token
+        },
         ...wsConfig.options
       });
 
       socketRef.current = socket;
 
       socket.on('connect', () => {
+        console.log('Socket.IO connected successfully');
         setIsConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -65,12 +78,17 @@ export const useSocketIO = (options: UseSocketIOOptions = {}) => {
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current++;
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
+            // Verificar que el token siga disponible antes de reconectar
+            const token = localStorage.getItem('accessToken');
+            if (token) {
+              connect();
+            }
           }, reconnectInterval);
         }
       });
 
       socket.on('connect_error', (err) => {
+        console.error('Socket.IO connection error:', err);
         setError('Socket.IO connection error');
         onError?.(err);
       });
@@ -176,6 +194,14 @@ export const useSocketIO = (options: UseSocketIOOptions = {}) => {
     leaveRoom(`conversation:${conversationId}`);
   };
 
+  const reconnectWithNewToken = () => {
+    // Desconectar y reconectar con el nuevo token
+    disconnect();
+    setTimeout(() => {
+      connect();
+    }, 1000);
+  };
+
   useEffect(() => {
     if (autoConnect) {
       connect();
@@ -197,7 +223,8 @@ export const useSocketIO = (options: UseSocketIOOptions = {}) => {
     joinUserRoom,
     leaveUserRoom,
     joinConversation,
-    leaveConversation
+    leaveConversation,
+    reconnectWithNewToken
   };
 };
 

@@ -37,20 +37,37 @@ class WhatsAppManagerServer {
   private userSockets: Map<number, string> = new Map(); // userId -> socketId
 
   constructor() {
+    console.log('🔧 Initializing WhatsApp Manager Server...');
     this.app = express();
     this.server = createServer(this.app);
     this.io = new SocketIOServer(this.server, {
       cors: {
-        origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+        origin: [
+          process.env.CORS_ORIGIN || "http://localhost:5173",
+          "http://localhost:80",
+          "http://localhost",
+          "http://127.0.0.1:80",
+          "http://127.0.0.1"
+        ],
         methods: ["GET", "POST"],
         credentials: true
       }
     });
 
+    console.log('🔧 Setting up middleware...');
     this.setupMiddleware();
+    console.log('🔧 Setting up routes...');
     this.setupRoutes();
-    this.setupSocketIO();
+    console.log('🔧 Setting up Socket.IO...');
+    try {
+      this.setupSocketIO();
+      console.log('✅ Socket.IO setup complete');
+    } catch (error) {
+      console.error('❌ Error setting up Socket.IO:', error);
+    }
+    console.log('🔧 Setting up WhatsApp events...');
     this.setupWhatsAppEvents();
+    console.log('✅ Server initialization complete');
   }
 
   private setupMiddleware(): void {
@@ -205,31 +222,52 @@ class WhatsAppManagerServer {
   }
 
   private setupSocketIO(): void {
+    console.log('🔧 Setting up Socket.IO middleware...');
+    console.log('🔧 Socket.IO instance:', !!this.io);
+    
+    // Verificar que this.io existe
+    if (!this.io) {
+      console.error('❌ Socket.IO instance not found');
+      return;
+    }
+    
     // Middleware de autenticación para sockets
     this.io.use(async (socket, next) => {
+      console.log('🔐 Socket middleware triggered');
       try {
         const token = socket.handshake.auth.token;
+        console.log('🔐 Socket authentication attempt:', { 
+          hasToken: !!token, 
+          tokenLength: token?.length,
+          auth: socket.handshake.auth 
+        });
         
         if (!token) {
+          console.log('❌ No token provided');
           return next(new Error('Token requerido'));
         }
 
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {
+          console.log('❌ No JWT secret configured');
           return next(new Error('Configuración JWT no válida'));
         }
 
         const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
+        console.log('🔍 Token decoded:', { userId: decoded.userId });
         
         // Verificar usuario
         const user = await database.get(
-          'SELECT id, email, name FROM users WHERE id = ?',
+          'SELECT id, email, name FROM users WHERE id = $1',
           [decoded.userId]
         );
 
         if (!user) {
+          console.log('❌ User not found:', decoded.userId);
           return next(new Error('Usuario no válido'));
         }
+
+        console.log('✅ User authenticated:', { id: user.id, email: user.email });
 
         // Agregar información del usuario al socket
         (socket as any).userId = user.id;
@@ -237,6 +275,7 @@ class WhatsAppManagerServer {
         
         next();
       } catch (error) {
+        console.log('❌ Token validation error:', error);
         next(new Error('Token inválido'));
       }
     });
