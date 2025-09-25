@@ -271,7 +271,7 @@ export class WhatsAppController {
 
       const [messages, totalResult] = await Promise.all([
         database.query(
-          `SELECT id, message_id, content, message_type, is_from_me, 
+          `SELECT id, whatsapp_message_id, content, message_type, is_from_me, 
                   timestamp, created_at
            FROM messages 
            WHERE user_id = $1 AND chat_id = $2
@@ -493,7 +493,7 @@ export class WhatsAppController {
       const messages = await database.query(
         `SELECT 
            m.id,
-           m.message_id,
+           m.whatsapp_message_id,
            m.content,
            m.message_type,
            m.is_from_me,
@@ -511,9 +511,9 @@ export class WhatsAppController {
 
       // Formatear los mensajes para el frontend
       const formattedMessages = messages.rows.map((msg: any) => ({
-        id: msg.message_id,
+        id: msg.whatsapp_message_id,
         key: {
-          id: msg.message_id,
+          id: msg.whatsapp_message_id,
           remoteJid: chatId,
           fromMe: msg.is_from_me
         },
