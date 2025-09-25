@@ -596,7 +596,7 @@ export class WhatsAppService extends EventEmitter {
       // Guardar mensaje
       await database.run(
         `INSERT INTO messages 
-         (user_id, message_id, chat_id, content, message_type, 
+         (user_id, whatsapp_message_id, chat_id, content, message_type, 
           is_from_me, timestamp) 
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
