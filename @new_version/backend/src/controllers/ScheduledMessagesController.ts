@@ -96,18 +96,18 @@ export class ScheduledMessagesController {
         SELECT sm.*, c.name as contact_name, c.whatsapp_id, c.phone_number
         FROM scheduled_messages sm
         JOIN contacts c ON sm.contact_id = c.id
-        WHERE sm.user_id = ?
+        WHERE sm.user_id = $1
       `;
-      let countQuery = 'SELECT COUNT(*) as total FROM scheduled_messages WHERE user_id = ?';
+      let countQuery = 'SELECT COUNT(*) as total FROM scheduled_messages WHERE user_id = $1';
       let params: any[] = [userId];
 
       if (status) {
-        query += ' AND sm.status = ?';
-        countQuery += ' AND status = ?';
+        query += ` AND sm.status = $2`;
+        countQuery += ` AND status = $2`;
         params.push(status);
       }
 
-      query += ' ORDER BY sm.scheduled_time ASC LIMIT ? OFFSET ?';
+      query += ` ORDER BY sm.scheduled_time ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
       params.push(limit, offset);
 
       const [messages, totalResult] = await Promise.all([

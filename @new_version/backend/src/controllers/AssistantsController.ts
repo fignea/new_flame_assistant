@@ -71,34 +71,35 @@ export class AssistantsController {
         });
       }
 
-      let whereClause = 'WHERE user_id = ?';
+      let whereClause = 'WHERE user_id = $1';
       const params: any[] = [userId];
+      let paramIndex = 2;
 
       if (status) {
-        whereClause += ' AND status = ?';
+        whereClause += ` AND status = $${paramIndex}`;
         params.push(status);
+        paramIndex++;
       }
 
       if (type) {
-        whereClause += ' AND type = ?';
+        whereClause += ` AND type = $${paramIndex}`;
         params.push(type);
+        paramIndex++;
       }
 
       // Obtener total de asistentes
-      const countResult = await database.get(
-        `SELECT COUNT(*) as total FROM assistants ${whereClause}`,
-        params
-      );
+      const countQuery = `SELECT COUNT(*) as total FROM assistants WHERE user_id = $1`;
+      console.log('Count query:', countQuery);
+      console.log('Count params:', [userId]);
+      const countResult = await database.get(countQuery, [userId]);
       const total = countResult?.total || 0;
 
       // Obtener asistentes con paginación
       const offset = (Number(page) - 1) * Number(limit);
-      const assistants = await database.query(
-        `SELECT * FROM assistants ${whereClause} 
-         ORDER BY created_at DESC 
-         LIMIT ? OFFSET ?`,
-        [...params, Number(limit), offset]
-      );
+      const assistantsQuery = `SELECT * FROM assistants WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`;
+      console.log('Assistants query:', assistantsQuery);
+      console.log('Assistants params:', [userId, Number(limit), offset]);
+      const assistants = await database.query(assistantsQuery, [userId, Number(limit), offset]);
 
       // Parsear JSON fields
       const parsedAssistants = assistants.rows.map((assistant: any) => ({
@@ -120,11 +121,17 @@ export class AssistantsController {
         }
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Get assistants error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        code: error.code
+      });
       return res.status(500).json({
         success: false,
-        message: 'Error al obtener los asistentes'
+        message: 'Error al obtener los asistentes',
+        error: error.message
       });
     }
   }

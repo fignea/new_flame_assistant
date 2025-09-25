@@ -36,5 +36,7 @@ router.get('/contacts/:id', authenticate, whatsappController.getContactById.bind
 
 // Estadísticas (con autenticación)
 router.get('/stats', authenticate, whatsappController.getStats.bind(whatsappController));
+// Estadísticas de mensajes (ruta directa)
+router.get("/messages/stats", authenticate, whatsappController.getMessageStats.bind(whatsappController));
 
 export default router;

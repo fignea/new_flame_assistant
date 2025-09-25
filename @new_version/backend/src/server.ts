@@ -23,6 +23,7 @@ import scheduledRoutes from './routes/scheduled';
 import integrationsRoutes from './routes/integrations';
 import assistantsRoutes from './routes/assistants';
 import configRoutes from './routes/config';
+import messagesRoutes from './routes/messages';
 
 // Importar servicios
 import { whatsappService } from './services/WhatsAppService';
@@ -176,6 +177,7 @@ class WhatsAppManagerServer {
     this.app.use('/api/integrations', integrationsRoutes);
     this.app.use('/api/assistants', assistantsRoutes);
     this.app.use('/api/config', configRoutes);
+    this.app.use('/api/messages', messagesRoutes);
 
     // Root endpoint
     this.app.get('/', (req, res) => {
