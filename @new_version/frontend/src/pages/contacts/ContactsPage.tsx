@@ -14,7 +14,8 @@ import {
   User,
   Users as UsersIcon,
   Eye,
-  Send
+  Send,
+  X
 } from 'lucide-react';
 import { apiService, Contact, PaginatedResponse } from '../../services/api.service';
 
@@ -28,6 +29,11 @@ export const ContactsPage: React.FC = () => {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showContactDetails, setShowContactDetails] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'individual' | 'groups'>('all');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showSendMessageModal, setShowSendMessageModal] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [messageText, setMessageText] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const itemsPerPage = 20;
 
@@ -65,6 +71,69 @@ export const ContactsPage: React.FC = () => {
       console.error('Error syncing contacts:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Manejar envío de mensaje
+  const handleSendMessage = (contact: Contact) => {
+    setSelectedContact(contact);
+    setShowSendMessageModal(true);
+    setMessageText('');
+  };
+
+  // Enviar mensaje
+  const sendMessage = async () => {
+    if (!selectedContact || !messageText.trim()) return;
+
+    try {
+      setSendingMessage(true);
+      const response = await apiService.sendMessage({
+        contactId: selectedContact.whatsapp_id,
+        content: messageText.trim(),
+        messageType: 'text'
+      });
+
+      if (response.success) {
+        setShowSendMessageModal(false);
+        setMessageText('');
+        setSelectedContact(null);
+        // Mostrar notificación de éxito
+        alert('Mensaje enviado exitosamente');
+      } else {
+        alert('Error al enviar el mensaje: ' + (response.message || 'Error desconocido'));
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Error al enviar el mensaje');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  // Manejar edición de contacto
+  const handleEditContact = (contact: Contact) => {
+    setEditingContact(contact);
+    setShowEditModal(true);
+  };
+
+  // Actualizar contacto
+  const updateContact = async (updatedData: Partial<Contact>) => {
+    if (!editingContact) return;
+
+    try {
+      // Aquí se implementaría la llamada a la API para actualizar el contacto
+      // Por ahora, actualizamos localmente
+      setContacts(prev => prev.map(contact => 
+        contact.id === editingContact.id 
+          ? { ...contact, ...updatedData }
+          : contact
+      ));
+      setShowEditModal(false);
+      setEditingContact(null);
+      alert('Contacto actualizado exitosamente');
+    } catch (error) {
+      console.error('Error updating contact:', error);
+      alert('Error al actualizar el contacto');
     }
   };
 
@@ -131,11 +200,6 @@ export const ContactsPage: React.FC = () => {
     setShowContactDetails(true);
   };
 
-  // Manejar envío de mensaje
-  const handleSendMessage = (contact: Contact) => {
-    // Aquí podrías abrir un modal o navegar a una página de envío de mensajes
-    console.log('Enviar mensaje a:', contact);
-  };
 
   // Renderizar paginación
   const renderPagination = () => {
@@ -359,7 +423,11 @@ export const ContactsPage: React.FC = () => {
                         >
                           <Send className="w-4 h-4" />
                         </button>
-                        <button className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                        <button 
+                          onClick={() => handleEditContact(contact)}
+                          className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                          title="Editar contacto"
+                        >
                           <MoreVertical className="w-4 h-4" />
                         </button>
                       </div>
@@ -464,6 +532,161 @@ export const ContactsPage: React.FC = () => {
                     className="flex-1 bg-gray-100 dark:bg-dark-card text-gray-700 dark:text-gray-300 py-3 px-4 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
                   >
                     Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de envío de mensaje */}
+        {showSendMessageModal && selectedContact && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-xl max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Enviar Mensaje
+                  </h2>
+                  <button
+                    onClick={() => setShowSendMessageModal(false)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    Enviar mensaje a:
+                  </p>
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-dark-card rounded-lg">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold ${
+                      selectedContact.is_group ? 'bg-blue-500' : 'bg-green-500'
+                    }`}>
+                      {getInitials(selectedContact.name)}
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {selectedContact.name || 'Sin nombre'}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {selectedContact.phone_number || selectedContact.whatsapp_id}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Mensaje
+                  </label>
+                  <textarea
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    placeholder="Escribe tu mensaje aquí..."
+                    className="w-full p-3 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-dark-card dark:text-white resize-none"
+                    rows={4}
+                  />
+                </div>
+
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowSendMessageModal(false)}
+                    className="flex-1 px-4 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-card rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={sendMessage}
+                    disabled={!messageText.trim() || sendingMessage}
+                    className="flex-1 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  >
+                    {sendingMessage ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Enviando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        <span>Enviar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de edición de contacto */}
+        {showEditModal && editingContact && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-xl max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Editar Contacto
+                  </h2>
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Nombre
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue={editingContact.name || ''}
+                      onChange={(e) => setEditingContact(prev => prev ? {...prev, name: e.target.value} : null)}
+                      className="w-full p-3 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-dark-card dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Número de teléfono
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue={editingContact.phone_number || ''}
+                      onChange={(e) => setEditingContact(prev => prev ? {...prev, phone_number: e.target.value} : null)}
+                      className="w-full p-3 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-dark-card dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      URL del avatar
+                    </label>
+                    <input
+                      type="url"
+                      defaultValue={editingContact.avatar_url || ''}
+                      onChange={(e) => setEditingContact(prev => prev ? {...prev, avatar_url: e.target.value} : null)}
+                      className="w-full p-3 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-dark-card dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 mt-6">
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="flex-1 px-4 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-card rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => updateContact(editingContact)}
+                    className="flex-1 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  >
+                    Guardar Cambios
                   </button>
                 </div>
               </div>
