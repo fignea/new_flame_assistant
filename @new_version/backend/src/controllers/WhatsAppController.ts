@@ -214,14 +214,16 @@ export class WhatsAppController {
 
       return res.json({
         success: true,
-        data: contacts,
-        message: 'Contactos obtenidos exitosamente',
-        pagination: {
-          page,
-          limit,
-          total,
-          pages
-        }
+        data: {
+          data: contacts.rows,
+          pagination: {
+            page,
+            limit,
+            total,
+            pages
+          }
+        },
+        message: 'Contactos obtenidos exitosamente'
       });
 
     } catch (error) {

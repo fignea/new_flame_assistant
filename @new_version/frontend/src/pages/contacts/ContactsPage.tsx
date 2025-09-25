@@ -43,9 +43,9 @@ export const ContactsPage: React.FC = () => {
 
       if (response.success && response.data) {
         const data = response.data as PaginatedResponse<Contact>;
-        setContacts(data.data);
-        setTotalPages(data.pagination.pages);
-        setTotalContacts(data.pagination.total);
+        setContacts(data.data || []);
+        setTotalPages(data.pagination?.pages || 1);
+        setTotalContacts(data.pagination?.total || 0);
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
@@ -89,7 +89,7 @@ export const ContactsPage: React.FC = () => {
   }, [searchTerm]);
 
   // Filtrar contactos por tipo
-  const filteredContacts = contacts.filter(contact => {
+  const filteredContacts = (contacts || []).filter(contact => {
     if (filterType === 'individual') return !contact.is_group;
     if (filterType === 'groups') return contact.is_group;
     return true;
