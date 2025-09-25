@@ -20,6 +20,7 @@ router.get('/whatsapp/messages/:contactId', whatsappController.getMessages.bind(
 
 // Contactos
 router.get('/whatsapp/contacts', whatsappController.getContacts.bind(whatsappController));
+router.get('/whatsapp/contacts/:id', whatsappController.getContactById.bind(whatsappController));
 
 // Estadísticas
 router.get('/whatsapp/stats', whatsappController.getStats.bind(whatsappController));

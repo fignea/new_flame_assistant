@@ -32,6 +32,7 @@ router.get('/chats/:chatId/messages', authenticate, whatsappController.getChatMe
 
 // Contactos (con autenticación)
 router.get('/contacts', authenticate, whatsappController.getContacts.bind(whatsappController));
+router.get('/contacts/:id', authenticate, whatsappController.getContactById.bind(whatsappController));
 
 // Estadísticas (con autenticación)
 router.get('/stats', authenticate, whatsappController.getStats.bind(whatsappController));

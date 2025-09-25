@@ -9,6 +9,19 @@ export interface ApiResponse<T = any> {
   details?: any;
 }
 
+// Interfaz para Contact
+export interface Contact {
+  id: number;
+  user_id: number;
+  whatsapp_id: string;
+  name?: string;
+  phone_number?: string;
+  is_group: boolean;
+  avatar_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PaginationInfo {
   page: number;
   limit: number;
@@ -371,6 +384,29 @@ export class ApiService {
     return this.post('/api/messages/webhook', {
       webhookUrl,
       events: events || ['message', 'messageUpdate']
+    });
+  }
+
+  // Métodos para gestión de contactos
+  async getContacts(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  }) {
+    return this.get<PaginatedResponse<Contact>>('/api/whatsapp/contacts', params);
+  }
+
+  async getContact(id: string) {
+    return this.get<Contact>(`/api/whatsapp/contacts/${id}`);
+  }
+
+  async searchContacts(query: string, params?: {
+    page?: number;
+    limit?: number;
+  }) {
+    return this.get<PaginatedResponse<Contact>>('/api/whatsapp/contacts', {
+      search: query,
+      ...params
     });
   }
 }

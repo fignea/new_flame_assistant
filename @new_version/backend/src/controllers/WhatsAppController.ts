@@ -188,7 +188,7 @@ export class WhatsAppController {
       const offset = (page - 1) * limit;
 
       let query = `
-        SELECT id, whatsapp_id, name, phone_number, is_group, created_at, updated_at
+        SELECT id, whatsapp_id, name, phone_number, is_group, avatar_url, created_at, updated_at
         FROM contacts 
         WHERE user_id = $1
       `;
@@ -229,6 +229,47 @@ export class WhatsAppController {
       return res.status(500).json({
         success: false,
         message: 'Error al obtener los contactos'
+      });
+    }
+  }
+
+  public async getContactById(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+    try {
+      const userId = req.user?.id;
+      const { id } = req.params;
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      const contact = await database.get(
+        `SELECT id, whatsapp_id, name, phone_number, is_group, avatar_url, created_at, updated_at
+         FROM contacts 
+         WHERE id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+
+      if (!contact) {
+        return res.status(404).json({
+          success: false,
+          message: 'Contacto no encontrado'
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: contact,
+        message: 'Contacto obtenido exitosamente'
+      });
+
+    } catch (error) {
+      console.error('Get contact by id error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al obtener el contacto'
       });
     }
   }
