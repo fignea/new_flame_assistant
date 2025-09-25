@@ -54,6 +54,20 @@ export const ContactsPage: React.FC = () => {
     }
   };
 
+  // Sincronizar contactos con WhatsApp
+  const syncContactsWithWhatsApp = async () => {
+    try {
+      setLoading(true);
+      // Aquí se podría implementar una llamada específica para sincronizar contactos
+      // Por ahora, simplemente recargamos los contactos
+      await loadContacts(currentPage, searchTerm);
+    } catch (error) {
+      console.error('Error syncing contacts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Efecto para cargar contactos al montar el componente
   useEffect(() => {
     loadContacts(currentPage, searchTerm);
@@ -187,12 +201,12 @@ export const ContactsPage: React.FC = () => {
               </p>
             </div>
             <button
-              onClick={() => loadContacts(currentPage, searchTerm)}
+              onClick={syncContactsWithWhatsApp}
               disabled={loading}
               className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>Actualizar</span>
+              <span>Sincronizar</span>
             </button>
           </div>
         </div>

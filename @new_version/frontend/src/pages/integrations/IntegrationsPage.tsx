@@ -213,6 +213,24 @@ export const IntegrationsPage: React.FC = () => {
     poll();
   };
 
+  // Función para desconectar WhatsApp
+  const disconnectWhatsApp = async () => {
+    try {
+      setError(null);
+      const response = await apiService.disconnectWhatsApp();
+      if (response.success) {
+        setWhatsappStatus(null);
+        setWhatsappQR(null);
+        setIsGeneratingQR(false);
+      } else {
+        setError(response.message || 'Error al desconectar WhatsApp');
+      }
+    } catch (error) {
+      console.error('Error disconnecting WhatsApp:', error);
+      setError('Error al desconectar WhatsApp');
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -235,25 +253,6 @@ export const IntegrationsPage: React.FC = () => {
     }
   };
 
-  const disconnectWhatsApp = async () => {
-    if (!isAuthenticated) return;
-    
-    try {
-      const response = await apiService.disconnectWhatsApp();
-      if (response.success) {
-        setWhatsappStatus({
-          isConnected: false,
-          isAuthenticated: false
-        });
-        setWhatsappQR(null);
-        setIsGeneratingQR(false);
-        console.log('WhatsApp disconnected successfully');
-      }
-    } catch (error) {
-      console.error('Error disconnecting WhatsApp:', error);
-      setError('Error desconectando WhatsApp Web');
-    }
-  };
 
   // Verificar estado al cargar la página
   React.useEffect(() => {

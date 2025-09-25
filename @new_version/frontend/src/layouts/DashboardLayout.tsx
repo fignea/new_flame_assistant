@@ -12,7 +12,8 @@ import {
   Sun,
   Moon,
   Flame,
-  LogOut
+  LogOut,
+  Clock
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useApp } from '../contexts/AppContext';
@@ -32,6 +33,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
     { name: 'Dashboard', href: '/dashboard', icon: Zap },
     { name: 'Inbox', href: '/inbox', icon: MessageSquare },
     { name: 'Contactos', href: '/contacts', icon: Users },
+    { name: 'Mensajes Programados', href: '/scheduled', icon: Clock },
     { name: 'Documentos', href: '/documents', icon: FileText },
     { name: 'Asistentes', href: '/assistants', icon: Bot },
     { name: 'Integraciones', href: '/integrations', icon: Zap },
