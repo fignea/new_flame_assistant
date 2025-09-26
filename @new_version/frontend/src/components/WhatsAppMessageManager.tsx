@@ -14,9 +14,15 @@ import {
   Check,
   CheckCheck,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Edit,
+  Ban,
+  Trash2,
+  Download,
+  User
 } from 'lucide-react';
 import { apiService } from '../services/api.service';
+import { useSocketIO } from '../hooks/useSocketIO';
 
 interface WhatsAppMessage {
   id: string;
@@ -81,9 +87,83 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [isUpdatingData, setIsUpdatingData] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Configurar WebSocket para recibir mensajes en tiempo real
+  const { isConnected: wsConnected, joinUserRoom, leaveUserRoom } = useSocketIO({
+    onMessage: (message) => {
+      console.log('📨 WebSocket message received:', message);
+      
+      if (message.type === 'whatsapp:message') {
+        const messageData = message.data;
+        console.log('📨 Processing message data:', messageData);
+        
+        // Solo procesar mensajes del chat actual
+        console.log('📨 Checking if message is for current chat:', {
+          messageChatId: messageData.chatId,
+          selectedChatId: selectedChat?.id,
+          isMatch: selectedChat && messageData.chatId === selectedChat.id
+        });
+        
+        if (selectedChat && messageData.chatId === selectedChat.id) {
+          console.log('📨 Message is for current chat, processing...');
+          
+          // Convertir el mensaje al formato esperado
+          const formattedMessage: WhatsAppMessage = {
+            id: messageData.id || messageData.key?.id || '',
+            key: messageData.key || { id: messageData.id, remoteJid: messageData.chatId, fromMe: messageData.isFromMe },
+            message: messageData.message || { conversation: messageData.content },
+            messageTimestamp: messageData.timestamp || messageData.messageTimestamp || Date.now() / 1000,
+            status: messageData.status || 'delivered',
+            fromMe: messageData.isFromMe || messageData.fromMe || false,
+            chatId: messageData.chatId,
+            senderId: messageData.senderId || messageData.chatId,
+            senderName: messageData.senderName || (messageData.isFromMe ? 'Tú' : messageData.chatId.split('@')[0]),
+            body: messageData.content || messageData.body || '',
+            type: messageData.messageType || messageData.type || 'text',
+            hasMedia: messageData.hasMedia || false,
+            media: messageData.media
+          };
+
+          console.log('📨 Formatted message:', formattedMessage);
+
+          // Agregar el mensaje a la lista
+          setMessages(prev => {
+            // Verificar si el mensaje ya existe para evitar duplicados
+            const exists = prev.some(msg => msg.id === formattedMessage.id);
+            if (exists) {
+              console.log('📨 Message already exists, skipping...');
+              return prev;
+            }
+            
+            console.log('📨 Adding new message to list');
+            return [...prev, formattedMessage];
+          });
+
+          // Notificar al componente padre
+          if (onMessageReceived) {
+            onMessageReceived(formattedMessage);
+          }
+        } else {
+          console.log('📨 Message not for current chat:', messageData.chatId, 'vs', selectedChat?.id);
+        }
+      }
+    },
+    onConnect: () => {
+      if (userId) {
+        joinUserRoom(userId.toString());
+      }
+    },
+    onDisconnect: () => {
+      if (userId) {
+        leaveUserRoom(userId.toString());
+      }
+    }
+  });
 
   // Scroll automático al final de los mensajes
   const scrollToBottom = () => {
@@ -94,19 +174,36 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
     scrollToBottom();
   }, [messages]);
 
+  // Cerrar menús al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showChatMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.chat-menu-container')) {
+          setShowChatMenu(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showChatMenu]);
+
   // Cargar chats al conectar
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected && wsConnected) {
       loadChats();
     }
-  }, [isConnected]);
+  }, [isConnected, wsConnected]);
 
   // Cargar mensajes cuando se selecciona un chat
   useEffect(() => {
-    if (selectedChat && isConnected) {
+    if (selectedChat && isConnected && wsConnected) {
       loadMessages(selectedChat.id);
     }
-  }, [selectedChat, isConnected]);
+  }, [selectedChat, isConnected, wsConnected]);
 
   // Cargar chats
   const loadChats = async () => {
@@ -226,36 +323,35 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat || isSending) return;
 
+    const messageContent = newMessage.trim();
     setIsSending(true);
+    setNewMessage(''); // Limpiar el input inmediatamente
+    
     try {
       const response = await apiService.sendMessage({
         contactId: selectedChat.id,
-        content: newMessage.trim(),
+        content: messageContent,
         messageType: 'text'
       });
       
       if (response.success && response.data) {
-        // Agregar mensaje a la lista local
-        const sentMessage: WhatsAppMessage = {
-          id: response.data.messageId,
-          key: { id: response.data.messageId, remoteJid: selectedChat.id, fromMe: true },
-          message: { conversation: newMessage },
-          messageTimestamp: response.data.timestamp,
-          status: 'sent',
-          fromMe: true,
-          chatId: selectedChat.id,
-          senderId: userId,
-          senderName: 'Tú',
-          body: newMessage.trim(),
-          type: 'text',
-          hasMedia: false
-        };
-
-        setMessages(prev => [...prev, sentMessage]);
-        setNewMessage('');
-        
+        // No agregar el mensaje localmente aquí - se recibirá a través de WebSocket
+        // Solo notificar que se envió exitosamente
         if (onMessageSent) {
-          onMessageSent(sentMessage);
+          onMessageSent({
+            id: response.data.messageId,
+            key: { id: response.data.messageId, remoteJid: selectedChat.id, fromMe: true },
+            message: { conversation: messageContent },
+            messageTimestamp: response.data.timestamp,
+            status: 'sent',
+            fromMe: true,
+            chatId: selectedChat.id,
+            senderId: userId,
+            senderName: 'Tú',
+            body: messageContent,
+            type: 'text',
+            hasMedia: false
+          });
         }
       } else {
         throw new Error(response.message || 'Error al enviar mensaje');
@@ -263,6 +359,8 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
     } catch (error) {
       console.error('Error sending message:', error);
       setError('Error al enviar el mensaje');
+      // Restaurar el mensaje en el input si falló
+      setNewMessage(messageContent);
     } finally {
       setIsSending(false);
     }
@@ -387,14 +485,118 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
 
   // Formatear timestamp
   const formatTimestamp = (timestamp: number) => {
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleTimeString('es-ES', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+    if (!timestamp || isNaN(timestamp)) {
+      return '--:--';
+    }
+    
+    try {
+      let date: Date;
+      
+      // Los timestamps de WhatsApp suelen estar en segundos desde 1970
+      // pero algunos pueden estar en milisegundos
+      if (timestamp > 1000000000000) {
+        // Timestamp en milisegundos
+        date = new Date(timestamp);
+      } else if (timestamp > 1000000000) {
+        // Timestamp en segundos (muy grande, probablemente incorrecto)
+        // Convertir a milisegundos dividiendo por 1000 si es muy grande
+        date = new Date(timestamp / 1000);
+      } else {
+        // Timestamp en segundos normal
+        date = new Date(timestamp * 1000);
+      }
+      
+      // Verificar si la fecha es válida
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid timestamp:', timestamp);
+        return '--:--';
+      }
+      
+      // Verificar si la fecha es razonable (no en el futuro lejano)
+      const now = new Date();
+      const yearDiff = date.getFullYear() - now.getFullYear();
+      if (yearDiff > 10 || yearDiff < -10) {
+        console.warn('Timestamp seems incorrect (too far in future/past):', timestamp, date);
+        return '--:--';
+      }
+      
+      return date.toLocaleTimeString('es-ES', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    } catch (error) {
+      console.error('Error formatting timestamp:', timestamp, error);
+      return '--:--';
+    }
   };
 
-  if (!isConnected) {
+  // Obtener datos del contacto/grupo
+  const fetchContactData = async () => {
+    if (!selectedChat) return;
+    
+    try {
+      setIsUpdatingData(true);
+      
+      const response = await apiService.getContactData(selectedChat.id);
+      
+      if (response.success && response.data) {
+        const updatedData = response.data;
+        
+        // Actualizar el chat con los nuevos datos
+        setSelectedChat(prev => prev ? {
+          ...prev,
+          name: updatedData.name || prev.name,
+          participants: updatedData.isGroup ? prev.participants : [selectedChat.id]
+        } : null);
+        
+        alert('Datos actualizados exitosamente');
+      } else {
+        alert('Error al obtener datos: ' + (response.message || 'Error desconocido'));
+      }
+    } catch (error) {
+      console.error('Error fetching contact data:', error);
+      alert('Error al obtener los datos del contacto/grupo');
+    } finally {
+      setIsUpdatingData(false);
+    }
+  };
+
+  // Editar contacto
+  const editContact = () => {
+    if (!selectedChat) return;
+    // Aquí podrías abrir un modal de edición o navegar a la página de contactos
+    alert('Función de edición - Implementar modal o navegación');
+  };
+
+  // Bloquear/Desbloquear contacto
+  const toggleBlockContact = async () => {
+    if (!selectedChat) return;
+    
+    try {
+      // Aquí implementarías la lógica de bloqueo
+      alert('Función de bloqueo - Implementar lógica de bloqueo');
+    } catch (error) {
+      console.error('Error toggling block:', error);
+      alert('Error al cambiar el estado de bloqueo');
+    }
+  };
+
+  // Eliminar contacto
+  const deleteContact = async () => {
+    if (!selectedChat) return;
+    
+    if (confirm('¿Estás seguro de que quieres eliminar este contacto?')) {
+      try {
+        // Aquí implementarías la lógica de eliminación
+        alert('Función de eliminación - Implementar lógica de eliminación');
+      } catch (error) {
+        console.error('Error deleting contact:', error);
+        alert('Error al eliminar el contacto');
+      }
+    }
+  };
+
+  if (!isConnected || !wsConnected) {
     return (
       <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
         <div className="text-center">
@@ -510,6 +712,67 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
                   <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-lg">
                     <Video className="w-5 h-5" />
                   </button>
+                  
+                  {/* Menú de opciones */}
+                  <div className="relative chat-menu-container">
+                    <button
+                      onClick={() => setShowChatMenu(!showChatMenu)}
+                      className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-lg"
+                    >
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
+                    
+                    {showChatMenu && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                        <div className="py-1">
+                          <button
+                            onClick={() => {
+                              fetchContactData();
+                              setShowChatMenu(false);
+                            }}
+                            disabled={isUpdatingData}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2 disabled:opacity-50"
+                          >
+                            <Download className="w-4 h-4" />
+                            <span>{isUpdatingData ? 'Obteniendo datos...' : 'Obtener datos'}</span>
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              editContact();
+                              setShowChatMenu(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+                          >
+                            <Edit className="w-4 h-4" />
+                            <span>Editar contacto</span>
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              toggleBlockContact();
+                              setShowChatMenu(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+                          >
+                            <Ban className="w-4 h-4" />
+                            <span>Bloquear contacto</span>
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              deleteContact();
+                              setShowChatMenu(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Eliminar contacto</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

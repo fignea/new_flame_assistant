@@ -563,7 +563,7 @@ export class WhatsAppController {
         message: {
           conversation: msg.content
         },
-        messageTimestamp: new Date(msg.timestamp).getTime() / 1000,
+        messageTimestamp: Math.floor(new Date(msg.timestamp).getTime() / 1000),
         status: 'delivered', // Estado por defecto
         fromMe: msg.is_from_me,
         chatId: chatId,

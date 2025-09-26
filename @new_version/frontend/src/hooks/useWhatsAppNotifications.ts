@@ -73,7 +73,9 @@ export const useWhatsAppNotifications = () => {
 
   const { isConnected, joinUserRoom, leaveUserRoom } = useWebSocket({
     onMessage: (message) => {
+      console.log('🔔 Notification hook received message:', message);
       if (message.type === 'whatsapp:message') {
+        console.log('📨 Processing WhatsApp message for notifications:', message.data);
         handleNewMessage({
           userId: user?.id || 0,
           message: message.data

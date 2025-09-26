@@ -419,6 +419,22 @@ export class WhatsAppService extends EventEmitter {
     }
   }
 
+  private normalizeTimestamp(timestamp: number): number {
+    // Los timestamps de WhatsApp pueden estar en diferentes formatos
+    // Normalizar a segundos desde 1970
+    if (timestamp > 1000000000000) {
+      // Timestamp en milisegundos, convertir a segundos
+      return Math.floor(timestamp / 1000);
+    } else if (timestamp > 1000000000) {
+      // Timestamp en segundos pero muy grande (probablemente incorrecto)
+      // Dividir por 1000 para normalizar
+      return Math.floor(timestamp / 1000);
+    } else {
+      // Timestamp en segundos normal
+      return Math.floor(timestamp);
+    }
+  }
+
   private convertBaileysMessage(message: WAMessage): WhatsAppMessage | null {
     try {
       const key = message.key;
@@ -552,7 +568,7 @@ export class WhatsAppService extends EventEmitter {
         senderName: senderName,
         content: messageContent,
         messageType,
-        timestamp: Number(message.messageTimestamp || Date.now() / 1000),
+        timestamp: this.normalizeTimestamp(Number(message.messageTimestamp) || Date.now() / 1000),
         isFromMe: Boolean(key.fromMe),
         status: 'delivered',
         mediaUrl
