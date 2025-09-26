@@ -823,8 +823,14 @@ export class WebController {
 })();
       `;
 
-      res.setHeader('Content-Type', 'application/javascript');
-      res.send(script);
+      return res.json({
+        success: true,
+        data: {
+          script: script,
+          filename: 'flame-chat-widget.js'
+        },
+        message: 'Script del widget generado exitosamente'
+      });
 
     } catch (error) {
       logger.error('Error generating widget script:', error);

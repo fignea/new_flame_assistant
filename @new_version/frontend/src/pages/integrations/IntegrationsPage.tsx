@@ -297,13 +297,13 @@ export const IntegrationsPage: React.FC = () => {
   const getWebChatWidgetScript = async () => {
     try {
       const response = await apiService.getWebChatWidgetScript();
-      if (response.success) {
+      if (response.success && response.data) {
         // Crear un blob con el script y descargarlo
-        const blob = new Blob([response.data], { type: 'application/javascript' });
+        const blob = new Blob([response.data.script], { type: 'application/javascript' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'flame-chat-widget.js';
+        a.download = response.data.filename || 'flame-chat-widget.js';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

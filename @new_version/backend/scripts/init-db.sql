@@ -88,6 +88,51 @@ CREATE TABLE IF NOT EXISTS assistants (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Crear tabla de visitantes web
+CREATE TABLE IF NOT EXISTS web_visitors (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    session_id VARCHAR(255) NOT NULL,
+    name VARCHAR(255),
+    email VARCHAR(255),
+    phone VARCHAR(50),
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    location VARCHAR(255),
+    is_online BOOLEAN DEFAULT FALSE,
+    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Crear tabla de conversaciones web
+CREATE TABLE IF NOT EXISTS web_conversations (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    visitor_id INTEGER REFERENCES web_visitors(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    status VARCHAR(50) DEFAULT 'active',
+    assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    priority VARCHAR(50) DEFAULT 'normal',
+    tags TEXT[],
+    metadata JSONB,
+    last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Crear tabla de mensajes web
+CREATE TABLE IF NOT EXISTS web_messages (
+    id SERIAL PRIMARY KEY,
+    conversation_id INTEGER REFERENCES web_conversations(id) ON DELETE CASCADE,
+    sender_type VARCHAR(50) NOT NULL,
+    sender_id INTEGER,
+    content TEXT NOT NULL,
+    message_type VARCHAR(50) DEFAULT 'text',
+    is_read BOOLEAN DEFAULT FALSE,
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Crear índices para mejorar performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_sessions_user_id ON whatsapp_sessions(user_id);
@@ -100,11 +145,22 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_messages_user_id ON scheduled_messages(
 CREATE INDEX IF NOT EXISTS idx_scheduled_messages_scheduled_time ON scheduled_messages(scheduled_time);
 CREATE INDEX IF NOT EXISTS idx_scheduled_messages_status ON scheduled_messages(status);
 
+-- Índices para web chat
+CREATE INDEX IF NOT EXISTS idx_web_visitors_user_id ON web_visitors(user_id);
+CREATE INDEX IF NOT EXISTS idx_web_visitors_session_id ON web_visitors(session_id);
+CREATE INDEX IF NOT EXISTS idx_web_conversations_user_id ON web_conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_web_conversations_visitor_id ON web_conversations(visitor_id);
+CREATE INDEX IF NOT EXISTS idx_web_conversations_status ON web_conversations(status);
+CREATE INDEX IF NOT EXISTS idx_web_conversations_last_message_at ON web_conversations(last_message_at);
+CREATE INDEX IF NOT EXISTS idx_web_messages_conversation_id ON web_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_web_messages_created_at ON web_messages(created_at);
+
 -- Triggers para actualizar updated_at automáticamente
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_whatsapp_sessions_updated_at BEFORE UPDATE ON whatsapp_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_contacts_updated_at BEFORE UPDATE ON contacts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_scheduled_messages_updated_at BEFORE UPDATE ON scheduled_messages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_web_conversations_updated_at BEFORE UPDATE ON web_conversations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Insertar usuario de demostración por defecto
 -- Email: admin@flame.com
