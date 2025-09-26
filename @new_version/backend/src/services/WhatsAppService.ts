@@ -373,6 +373,18 @@ export class WhatsAppService extends EventEmitter {
       try {
         const whatsappMessage = this.convertBaileysMessage(message);
         if (whatsappMessage) {
+          // Filtrar mensajes de grupos
+          if (this.isGroupMessage(whatsappMessage.chatId)) {
+            console.log(`🚫 Skipping group message: ${whatsappMessage.chatId}`);
+            continue;
+          }
+
+          // Filtrar mensajes de estado (status)
+          if (this.isStatusMessage(whatsappMessage)) {
+            console.log(`🚫 Skipping status message: ${whatsappMessage.content}`);
+            continue;
+          }
+
           // Log del mensaje recibido
           console.log(`💬 New message for user ${userId}:`);
           console.log(`   📱 From: ${whatsappMessage.senderName} (${whatsappMessage.senderId})`);
@@ -639,6 +651,56 @@ export class WhatsAppService extends EventEmitter {
     } catch (error) {
       console.error('Error saving contact:', error);
     }
+  }
+
+  // Métodos de filtrado de mensajes
+  private isGroupMessage(chatId: string): boolean {
+    // Los grupos en WhatsApp tienen el sufijo @g.us
+    return chatId.includes('@g.us');
+  }
+
+  private isStatusMessage(message: WhatsAppMessage): boolean {
+    // Filtrar mensajes de estado (status) que suelen tener contenido específico
+    const statusPatterns = [
+      /^\[Status\]/i,
+      /^\[Estado\]/i,
+      /^\[Story\]/i,
+      /^\[Historia\]/i,
+      /^\[View Once\]/i,
+      /^\[Ver una vez\]/i,
+      /^\[Ephemeral\]/i,
+      /^\[Temporal\]/i,
+      /^\[Protocol Update\]/i,
+      /^\[Security Update\]/i
+    ];
+
+    // También filtrar mensajes que son claramente estados
+    const statusContent = [
+      'Status',
+      'Estado',
+      'Story',
+      'Historia',
+      'View Once',
+      'Ver una vez',
+      'Ephemeral',
+      'Temporal',
+      'Protocol Update',
+      'Security Update'
+    ];
+
+    // Filtrar por tipo de mensaje
+    const statusMessageTypes = [
+      'ephemeral',
+      'view_once',
+      'view_once_image',
+      'view_once_video',
+      'protocol_update',
+      'security_update'
+    ];
+
+    return statusPatterns.some(pattern => pattern.test(message.content)) ||
+           statusContent.some(status => message.content.includes(status)) ||
+           statusMessageTypes.includes(message.messageType);
   }
 
   private startConnectionMonitor(userId: number): void {
