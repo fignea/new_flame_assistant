@@ -488,6 +488,73 @@ export class ApiService {
   async cancelScheduledMessage(id: string) {
     return this.post(`/api/scheduled/${id}/cancel`);
   }
+
+  // Métodos para Web Chat
+  async getWebChatConversations(params?: {
+    status?: string;
+    assigned_to?: number;
+    limit?: number;
+    offset?: number;
+  }) {
+    return this.get('/api/integrations/web/conversations', params);
+  }
+
+  async getWebChatConversation(conversationId: string) {
+    return this.get(`/api/integrations/web/conversations/${conversationId}`);
+  }
+
+  async createWebChatConversation(data: {
+    visitor: {
+      session_id: string;
+      name?: string;
+      email?: string;
+      phone?: string;
+      ip_address?: string;
+      user_agent?: string;
+      location?: string;
+    };
+    initial_message?: string;
+  }) {
+    return this.post('/api/integrations/web/conversations', data);
+  }
+
+  async updateWebChatConversation(conversationId: string, data: {
+    status?: 'active' | 'closed' | 'pending' | 'resolved';
+    assigned_to?: number;
+    priority?: 'low' | 'normal' | 'high' | 'urgent';
+    tags?: string[];
+    metadata?: Record<string, any>;
+  }) {
+    return this.put(`/api/integrations/web/conversations/${conversationId}`, data);
+  }
+
+  async getWebChatMessages(conversationId: string, params?: {
+    limit?: number;
+    offset?: number;
+  }) {
+    return this.get(`/api/integrations/web/conversations/${conversationId}/messages`, params);
+  }
+
+  async sendWebChatMessage(data: {
+    conversation_id: number;
+    content: string;
+    message_type?: 'text' | 'image' | 'video' | 'audio' | 'file' | 'emoji';
+    metadata?: Record<string, any>;
+  }) {
+    return this.post('/api/integrations/web/messages', data);
+  }
+
+  async markWebChatMessagesAsRead(conversationId: string) {
+    return this.post(`/api/integrations/web/conversations/${conversationId}/read`);
+  }
+
+  async getWebChatStats() {
+    return this.get('/api/integrations/web/stats');
+  }
+
+  async getWebChatWidgetScript(domain?: string) {
+    return this.get('/api/integrations/web/widget-script', { domain });
+  }
 }
 
 // Instancia singleton del servicio

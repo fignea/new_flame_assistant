@@ -10,11 +10,14 @@ import {
   ExternalLink,
   Copy,
   RefreshCw,
-  MessageSquare
+  MessageSquare,
+  Globe,
+  Settings
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { apiService } from '../../services/api.service';
 import { useNavigate } from 'react-router-dom';
+import { WebChatDemoModal } from '../../components/WebChatDemoModal';
 // Importación dinámica de QRCode para evitar problemas con Vite
 
 interface Integration {
@@ -48,6 +51,14 @@ export const IntegrationsPage: React.FC = () => {
     type: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
+  const [webChatStats, setWebChatStats] = useState<{
+    total_conversations: number;
+    active_conversations: number;
+    online_visitors: number;
+  } | null>(null);
+  const [isLoadingWebStats, setIsLoadingWebStats] = useState(false);
+  const [webChatEnabled, setWebChatEnabled] = useState(true);
+  const [showWebChatDemo, setShowWebChatDemo] = useState(false);
 
   // Generar imagen QR cuando se reciba el código
   useEffect(() => {
@@ -125,6 +136,20 @@ export const IntegrationsPage: React.FC = () => {
       connected: false,
       color: 'text-green-600',
       bgColor: 'bg-green-600/10'
+    },
+    {
+      id: 'web-chat',
+      name: 'Web Chat',
+      description: webChatEnabled 
+        ? (webChatStats 
+          ? `${webChatStats.active_conversations} conversaciones activas, ${webChatStats.online_visitors} visitantes online`
+          : 'Widget de chat en vivo para tu sitio web')
+        : 'Web Chat deshabilitado',
+      icon: Globe,
+      available: true,
+      connected: webChatEnabled,
+      color: webChatEnabled ? 'text-blue-500' : 'text-gray-500',
+      bgColor: webChatEnabled ? 'bg-blue-500/10' : 'bg-gray-500/10'
     }
   ];
 
@@ -253,11 +278,59 @@ export const IntegrationsPage: React.FC = () => {
     }
   };
 
+  const checkWebChatStats = async () => {
+    if (!isAuthenticated) return;
+    
+    setIsLoadingWebStats(true);
+    try {
+      const response = await apiService.getWebChatStats();
+      if (response.success && response.data) {
+        setWebChatStats(response.data);
+      }
+    } catch (error) {
+      console.error('Error checking web chat stats:', error);
+    } finally {
+      setIsLoadingWebStats(false);
+    }
+  };
+
+  const getWebChatWidgetScript = async () => {
+    try {
+      const response = await apiService.getWebChatWidgetScript();
+      if (response.success) {
+        // Crear un blob con el script y descargarlo
+        const blob = new Blob([response.data], { type: 'application/javascript' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'flame-chat-widget.js';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        setNotification({
+          type: 'success',
+          message: 'Script del widget descargado exitosamente'
+        });
+        setTimeout(() => setNotification(null), 5000);
+      }
+    } catch (error) {
+      console.error('Error getting widget script:', error);
+      setNotification({
+        type: 'error',
+        message: 'Error obteniendo el script del widget'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
 
   // Verificar estado al cargar la página
   React.useEffect(() => {
     if (isAuthenticated) {
       checkWhatsAppStatus();
+      checkWebChatStats();
     }
   }, [isAuthenticated]);
 
@@ -415,6 +488,51 @@ export const IntegrationsPage: React.FC = () => {
                               </button>
                             </div>
                           </div>
+                        ) : integration.id === 'web-chat' ? (
+                          <div className="space-y-3">
+                            {/* Switch de habilitar/deshabilitar */}
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                {webChatEnabled ? 'Habilitado' : 'Deshabilitado'}
+                              </span>
+                              <button
+                                onClick={() => setWebChatEnabled(!webChatEnabled)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                                  webChatEnabled ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    webChatEnabled ? 'translate-x-6' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+
+                            {/* Botones de acción */}
+                            {webChatEnabled && (
+                              <div className="space-y-2">
+                                <div className="flex space-x-2">
+                                  <button
+                                    onClick={() => setShowWebChatDemo(true)}
+                                    className="flex-1 bg-purple-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-purple-600 transition-colors flex items-center justify-center space-x-2"
+                                  >
+                                    <Globe className="w-4 h-4" />
+                                    <span>Ver Demo</span>
+                                  </button>
+                                </div>
+                                <div className="flex space-x-2">
+                                  <button
+                                    onClick={getWebChatWidgetScript}
+                                    className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-blue-600 transition-colors flex items-center justify-center space-x-2"
+                                  >
+                                    <Settings className="w-4 h-4" />
+                                    <span>Descargar Script</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <button
                             onClick={integration.id === 'whatsapp-web' ? generateWhatsAppQR : undefined}
@@ -556,6 +674,12 @@ export const IntegrationsPage: React.FC = () => {
 
 
       </div>
+
+      {/* Modal de Demo Web Chat */}
+      <WebChatDemoModal 
+        isOpen={showWebChatDemo}
+        onClose={() => setShowWebChatDemo(false)}
+      />
     </div>
   );
 };

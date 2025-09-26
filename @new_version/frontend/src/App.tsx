@@ -16,6 +16,7 @@ import { AssistantsPage } from './pages/assistants/AssistantsPage';
 import { IntegrationsPage } from './pages/integrations/IntegrationsPage';
 import { ConfigPage } from './pages/config/ConfigPage';
 import { ScheduledMessagesPage } from './pages/scheduled/ScheduledMessagesPage';
+import { WidgetDemoPage } from './pages/web-chat/WidgetDemoPage';
 
 // Componente para manejar notificaciones de WhatsApp
 const WhatsAppNotificationHandler: React.FC = () => {
@@ -124,6 +125,14 @@ const AppContent: React.FC = () => {
                 <DashboardLayout>
                   <IntegrationsPage />
                 </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/web-chat/demo"
+            element={
+              <ProtectedRoute>
+                <WidgetDemoPage />
               </ProtectedRoute>
             } 
           />

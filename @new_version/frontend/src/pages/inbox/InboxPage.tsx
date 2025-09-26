@@ -28,7 +28,8 @@ import {
   Image as ImageIcon,
   FileText,
   Mic,
-  Video
+  Video,
+  Globe
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { apiService } from '../../services/api.service';
@@ -87,12 +88,60 @@ interface WhatsAppChat {
   ephemeralSettingTimestamp?: number;
 }
 
+interface WebConversation {
+  id: number;
+  user_id: number;
+  visitor_id: number;
+  title: string;
+  status: 'active' | 'closed' | 'pending' | 'resolved';
+  assigned_to?: number;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  tags: string[];
+  metadata: Record<string, any>;
+  last_message_at: string;
+  created_at: string;
+  updated_at: string;
+  visitor?: {
+    id: number;
+    user_id: number;
+    session_id: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    is_online: boolean;
+    last_seen: string;
+    created_at: string;
+  };
+  assigned_user?: {
+    id: number;
+    email: string;
+    name: string;
+    password: string;
+    created_at: string;
+    updated_at: string;
+  };
+  unread_count?: number;
+}
+
+interface WebMessage {
+  id: number;
+  conversation_id: number;
+  sender_type: 'visitor' | 'agent' | 'system';
+  sender_id?: number;
+  content: string;
+  message_type: 'text' | 'image' | 'video' | 'audio' | 'file' | 'emoji' | 'typing';
+  is_read: boolean;
+  metadata: Record<string, any>;
+  created_at: string;
+  sender_name?: string;
+}
+
 interface Conversation {
   id: string;
   contactName: string;
   contactPhone: string;
   contactEmail?: string;
-  platform: 'whatsapp' | 'facebook' | 'instagram' | 'telegram';
+  platform: 'whatsapp' | 'facebook' | 'instagram' | 'telegram' | 'web';
   status: 'active' | 'pending' | 'resolved' | 'archived';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   assignedAssistant?: string;
@@ -103,6 +152,9 @@ interface Conversation {
   messages: Message[];
   createdAt: string;
   updatedAt: string;
+  // Campos específicos para web chat
+  webConversation?: WebConversation;
+  webMessages?: WebMessage[];
 }
 
 export const InboxPage: React.FC = () => {
@@ -124,6 +176,10 @@ export const InboxPage: React.FC = () => {
     userName?: string;
   } | null>(null);
   const [showWhatsAppOnly, setShowWhatsAppOnly] = useState(false);
+  const [webConversations, setWebConversations] = useState<WebConversation[]>([]);
+  const [webMessages, setWebMessages] = useState<WebMessage[]>([]);
+  const [isLoadingWeb, setIsLoadingWeb] = useState(false);
+  const [webChatEnabled, setWebChatEnabled] = useState(true);
 
   // Configurar Socket.IO para recibir mensajes en tiempo real
   const { isConnected: wsConnected, joinUserRoom, leaveUserRoom, reconnectWithNewToken } = useSocketIO({
@@ -210,14 +266,25 @@ export const InboxPage: React.FC = () => {
     }
   }, [whatsappStatus?.isConnected]);
 
-  // Cargar mensajes cuando se selecciona un chat de WhatsApp
+  // Cargar conversaciones web cuando esté habilitado
   useEffect(() => {
-    if (selectedConversation && whatsappStatus?.isConnected) {
-      // Si es un chat de WhatsApp, extraer el ID real del chat
-      const chatId = selectedConversation.startsWith('whatsapp_') 
-        ? selectedConversation.replace('whatsapp_', '') 
-        : selectedConversation;
-      loadWhatsAppMessages(chatId);
+    if (webChatEnabled) {
+      loadWebConversations();
+    }
+  }, [webChatEnabled, statusFilter]);
+
+  // Cargar mensajes cuando se selecciona una conversación
+  useEffect(() => {
+    if (selectedConversation) {
+      if (selectedConversation.startsWith('whatsapp_') && whatsappStatus?.isConnected) {
+        // Si es un chat de WhatsApp, extraer el ID real del chat
+        const chatId = selectedConversation.replace('whatsapp_', '');
+        loadWhatsAppMessages(chatId);
+      } else if (selectedConversation.startsWith('web_')) {
+        // Si es una conversación web
+        const conversationId = parseInt(selectedConversation.replace('web_', ''));
+        loadWebMessages(conversationId);
+      }
     }
   }, [selectedConversation, whatsappStatus?.isConnected]);
 
@@ -245,6 +312,73 @@ export const InboxPage: React.FC = () => {
       console.error('Error loading WhatsApp chats:', error);
     } finally {
       setIsLoadingWhatsApp(false);
+    }
+  };
+
+  // Cargar conversaciones web
+  const loadWebConversations = async () => {
+    if (!webChatEnabled) return;
+    
+    try {
+      setIsLoadingWeb(true);
+      const response = await apiService.getWebChatConversations({
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        limit: 50
+      });
+      
+      if (response.success && response.data) {
+        setWebConversations(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading web conversations:', error);
+    } finally {
+      setIsLoadingWeb(false);
+    }
+  };
+
+  // Cargar mensajes web
+  const loadWebMessages = async (conversationId: number) => {
+    try {
+      setIsLoadingWeb(true);
+      const response = await apiService.getWebChatMessages(conversationId.toString(), {
+        limit: 100
+      });
+      
+      if (response.success && response.data) {
+        setWebMessages(response.data);
+        // Marcar mensajes como leídos
+        await apiService.markWebChatMessagesAsRead(conversationId.toString());
+      }
+    } catch (error) {
+      console.error('Error loading web messages:', error);
+    } finally {
+      setIsLoadingWeb(false);
+    }
+  };
+
+  // Enviar mensaje web
+  const sendWebMessage = async () => {
+    if (!selectedConv?.webConversation || !newMessage.trim()) return;
+
+    try {
+      setIsSendingMessage(true);
+      const response = await apiService.sendWebChatMessage({
+        conversation_id: selectedConv.webConversation.id,
+        content: newMessage.trim(),
+        message_type: 'text'
+      });
+
+      if (response.success && response.data) {
+        // Agregar mensaje a la lista local
+        setWebMessages(prev => [...prev, response.data]);
+        setNewMessage('');
+        // Recargar conversaciones para actualizar el último mensaje
+        loadWebConversations();
+      }
+    } catch (error) {
+      console.error('Error sending web message:', error);
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -820,12 +954,14 @@ export const InboxPage: React.FC = () => {
     }
   ]);
 
-  // Combinar conversaciones normales con chats de WhatsApp
+  // Combinar conversaciones normales con chats de WhatsApp y conversaciones web
   const allConversations = [
     ...conversations.map(conv => ({
       ...conv,
       isWhatsApp: false,
-      whatsappChat: null
+      isWeb: false,
+      whatsappChat: null,
+      webConversation: null
     })),
     ...whatsappChats.map(chat => ({
       id: `whatsapp_${chat.id}`,
@@ -843,7 +979,30 @@ export const InboxPage: React.FC = () => {
       createdAt: new Date(chat.createdAt).toISOString(),
       updatedAt: new Date(chat.updatedAt).toISOString(),
       isWhatsApp: true,
-      whatsappChat: chat
+      isWeb: false,
+      whatsappChat: chat,
+      webConversation: null
+    })),
+    ...webConversations.map(conv => ({
+      id: `web_${conv.id}`,
+      contactName: conv.visitor?.name || conv.title || 'Visitante Web',
+      contactPhone: conv.visitor?.phone || 'N/A',
+      contactEmail: conv.visitor?.email,
+      platform: 'web' as const,
+      status: conv.status === 'closed' ? 'archived' : conv.status as 'active' | 'pending' | 'resolved' | 'archived',
+      priority: conv.priority === 'normal' ? 'medium' : conv.priority as 'low' | 'medium' | 'high' | 'urgent',
+      assignedAssistant: conv.assigned_user?.name,
+      lastMessage: 'Mensaje del chat web',
+      lastMessageTime: conv.last_message_at,
+      unreadCount: conv.unread_count || 0,
+      tags: conv.tags,
+      messages: [],
+      createdAt: conv.created_at,
+      updatedAt: conv.updated_at,
+      isWhatsApp: false,
+      isWeb: true,
+      whatsappChat: null,
+      webConversation: conv
     }))
   ];
 
@@ -854,8 +1013,9 @@ export const InboxPage: React.FC = () => {
     const matchesPriority = priorityFilter === 'all' || conversation.priority === priorityFilter;
     const matchesPlatform = platformFilter === 'all' || conversation.platform === platformFilter;
     const matchesWhatsApp = !showWhatsAppOnly || conversation.isWhatsApp;
+    const matchesWeb = !webChatEnabled || conversation.isWeb || conversation.isWhatsApp;
     
-    return matchesSearch && matchesStatus && matchesPriority && matchesPlatform && matchesWhatsApp;
+    return matchesSearch && matchesStatus && matchesPriority && matchesPlatform && matchesWhatsApp && matchesWeb;
   });
 
   const selectedConv = allConversations.find(c => c.id === selectedConversation);
@@ -887,6 +1047,7 @@ export const InboxPage: React.FC = () => {
       case 'facebook': return MessageSquare;
       case 'instagram': return MessageSquare;
       case 'telegram': return MessageSquare;
+      case 'web': return Globe;
       default: return MessageSquare;
     }
   };
@@ -954,6 +1115,9 @@ export const InboxPage: React.FC = () => {
     if (isWhatsAppConversation) {
       // Enviar mensaje de WhatsApp
       sendWhatsAppMessage();
+    } else if (selectedConv.isWeb) {
+      // Enviar mensaje web
+      sendWebMessage();
     } else {
       // Enviar mensaje normal
       const newMsg: Message = {
@@ -1046,6 +1210,7 @@ export const InboxPage: React.FC = () => {
               >
                 <option value="all">Todas las plataformas</option>
                 <option value="whatsapp">WhatsApp</option>
+                <option value="web">Web Chat</option>
                 <option value="facebook">Facebook</option>
                 <option value="instagram">Instagram</option>
                 <option value="telegram">Telegram</option>
@@ -1205,7 +1370,7 @@ export const InboxPage: React.FC = () => {
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {isLoadingWhatsApp ? (
+                {(isLoadingWhatsApp || isLoadingWeb) ? (
                   <div className="flex items-center justify-center h-32">
                     <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
                     <span className="ml-2 text-gray-500">Cargando mensajes...</span>
@@ -1255,6 +1420,44 @@ export const InboxPage: React.FC = () => {
                                 {message.status === 'delivered' && <CheckCircle className="w-3 h-3" />}
                                 {message.status === 'read' && <CheckCircle className="w-3 h-3 text-blue-400" />}
                                 {message.status === 'failed' && <AlertCircle className="w-3 h-3 text-red-400" />}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )
+                ) : selectedConv.isWeb ? (
+                  // Mostrar mensajes web
+                  webMessages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-32 text-center">
+                      <Globe className="w-8 h-8 text-gray-400 mb-2" />
+                      <p className="text-gray-500">No hay mensajes en esta conversación</p>
+                    </div>
+                  ) : (
+                    webMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${message.sender_type === 'agent' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                          message.sender_type === 'agent'
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                        }`}>
+                          {message.sender_type !== 'agent' && (
+                            <div className="text-xs opacity-75 mb-1">
+                              {message.sender_name || 'Visitante'}
+                            </div>
+                          )}
+                          <p className="text-sm">{message.content}</p>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xs opacity-70">
+                              {formatTimeForBubble(message.created_at)}
+                            </span>
+                            {message.sender_type === 'agent' && (
+                              <div className="flex items-center space-x-1">
+                                <CheckCircle className="w-3 h-3" />
                               </div>
                             )}
                           </div>
@@ -1334,10 +1537,12 @@ export const InboxPage: React.FC = () => {
                   
                   <button
                     onClick={handleSendMessage}
-                    disabled={!newMessage.trim() || (isWhatsAppConversation && !whatsappStatus?.isConnected)}
+                    disabled={!newMessage.trim() || (isWhatsAppConversation && !whatsappStatus?.isConnected) || (selectedConv?.isWeb && !webChatEnabled)}
                     className={`p-3 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                       isWhatsAppConversation
                         ? 'bg-green-500 text-white hover:bg-green-600'
+                        : selectedConv?.isWeb
+                        ? 'bg-blue-500 text-white hover:bg-blue-600'
                         : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
                     }`}
                   >
@@ -1349,6 +1554,12 @@ export const InboxPage: React.FC = () => {
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
                     <MessageCircle className="w-3 h-3" />
                     <span>Enviando a través de WhatsApp</span>
+                  </div>
+                )}
+                {selectedConv?.isWeb && webChatEnabled && (
+                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
+                    <Globe className="w-3 h-3" />
+                    <span>Enviando a través de Web Chat</span>
                   </div>
                 )}
               </div>

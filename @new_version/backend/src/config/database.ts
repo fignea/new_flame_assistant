@@ -170,6 +170,58 @@ class DatabaseConfig {
         )
       `);
 
+      // Tabla de visitantes web
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS web_visitors (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          session_id VARCHAR(255) NOT NULL,
+          name VARCHAR(255),
+          email VARCHAR(255),
+          phone VARCHAR(50),
+          ip_address INET,
+          user_agent TEXT,
+          location VARCHAR(255),
+          is_online BOOLEAN DEFAULT FALSE,
+          last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, session_id)
+        )
+      `);
+
+      // Tabla de conversaciones web
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS web_conversations (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          visitor_id INTEGER REFERENCES web_visitors(id) ON DELETE CASCADE,
+          title VARCHAR(255) NOT NULL,
+          status VARCHAR(50) DEFAULT 'active',
+          assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          priority VARCHAR(20) DEFAULT 'normal',
+          tags TEXT DEFAULT '[]',
+          metadata TEXT DEFAULT '{}',
+          last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Tabla de mensajes web
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS web_messages (
+          id SERIAL PRIMARY KEY,
+          conversation_id INTEGER REFERENCES web_conversations(id) ON DELETE CASCADE,
+          sender_type VARCHAR(20) NOT NULL,
+          sender_id INTEGER,
+          content TEXT NOT NULL,
+          message_type VARCHAR(50) DEFAULT 'text',
+          is_read BOOLEAN DEFAULT FALSE,
+          metadata TEXT DEFAULT '{}',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       // Crear usuario por defecto si no existe
       await this.createDefaultUser();
 
@@ -201,6 +253,23 @@ class DatabaseConfig {
       } else {
         logger.info('ℹ️ Usuario por defecto ya existe');
       }
+
+      // Crear índices para las nuevas tablas web
+      await this.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_web_visitors_user_id ON web_visitors(user_id);
+        CREATE INDEX IF NOT EXISTS idx_web_visitors_session_id ON web_visitors(session_id);
+        CREATE INDEX IF NOT EXISTS idx_web_visitors_is_online ON web_visitors(is_online);
+        CREATE INDEX IF NOT EXISTS idx_web_conversations_user_id ON web_conversations(user_id);
+        CREATE INDEX IF NOT EXISTS idx_web_conversations_visitor_id ON web_conversations(visitor_id);
+        CREATE INDEX IF NOT EXISTS idx_web_conversations_status ON web_conversations(status);
+        CREATE INDEX IF NOT EXISTS idx_web_conversations_assigned_to ON web_conversations(assigned_to);
+        CREATE INDEX IF NOT EXISTS idx_web_conversations_last_message_at ON web_conversations(last_message_at);
+        CREATE INDEX IF NOT EXISTS idx_web_messages_conversation_id ON web_messages(conversation_id);
+        CREATE INDEX IF NOT EXISTS idx_web_messages_sender_type ON web_messages(sender_type);
+        CREATE INDEX IF NOT EXISTS idx_web_messages_created_at ON web_messages(created_at);
+        CREATE INDEX IF NOT EXISTS idx_web_messages_is_read ON web_messages(is_read);
+      `);
+
     } catch (error) {
       logger.error('❌ Error creando usuario por defecto:', error);
     }

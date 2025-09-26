@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { whatsappController } from '../controllers/WhatsAppController';
+import { webController } from '../controllers/WebController';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
@@ -24,5 +25,15 @@ router.get('/whatsapp/contacts/:id', whatsappController.getContactById.bind(what
 
 // Estadísticas
 router.get('/whatsapp/stats', whatsappController.getStats.bind(whatsappController));
+
+// Rutas de integración Web Chat
+router.post('/web/conversations', webController.createConversation.bind(webController));
+router.get('/web/conversations', webController.getConversations.bind(webController));
+router.get('/web/conversations/:conversationId/messages', webController.getMessages.bind(webController));
+router.post('/web/messages', webController.sendMessage.bind(webController));
+router.put('/web/conversations/:conversationId', webController.updateConversation.bind(webController));
+router.post('/web/conversations/:conversationId/read', webController.markMessagesAsRead.bind(webController));
+router.get('/web/stats', webController.getStats.bind(webController));
+router.get('/web/widget-script', webController.getWidgetScript.bind(webController));
 
 export default router;

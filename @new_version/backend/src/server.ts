@@ -28,6 +28,7 @@ import messagesRoutes from './routes/messages';
 // Importar servicios
 import { whatsappService } from './services/WhatsAppService';
 import { scheduledMessagesService } from './services/ScheduledMessagesService';
+import { setSocketIO } from './controllers/WebController';
 
 // Importar middleware de autenticación para sockets
 import jwt from 'jsonwebtoken';
@@ -70,6 +71,10 @@ class WhatsAppManagerServer {
     }
     console.log('🔧 Setting up WhatsApp events...');
     this.setupWhatsAppEvents();
+    console.log('🔧 Setting up Web Chat events...');
+    this.setupWebChatEvents();
+    console.log('🔧 Setting up Web Controller Socket.IO...');
+    setSocketIO(this.io);
     console.log('✅ Server initialization complete');
   }
 
@@ -342,6 +347,41 @@ class WhatsAppManagerServer {
     });
 
     console.log('✅ WhatsApp events configured');
+  }
+
+  private setupWebChatEvents(): void {
+    // Eventos del chat web
+    this.io.on('connection', (socket) => {
+      const userId = (socket as any).userId;
+      
+      // Unirse a sala de chat web
+      socket.join(`web:${userId}`);
+
+      // Eventos específicos del chat web
+      socket.on('web:join:conversation', (conversationId: number) => {
+        socket.join(`web:conversation:${conversationId}`);
+        console.log(`👤 User ${userId} joined web conversation ${conversationId}`);
+      });
+
+      socket.on('web:leave:conversation', (conversationId: number) => {
+        socket.leave(`web:conversation:${conversationId}`);
+        console.log(`👤 User ${userId} left web conversation ${conversationId}`);
+      });
+
+      socket.on('web:typing:start', (data: { conversationId: number, visitorId: number }) => {
+        socket.to(`web:conversation:${data.conversationId}`).emit('web:typing:start', data);
+      });
+
+      socket.on('web:typing:stop', (data: { conversationId: number, visitorId: number }) => {
+        socket.to(`web:conversation:${data.conversationId}`).emit('web:typing:stop', data);
+      });
+
+      socket.on('disconnect', () => {
+        console.log(`🔌 User ${userId} disconnected from web chat`);
+      });
+    });
+
+    console.log('✅ Web Chat events configured');
   }
 
   public async start(): Promise<void> {
