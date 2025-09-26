@@ -7,7 +7,7 @@ const router = Router();
 // Todas las rutas requieren autenticación
 router.use(authenticate);
 
-// CRUD de mensajes programados
+// CRUD de programación
 router.post('/', scheduledMessagesController.create.bind(scheduledMessagesController));
 router.get('/', scheduledMessagesController.getAll.bind(scheduledMessagesController));
 router.get('/:id', scheduledMessagesController.getById.bind(scheduledMessagesController));

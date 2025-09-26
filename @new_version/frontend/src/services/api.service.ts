@@ -22,6 +22,21 @@ export interface Contact {
   updated_at: string;
 }
 
+// Interfaz para ScheduledMessage
+export interface ScheduledMessage {
+  id: number;
+  user_id: number;
+  contact_id: number;
+  content: string;
+  message_type: string;
+  scheduled_time: string;
+  status: 'pending' | 'sent' | 'failed' | 'cancelled';
+  sent_at?: string;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PaginationInfo {
   page: number;
   limit: number;
@@ -408,6 +423,45 @@ export class ApiService {
       search: query,
       ...params
     });
+  }
+
+  // Métodos para programación
+  async getScheduledMessages(params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+  }) {
+    return this.get<PaginatedResponse<any>>('/api/scheduled', params);
+  }
+
+  async getScheduledMessage(id: string) {
+    return this.get(`/api/scheduled/${id}`);
+  }
+
+  async createScheduledMessage(data: {
+    contactId: number;
+    content: string;
+    messageType?: string;
+    scheduledTime: string;
+  }) {
+    return this.post('/api/scheduled', data);
+  }
+
+  async updateScheduledMessage(id: string, data: {
+    content?: string;
+    messageType?: string;
+    scheduledTime?: string;
+  }) {
+    return this.put(`/api/scheduled/${id}`, data);
+  }
+
+  async deleteScheduledMessage(id: string) {
+    return this.delete(`/api/scheduled/${id}`);
+  }
+
+  async cancelScheduledMessage(id: string) {
+    return this.post(`/api/scheduled/${id}/cancel`);
   }
 }
 

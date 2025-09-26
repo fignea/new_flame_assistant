@@ -12,7 +12,7 @@
 - **Baileys**: Integración WhatsApp Web funcional
 - **SQLite**: Base de datos con todas las tablas
 - **JWT**: Autenticación segura
-- **Cron Jobs**: Mensajes programados automáticos
+- **Cron Jobs**: Programación automáticos
 - **QR Generation**: Códigos QR funcionales
 - **Health Checks**: Monitoreo de servicios
 
@@ -116,7 +116,7 @@ docker-compose down --rmi all --volumes
 - **whatsapp_sessions**: Sesiones de WhatsApp
 - **contacts**: Contactos sincronizados
 - **messages**: Historial de mensajes
-- **scheduled_messages**: Mensajes programados
+- **scheduled_messages**: Programación
 
 ### Volúmenes Docker
 - `backend_data`: Base de datos SQLite
@@ -141,7 +141,7 @@ Tu aplicación WhatsApp Manager está completamente funcional y lista para usar.
 - ✅ Interfaz de usuario profesional  
 - ✅ Sistema de mensajes en tiempo real
 - ✅ Gestión automática de contactos
-- ✅ Mensajes programados con cron jobs
+- ✅ Programación con cron jobs
 - ✅ Autenticación segura
 - ✅ Base de datos persistente
 - ✅ Configuración Docker completa

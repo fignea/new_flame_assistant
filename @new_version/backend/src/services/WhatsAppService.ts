@@ -429,6 +429,12 @@ export class WhatsAppService extends EventEmitter {
       
       if (!content || !key.remoteJid) return null;
 
+      // Filtrar mensajes de grupo - solo procesar mensajes individuales
+      if (key.remoteJid.includes('@g.us')) {
+        console.log(`🚫 Skipping group message from ${key.remoteJid}`);
+        return null;
+      }
+
       let messageContent = '';
       let messageType: WhatsAppMessage['messageType'] = 'text';
       let mediaUrl: string | undefined;
@@ -479,15 +485,17 @@ export class WhatsAppService extends EventEmitter {
         messageContent = '[Poll Update]';
         messageType = 'poll_update';
       } else if (content.reactionMessage) {
-        messageContent = `[Reaction] ${content.reactionMessage.text || '👍'}`;
-        messageType = 'reaction';
+        // Filtrar reacciones - no procesar
+        console.log(`🚫 Skipping reaction message`);
+        return null;
       } else if (content.senderKeyDistributionMessage) {
-        messageContent = '[Security Update]';
-        messageType = 'security_update';
+        // Filtrar actualizaciones de seguridad - no procesar
+        console.log(`🚫 Skipping security update message`);
+        return null;
       } else if (content.protocolMessage) {
-        // Manejar actualizaciones de protocolo (leído, recibido, etc.)
-        messageContent = '[Protocol Update]';
-        messageType = 'protocol_update';
+        // Filtrar actualizaciones de protocolo - no procesar
+        console.log(`🚫 Skipping protocol update message`);
+        return null;
       } else if (content.listMessage) {
         messageContent = `[List] ${content.listMessage.description || 'List Message'}`;
         messageType = 'list';
@@ -510,8 +518,9 @@ export class WhatsAppService extends EventEmitter {
         messageContent = `[Product] ${content.productMessage.product?.title || 'Product'}`;
         messageType = 'product';
       } else if (content.callLogMesssage) {
-        messageContent = '[Call Log]';
-        messageType = 'call_log';
+        // Filtrar logs de llamadas - no procesar
+        console.log(`🚫 Skipping call log message`);
+        return null;
       } else if (content.viewOnceMessage) {
         // Mensajes que se ven una sola vez
         if (content.viewOnceMessage.message?.imageMessage) {
@@ -525,9 +534,9 @@ export class WhatsAppService extends EventEmitter {
           messageType = 'view_once';
         }
       } else if (content.ephemeralMessage) {
-        // Mensajes temporales
-        messageContent = '[Ephemeral Message]';
-        messageType = 'ephemeral';
+        // Filtrar mensajes efímeros - no procesar
+        console.log(`🚫 Skipping ephemeral message`);
+        return null;
       } else {
         // Log del tipo de mensaje desconocido para debugging
         const unknownType = Object.keys(content)[0];
@@ -568,11 +577,23 @@ export class WhatsAppService extends EventEmitter {
 
   private convertBaileysChat(chat: Chat): WhatsAppContact | null {
     try {
+      // Filtrar grupos - solo procesar contactos individuales
+      if (chat.id.includes('@g.us')) {
+        console.log(`🚫 Skipping group chat: ${chat.id}`);
+        return null;
+      }
+
+      // Filtrar contactos de estado y broadcast
+      if (chat.id.includes('@broadcast') || chat.id.includes('status')) {
+        console.log(`🚫 Skipping status/broadcast chat: ${chat.id}`);
+        return null;
+      }
+
       return {
         id: chat.id,
         name: chat.name || chat.id.split('@')[0],
         phoneNumber: chat.id.includes('@s.whatsapp.net') ? chat.id.split('@')[0] : undefined,
-        isGroup: chat.id.includes('@g.us'),
+        isGroup: false, // Siempre false ya que filtramos grupos
         unreadCount: chat.unreadCount || 0,
         lastSeen: new Date()
       };
