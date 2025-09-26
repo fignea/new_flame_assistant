@@ -32,8 +32,15 @@ router.get('/chats/:chatId/messages', authenticate, whatsappController.getChatMe
 
 // Contactos (con autenticación)
 router.get('/contacts', authenticate, whatsappController.getContacts.bind(whatsappController));
+router.get('/contacts/:id', authenticate, whatsappController.getContactById.bind(whatsappController));
+router.put('/contacts/:id', authenticate, whatsappController.updateContact.bind(whatsappController));
+router.post('/contacts/:id/block', authenticate, whatsappController.blockContact.bind(whatsappController));
+router.post('/contacts/:id/unblock', authenticate, whatsappController.unblockContact.bind(whatsappController));
+router.delete('/contacts/:id', authenticate, whatsappController.deleteContact.bind(whatsappController));
 
 // Estadísticas (con autenticación)
 router.get('/stats', authenticate, whatsappController.getStats.bind(whatsappController));
+// Estadísticas de mensajes (ruta directa)
+router.get("/messages/stats", authenticate, whatsappController.getMessageStats.bind(whatsappController));
 
 export default router;

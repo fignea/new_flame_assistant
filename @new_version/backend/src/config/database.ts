@@ -98,6 +98,7 @@ class DatabaseConfig {
           name VARCHAR(255),
           phone_number VARCHAR(50),
           is_group BOOLEAN DEFAULT FALSE,
+          is_blocked BOOLEAN DEFAULT FALSE,
           avatar_url TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

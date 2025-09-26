@@ -373,6 +373,15 @@ export class WhatsAppService extends EventEmitter {
       try {
         const whatsappMessage = this.convertBaileysMessage(message);
         if (whatsappMessage) {
+          // Verificar si el contacto está bloqueado (solo para mensajes entrantes)
+          if (!whatsappMessage.isFromMe) {
+            const isBlocked = await this.isContactBlocked(whatsappMessage.senderId, userId);
+            if (isBlocked) {
+              console.log(`🚫 Message from blocked contact ${whatsappMessage.senderName} (${whatsappMessage.senderId}) - ignoring`);
+              continue; // No procesar mensajes de contactos bloqueados
+            }
+          }
+
           // Log del mensaje recibido
           console.log(`💬 New message for user ${userId}:`);
           console.log(`   📱 From: ${whatsappMessage.senderName} (${whatsappMessage.senderId})`);
@@ -750,6 +759,21 @@ export class WhatsAppService extends EventEmitter {
       }
       
       await this.cleanupSession(userId);
+    }
+  }
+
+  // Verificar si un contacto está bloqueado
+  private async isContactBlocked(whatsappId: string, userId: number): Promise<boolean> {
+    try {
+      const contact = await database.get(
+        'SELECT is_blocked FROM contacts WHERE whatsapp_id = $1 AND user_id = $2',
+        [whatsappId, userId]
+      );
+      
+      return contact ? contact.is_blocked : false;
+    } catch (error) {
+      console.error('Error checking if contact is blocked:', error);
+      return false; // En caso de error, no bloquear
     }
   }
 
