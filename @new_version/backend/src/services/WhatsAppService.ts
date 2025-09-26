@@ -842,6 +842,92 @@ export class WhatsAppService extends EventEmitter {
       throw error;
     }
   }
+
+  // Obtener datos actualizados del contacto/grupo desde WhatsApp
+  public async getContactData(whatsappId: string): Promise<WhatsAppContact | null> {
+    try {
+      // Buscar una sesión activa para obtener los datos
+      let activeSession: WASocket | null = null;
+      
+      for (const [userId, session] of this.sessions.entries()) {
+        if (session.isConnected && session.socket) {
+          activeSession = session.socket;
+          break;
+        }
+      }
+
+      if (!activeSession) {
+        logger.warn('No hay sesiones activas de WhatsApp para obtener datos del contacto');
+        return null;
+      }
+
+      logger.info(`🔄 Fetching contact data for WhatsApp ID: ${whatsappId}`);
+
+      // Determinar si es un grupo
+      const isGroup = whatsappId.includes('@g.us');
+      
+      let contactInfo: any = null;
+      
+      if (isGroup) {
+        // Para grupos, usar groupMetadata
+        try {
+          contactInfo = await activeSession.groupMetadata(whatsappId);
+        } catch (error) {
+          logger.warn(`No se pudo obtener información del grupo: ${whatsappId}`, error);
+          return null;
+        }
+      } else {
+        // Para contactos individuales, crear un objeto básico
+        // ya que getContactInfo no está disponible en esta versión de Baileys
+        contactInfo = {
+          name: undefined,
+          notify: undefined
+        };
+      }
+      
+      if (!contactInfo) {
+        logger.warn(`No se pudo obtener información del contacto: ${whatsappId}`);
+        return null;
+      }
+
+      // Obtener la foto de perfil si está disponible
+      let avatarUrl: string | undefined;
+      try {
+        const profilePicture = await activeSession.profilePictureUrl(whatsappId);
+        avatarUrl = profilePicture;
+      } catch (error) {
+        logger.debug(`No se pudo obtener la foto de perfil para ${whatsappId}:`, error);
+      }
+
+      // Extraer el número de teléfono si no es un grupo
+      let phoneNumber: string | undefined;
+      if (!isGroup && whatsappId.includes('@s.whatsapp.net')) {
+        phoneNumber = whatsappId.replace('@s.whatsapp.net', '');
+      }
+
+      const contactData: WhatsAppContact = {
+        id: whatsappId,
+        name: contactInfo.subject || contactInfo.name || contactInfo.notify || undefined,
+        phoneNumber: phoneNumber,
+        isGroup: isGroup,
+        avatarUrl: avatarUrl,
+        lastSeen: new Date(),
+        unreadCount: 0
+      };
+
+      logger.info(`✅ Contact data retrieved successfully for ${whatsappId}:`, {
+        name: contactData.name,
+        isGroup: contactData.isGroup,
+        hasAvatar: !!contactData.avatarUrl
+      });
+
+      return contactData;
+
+    } catch (error) {
+      logger.error(`Error fetching contact data for ${whatsappId}:`, error);
+      return null;
+    }
+  }
 }
 
 export const whatsappService = new WhatsAppService();

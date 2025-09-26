@@ -446,6 +446,10 @@ export class ApiService {
     return this.delete(`/api/whatsapp/contacts/${id}`);
   }
 
+  async getContactData(whatsappId: string) {
+    return this.get<Contact>(`/api/whatsapp/contacts/data/${whatsappId}`);
+  }
+
   // Métodos para programación
   async getScheduledMessages(params?: {
     page?: number;

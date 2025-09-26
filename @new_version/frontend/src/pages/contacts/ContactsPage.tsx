@@ -19,7 +19,9 @@ import {
   Trash2,
   Ban,
   AlertTriangle,
-  Edit
+  Edit,
+  Download,
+  Loader2
 } from 'lucide-react';
 import { apiService, Contact, PaginatedResponse } from '../../services/api.service';
 import { useNotificationHelpers } from '../../components/NotificationSystem';
@@ -46,6 +48,7 @@ export const ContactsPage: React.FC = () => {
   const [deletingContact, setDeletingContact] = useState(false);
   const [blockingContact, setBlockingContact] = useState(false);
   const [unblockingContact, setUnblockingContact] = useState(false);
+  const [fetchingData, setFetchingData] = useState(false);
 
   const itemsPerPage = 20;
 
@@ -225,6 +228,44 @@ export const ContactsPage: React.FC = () => {
     }
   };
 
+  // Obtener datos del contacto/grupo
+  const fetchContactData = async (contact: Contact) => {
+    try {
+      setFetchingData(true);
+      
+      // Llamar al endpoint para obtener datos actualizados del contacto/grupo
+      const response = await apiService.getContactData(contact.whatsapp_id);
+      
+      if (response.success && response.data) {
+        const updatedData = response.data;
+        
+        // Actualizar el contacto en la lista local con los nuevos datos
+        setContacts(prev => prev.map(c => 
+          c.id === contact.id 
+            ? { 
+                ...c, 
+                name: updatedData.name || c.name,
+                avatar_url: updatedData.avatar_url || c.avatar_url,
+                phone_number: updatedData.phone_number || c.phone_number
+              }
+            : c
+        ));
+        
+        showSuccess(
+          'Datos actualizados', 
+          `Se obtuvieron los datos actualizados para ${contact.is_group ? 'el grupo' : 'el contacto'}`
+        );
+      } else {
+        showError('Error al obtener datos', response.message || 'No se pudieron obtener los datos actualizados');
+      }
+    } catch (error) {
+      console.error('Error fetching contact data:', error);
+      showError('Error al obtener datos', 'No se pudieron obtener los datos del contacto/grupo');
+    } finally {
+      setFetchingData(false);
+    }
+  };
+
   // Efecto para cargar contactos al montar el componente
   useEffect(() => {
     loadContacts(currentPage, searchTerm);
@@ -245,7 +286,7 @@ export const ContactsPage: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [searchTerm]);
 
-  // Filtrar contactos por tipo
+  // Filtrar contactos por tipo (la búsqueda por nombre/número se hace en el backend)
   const filteredContacts = (contacts || []).filter(contact => {
     if (filterType === 'individual') return !contact.is_group;
     if (filterType === 'groups') return contact.is_group;
@@ -372,7 +413,7 @@ export const ContactsPage: React.FC = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
-                  placeholder="Buscar contactos por nombre o número..."
+                  placeholder="Buscar por nombre, número o grupo..."
                   value={searchTerm}
                   onChange={handleSearch}
                   className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-dark-card dark:text-white"
@@ -418,6 +459,19 @@ export const ContactsPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Resultados de búsqueda */}
+        {searchTerm && (
+          <div className="mb-4 px-1">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {loading ? (
+                'Buscando...'
+              ) : (
+                `${filteredContacts.length} resultado${filteredContacts.length !== 1 ? 's' : ''} para "${searchTerm}"`
+              )}
+            </p>
+          </div>
+        )}
+
         {/* Lista de contactos */}
         <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-sm border border-gray-200 dark:border-dark-border overflow-hidden">
           {loading ? (
@@ -432,8 +486,13 @@ export const ContactsPage: React.FC = () => {
                 No se encontraron contactos
               </h3>
               <p className="text-gray-600 dark:text-gray-400">
-                {searchTerm ? 'Intenta con otros términos de búsqueda' : 'No hay contactos disponibles'}
+                {searchTerm ? `No se encontraron contactos para "${searchTerm}"` : 'No hay contactos disponibles'}
               </p>
+              {searchTerm && (
+                <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
+                  Busca por nombre, número de teléfono o ID de WhatsApp
+                </p>
+              )}
             </div>
           ) : (
             <>
@@ -533,6 +592,18 @@ export const ContactsPage: React.FC = () => {
                           {/* Menú desplegable */}
                           <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-dark-surface rounded-lg shadow-lg border border-gray-200 dark:border-dark-border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
                             <div className="py-1">
+                              <button
+                                onClick={() => fetchContactData(contact)}
+                                disabled={fetchingData}
+                                className="w-full px-4 py-2 text-left text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {fetchingData ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Download className="w-4 h-4" />
+                                )}
+                                <span>Obtener datos</span>
+                              </button>
                               <button
                                 onClick={() => handleEditContact(contact)}
                                 className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"

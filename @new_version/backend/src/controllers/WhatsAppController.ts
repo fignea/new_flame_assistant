@@ -196,9 +196,9 @@ export class WhatsAppController {
       let params: any[] = [userId];
 
       if (search) {
-        query += ' AND (name LIKE $2 OR phone_number LIKE $3)';
-        countQuery += ' AND (name LIKE $2 OR phone_number LIKE $3)';
-        params.push(`%${search}%`, `%${search}%`);
+        query += ' AND (name ILIKE $2 OR phone_number ILIKE $3 OR whatsapp_id ILIKE $4)';
+        countQuery += ' AND (name ILIKE $2 OR phone_number ILIKE $3 OR whatsapp_id ILIKE $4)';
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`);
       }
 
       query += ' ORDER BY updated_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
@@ -206,7 +206,7 @@ export class WhatsAppController {
 
       const [contacts, totalResult] = await Promise.all([
         database.query(query, params),
-        database.get(countQuery, search ? [userId, `%${search}%`, `%${search}%`] : [userId])
+        database.get(countQuery, search ? [userId, `%${search}%`, `%${search}%`, `%${search}%`] : [userId])
       ]);
 
       const total = (totalResult as any).total;
@@ -825,6 +825,65 @@ export class WhatsAppController {
       return res.status(500).json({
         success: false,
         message: 'Error al actualizar el contacto'
+      });
+    }
+  }
+
+  // Obtener datos actualizados del contacto/grupo desde WhatsApp
+  public async getContactData(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+    try {
+      const userId = req.user?.id;
+      const { whatsappId } = req.params;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!whatsappId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de WhatsApp es requerido'
+        });
+      }
+
+      logger.info(`🔄 Fetching contact data for WhatsApp ID: ${whatsappId}, User: ${userId}`);
+
+      // Obtener datos actualizados desde WhatsApp
+      const contactData = await whatsappService.getContactData(whatsappId);
+
+      if (!contactData) {
+        return res.status(404).json({
+          success: false,
+          message: 'No se pudo obtener los datos del contacto/grupo'
+        });
+      }
+
+      // Actualizar la base de datos con los nuevos datos
+      await database.query(
+        'UPDATE contacts SET name = $1, avatar_url = $2, phone_number = $3, updated_at = CURRENT_TIMESTAMP WHERE whatsapp_id = $4 AND user_id = $5',
+        [
+          contactData.name || null,
+          contactData.avatarUrl || null,
+          contactData.phoneNumber || null,
+          whatsappId,
+          userId
+        ]
+      );
+
+      return res.json({
+        success: true,
+        data: contactData,
+        message: 'Datos del contacto/grupo obtenidos exitosamente'
+      });
+
+    } catch (error) {
+      console.error('Get contact data error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al obtener los datos del contacto/grupo'
       });
     }
   }
