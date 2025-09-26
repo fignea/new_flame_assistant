@@ -44,7 +44,7 @@ export class ScheduledMessagesController {
         });
       }
 
-      // Crear mensaje programado
+      // Crear programación
       const result = await database.run(
         `INSERT INTO scheduled_messages 
          (user_id, contact_id, content, message_type, scheduled_time) 
@@ -64,14 +64,14 @@ export class ScheduledMessagesController {
       return res.status(201).json({
         success: true,
         data: { scheduledMessage },
-        message: 'Mensaje programado creado exitosamente'
+        message: 'Programación creado exitosamente'
       });
 
     } catch (error) {
       console.error('Create scheduled message error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al crear el mensaje programado'
+        message: 'Error al crear el programación'
       });
     }
   }
@@ -121,7 +121,7 @@ export class ScheduledMessagesController {
       return res.json({
         success: true,
         data: messages,
-        message: 'Mensajes programados obtenidos exitosamente',
+        message: 'Programación obtenidos exitosamente',
         pagination: {
           page,
           limit,
@@ -134,7 +134,7 @@ export class ScheduledMessagesController {
       console.error('Get scheduled messages error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al obtener los mensajes programados'
+        message: 'Error al obtener los programación'
       });
     }
   }
@@ -162,21 +162,21 @@ export class ScheduledMessagesController {
       if (!scheduledMessage) {
         return res.status(404).json({
           success: false,
-          message: 'Mensaje programado no encontrado'
+          message: 'Programación no encontrado'
         });
       }
 
       return res.json({
         success: true,
         data: { scheduledMessage },
-        message: 'Mensaje programado obtenido exitosamente'
+        message: 'Programación obtenido exitosamente'
       });
 
     } catch (error) {
       console.error('Get scheduled message error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al obtener el mensaje programado'
+        message: 'Error al obtener el programación'
       });
     }
   }
@@ -203,7 +203,7 @@ export class ScheduledMessagesController {
       if (!existingMessage) {
         return res.status(404).json({
           success: false,
-          message: 'Mensaje programado no encontrado'
+          message: 'Programación no encontrado'
         });
       }
 
@@ -270,14 +270,14 @@ export class ScheduledMessagesController {
       return res.json({
         success: true,
         data: { scheduledMessage: updatedMessage },
-        message: 'Mensaje programado actualizado exitosamente'
+        message: 'Programación actualizado exitosamente'
       });
 
     } catch (error) {
       console.error('Update scheduled message error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al actualizar el mensaje programado'
+        message: 'Error al actualizar el programación'
       });
     }
   }
@@ -303,7 +303,7 @@ export class ScheduledMessagesController {
       if (!existingMessage) {
         return res.status(404).json({
           success: false,
-          message: 'Mensaje programado no encontrado'
+          message: 'Programación no encontrado'
         });
       }
 
@@ -323,14 +323,14 @@ export class ScheduledMessagesController {
 
       return res.json({
         success: true,
-        message: 'Mensaje programado eliminado exitosamente'
+        message: 'Programación eliminado exitosamente'
       });
 
     } catch (error) {
       console.error('Delete scheduled message error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al eliminar el mensaje programado'
+        message: 'Error al eliminar el programación'
       });
     }
   }
@@ -356,7 +356,7 @@ export class ScheduledMessagesController {
       if (!existingMessage) {
         return res.status(404).json({
           success: false,
-          message: 'Mensaje programado no encontrado'
+          message: 'Programación no encontrado'
         });
       }
 
@@ -376,14 +376,14 @@ export class ScheduledMessagesController {
 
       return res.json({
         success: true,
-        message: 'Mensaje programado cancelado exitosamente'
+        message: 'Programación cancelado exitosamente'
       });
 
     } catch (error) {
       console.error('Cancel scheduled message error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al cancelar el mensaje programado'
+        message: 'Error al cancelar el programación'
       });
     }
   }

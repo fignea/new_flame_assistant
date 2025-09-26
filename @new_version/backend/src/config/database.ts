@@ -123,7 +123,7 @@ class DatabaseConfig {
         )
       `);
 
-      // Tabla de mensajes programados
+      // Tabla de programación
       await this.pool.query(`
         CREATE TABLE IF NOT EXISTS scheduled_messages (
           id SERIAL PRIMARY KEY,

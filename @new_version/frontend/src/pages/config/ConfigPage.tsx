@@ -219,7 +219,7 @@ export const ConfigPage: React.FC = () => {
                   <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">{systemInfo.totalMessages}</span>
                 </div>
                 <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Mensajes Programados</h4>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Programación</h4>
                   <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">{systemInfo.totalScheduledMessages}</span>
                 </div>
                 <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">

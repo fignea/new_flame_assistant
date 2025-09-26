@@ -225,7 +225,7 @@ export class ConfigController {
       const messagesCount = await database.get('SELECT COUNT(*) as count FROM messages WHERE user_id = ?', [userId]);
       stats.totalMessages = messagesCount?.count || 0;
 
-      // Contar mensajes programados
+      // Contar programación
       const scheduledCount = await database.get('SELECT COUNT(*) as count FROM scheduled_messages WHERE user_id = ?', [userId]);
       stats.totalScheduledMessages = scheduledCount?.count || 0;
 

@@ -6,7 +6,7 @@ Una plataforma completa para gestionar mensajes de WhatsApp Web, programar enví
 
 - 📱 **Conexión WhatsApp Web**: Conecta tu WhatsApp mediante código QR
 - 💬 **Mensajes en Tiempo Real**: Envía y recibe mensajes directamente desde el navegador
-- ⏰ **Mensajes Programados**: Programa mensajes para envío automático
+- ⏰ **Programación**: Programa mensajes para envío automático
 - 👥 **Gestión de Contactos**: Administra todos tus contactos en un solo lugar
 - 🔐 **Autenticación Segura**: Sistema de login con JWT
 - 📊 **Dashboard Completo**: Estadísticas y métricas en tiempo real
@@ -161,8 +161,8 @@ npm run dev
 - ✅ Gestión de grupos e individuales
 - ✅ Información detallada
 
-### 5. Mensajes Programados
-- ✅ Crear mensajes programados
+### 5. Programación
+- ✅ Crear programación
 - ✅ Ejecución automática con cron
 - ✅ Gestión de estados (pendiente/enviado/fallido)
 - ✅ Reintento de mensajes fallidos
@@ -241,9 +241,9 @@ curl http://localhost:3001/health
 - `POST /api/whatsapp/disconnect` - Desconectar
 - `GET /api/whatsapp/stats` - Estadísticas
 
-### Mensajes Programados
-- `POST /api/scheduled` - Crear mensaje programado
-- `GET /api/scheduled` - Obtener mensajes programados
+### Programación
+- `POST /api/scheduled` - Crear programación
+- `GET /api/scheduled` - Obtener programación
 - `GET /api/scheduled/:id` - Obtener mensaje por ID
 - `PUT /api/scheduled/:id` - Actualizar mensaje
 - `DELETE /api/scheduled/:id` - Eliminar mensaje

@@ -42,7 +42,7 @@ export const DashboardPage: React.FC = () => {
       color: 'from-green-500 to-emerald-500'
     },
     {
-      title: 'Mensajes Programados',
+      title: 'Programación',
       value: '0',
       change: '+0%',
       changeType: 'positive',
@@ -83,12 +83,12 @@ export const DashboardPage: React.FC = () => {
         ));
       }
 
-      // Cargar mensajes programados
+      // Cargar programación
       const scheduledResponse = await apiService.getScheduledMessages({ page: 1, limit: 1 });
       if (scheduledResponse.success && scheduledResponse.data) {
         const scheduledData = scheduledResponse.data as any;
         setStats(prev => prev.map(stat => 
-          stat.title === 'Mensajes Programados' 
+          stat.title === 'Programación' 
             ? { ...stat, value: scheduledData.pagination?.total?.toString() || '0' }
             : stat
         ));

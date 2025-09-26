@@ -425,7 +425,7 @@ export class ApiService {
     });
   }
 
-  // Métodos para mensajes programados
+  // Métodos para programación
   async getScheduledMessages(params?: {
     page?: number;
     limit?: number;

@@ -13,7 +13,7 @@
 - ✅ Integración WhatsApp Web funcional y real
 - ✅ Sistema de mensajes en tiempo real funcional
 - ✅ Gestión de contactos automática con sincronización real
-- ✅ Mensajes programados con cron jobs y UI completa
+- ✅ Programación con cron jobs y UI completa
 - ✅ Dashboard con datos reales del sistema
 - ✅ Asistentes de IA con backend funcional
 - ✅ Configuración del sistema con información real
@@ -52,10 +52,10 @@
 - ✅ Información detallada de contactos
 - ✅ Gestión de grupos e individuos
 
-#### **5. Mensajes Programados**
+#### **5. Programación**
 - ✅ Interfaz completa de programación
 - ✅ Calendario visual
-- ✅ Estados de mensajes programados
+- ✅ Estados de programación
 - ✅ Edición y cancelación
 - ✅ Cron jobs automáticos
 
@@ -104,7 +104,7 @@
 - ✅ Gestión básica de contactos
 - ✅ Autenticación de usuarios
 - ✅ Dashboard simple
-- ✅ Mensajes programados básicos
+- ✅ Programación básicos
 
 #### UX/UI Requerida:
 - ✅ Interfaz limpia y minimalista
@@ -149,7 +149,7 @@
 **Objetivo**: Automatización de envío de mensajes
 
 #### Funcionalidades:
-- ✅ Creación de mensajes programados
+- ✅ Creación de programación
 - ✅ Programación por fecha/hora específica
 - ✅ Programación recurrente (diaria, semanal, mensual)
 - ✅ Estados de mensajes (pendiente, enviado, fallido)
@@ -159,7 +159,7 @@
 #### UX/UI Requerida:
 - ✅ Calendario visual para programación
 - ✅ Formulario intuitivo de creación
-- ✅ Lista de mensajes programados con estados
+- ✅ Lista de programación con estados
 - ✅ Edición/cancelación de mensajes
 - ✅ Notificaciones de estado
 

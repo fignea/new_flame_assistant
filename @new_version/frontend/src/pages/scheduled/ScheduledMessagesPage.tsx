@@ -51,13 +51,14 @@ export const ScheduledMessagesPage: React.FC = () => {
     { value: 'cancelled', label: 'Cancelados', color: 'gray' }
   ];
 
-  // Cargar mensajes programados
+  // Cargar programación
   const loadScheduledMessages = async () => {
     try {
       setLoading(true);
       const response = await apiService.getScheduledMessages();
       if (response.success && response.data) {
-        setScheduledMessages(response.data);
+        const data = response.data as any;
+        setScheduledMessages(data.data || []);
       }
     } catch (error) {
       console.error('Error loading scheduled messages:', error);
@@ -85,14 +86,14 @@ export const ScheduledMessagesPage: React.FC = () => {
   }, []);
 
   // Filtrar mensajes
-  const filteredMessages = scheduledMessages.filter(message => {
+  const filteredMessages = (scheduledMessages || []).filter(message => {
     const matchesSearch = message.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          message.contact_name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || message.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  // Crear mensaje programado
+  // Crear programación
   const handleCreateMessage = async () => {
     if (!formData.contactId || !formData.content || !formData.scheduledDate || !formData.scheduledTime) {
       alert('Por favor completa todos los campos requeridos');
@@ -114,15 +115,15 @@ export const ScheduledMessagesPage: React.FC = () => {
         resetForm();
         loadScheduledMessages();
       } else {
-        alert('Error al crear el mensaje programado');
+        alert('Error al crear el programación');
       }
     } catch (error) {
       console.error('Error creating scheduled message:', error);
-      alert('Error al crear el mensaje programado');
+      alert('Error al crear el programación');
     }
   };
 
-  // Actualizar mensaje programado
+  // Actualizar programación
   const handleUpdateMessage = async () => {
     if (!editingMessage || !formData.contactId || !formData.content || !formData.scheduledDate || !formData.scheduledTime) {
       alert('Por favor completa todos los campos requeridos');
@@ -144,15 +145,15 @@ export const ScheduledMessagesPage: React.FC = () => {
         resetForm();
         loadScheduledMessages();
       } else {
-        alert('Error al actualizar el mensaje programado');
+        alert('Error al actualizar el programación');
       }
     } catch (error) {
       console.error('Error updating scheduled message:', error);
-      alert('Error al actualizar el mensaje programado');
+      alert('Error al actualizar el programación');
     }
   };
 
-  // Eliminar mensaje programado
+  // Eliminar programación
   const handleDeleteMessage = async (id: string) => {
     try {
       const response = await apiService.deleteScheduledMessage(id);
@@ -160,26 +161,26 @@ export const ScheduledMessagesPage: React.FC = () => {
         setShowDeleteConfirm(null);
         loadScheduledMessages();
       } else {
-        alert('Error al eliminar el mensaje programado');
+        alert('Error al eliminar el programación');
       }
     } catch (error) {
       console.error('Error deleting scheduled message:', error);
-      alert('Error al eliminar el mensaje programado');
+      alert('Error al eliminar el programación');
     }
   };
 
-  // Cancelar mensaje programado
+  // Cancelar programación
   const handleCancelMessage = async (id: string) => {
     try {
       const response = await apiService.cancelScheduledMessage(id);
       if (response.success) {
         loadScheduledMessages();
       } else {
-        alert('Error al cancelar el mensaje programado');
+        alert('Error al cancelar el programación');
       }
     } catch (error) {
       console.error('Error cancelling scheduled message:', error);
-      alert('Error al cancelar el mensaje programado');
+      alert('Error al cancelar el programación');
     }
   };
 
@@ -261,7 +262,7 @@ export const ScheduledMessagesPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent mb-2">
-              Mensajes Programados
+              Programación
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
               Programa y gestiona el envío automático de mensajes
@@ -311,11 +312,11 @@ export const ScheduledMessagesPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Lista de mensajes programados */}
+        {/* Lista de programación */}
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
-            <p className="text-gray-600 dark:text-gray-400 mt-4">Cargando mensajes programados...</p>
+            <p className="text-gray-600 dark:text-gray-400 mt-4">Cargando programación...</p>
           </div>
         ) : filteredMessages.length === 0 ? (
           <div className="text-center py-12">
@@ -323,7 +324,7 @@ export const ScheduledMessagesPage: React.FC = () => {
               <Clock className="w-12 h-12 text-purple-500" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              No hay mensajes programados
+              No hay programación
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               Programa tu primer mensaje para comenzar a automatizar tu comunicación
@@ -420,7 +421,7 @@ export const ScheduledMessagesPage: React.FC = () => {
             <div className="bg-white dark:bg-dark-surface rounded-2xl p-8 max-w-2xl w-full border border-gray-200/50 dark:border-dark-border/50 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {editingMessage ? 'Editar Mensaje Programado' : 'Programar Nuevo Mensaje'}
+                  {editingMessage ? 'Editar Programación' : 'Programar Nuevo Mensaje'}
                 </h2>
                 <button
                   onClick={() => {
@@ -548,10 +549,10 @@ export const ScheduledMessagesPage: React.FC = () => {
                   <Trash2 className="w-8 h-8 text-red-500" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  ¿Eliminar Mensaje Programado?
+                  ¿Eliminar Programación?
                 </h3>
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Esta acción no se puede deshacer. El mensaje programado será eliminado permanentemente.
+                  Esta acción no se puede deshacer. El programación será eliminado permanentemente.
                 </p>
                 <div className="flex space-x-3">
                   <button
