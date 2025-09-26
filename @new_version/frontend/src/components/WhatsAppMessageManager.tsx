@@ -112,42 +112,64 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
         if (selectedChat && messageData.chatId === selectedChat.id) {
           console.log('📨 Message is for current chat, processing...');
           
-          // Convertir el mensaje al formato esperado
-          const formattedMessage: WhatsAppMessage = {
-            id: messageData.id || messageData.key?.id || '',
-            key: messageData.key || { id: messageData.id, remoteJid: messageData.chatId, fromMe: messageData.isFromMe },
-            message: messageData.message || { conversation: messageData.content },
-            messageTimestamp: messageData.timestamp || messageData.messageTimestamp || Date.now() / 1000,
-            status: messageData.status || 'delivered',
-            fromMe: messageData.isFromMe || messageData.fromMe || false,
-            chatId: messageData.chatId,
-            senderId: messageData.senderId || messageData.chatId,
-            senderName: messageData.senderName || (messageData.isFromMe ? 'Tú' : messageData.chatId.split('@')[0]),
-            body: messageData.content || messageData.body || '',
-            type: messageData.messageType || messageData.type || 'text',
-            hasMedia: messageData.hasMedia || false,
-            media: messageData.media
-          };
-
-          console.log('📨 Formatted message:', formattedMessage);
-
-          // Agregar el mensaje a la lista
+          // Verificar si es una actualización de estado de un mensaje existente
           setMessages(prev => {
-            // Verificar si el mensaje ya existe para evitar duplicados
-            const exists = prev.some(msg => msg.id === formattedMessage.id);
-            if (exists) {
-              console.log('📨 Message already exists, skipping...');
-              return prev;
+            const existingMessage = prev.find(msg => msg.id === messageData.id);
+            
+            if (existingMessage) {
+              // El mensaje ya existe, verificar si es una actualización de estado
+              const isStatusUpdate = messageData.isFromMe && messageData.status && 
+                (messageData.status === 'delivered' || messageData.status === 'read') &&
+                existingMessage.status !== messageData.status;
+              
+              if (isStatusUpdate) {
+                console.log('📨 This is a status update, updating existing message...');
+                console.log('📨 Updating message status:', messageData.id, 'from', existingMessage.status, 'to', messageData.status);
+                
+                // Actualizar solo el estado del mensaje existente
+                return prev.map(msg => {
+                  if (msg.id === messageData.id) {
+                    return { ...msg, status: messageData.status };
+                  }
+                  return msg;
+                });
+              } else {
+                console.log('📨 Message already exists with same status, skipping...');
+                return prev; // No hacer cambios
+              }
             }
             
-            console.log('📨 Adding new message to list');
+            // El mensaje no existe, es un mensaje nuevo
+            console.log('📨 New message, adding to list...');
+            
+            // Convertir el mensaje al formato esperado
+            const formattedMessage: WhatsAppMessage = {
+              id: messageData.id || messageData.key?.id || '',
+              key: messageData.key || { id: messageData.id, remoteJid: messageData.chatId, fromMe: messageData.isFromMe },
+              message: messageData.message || { conversation: messageData.content },
+              messageTimestamp: messageData.timestamp || messageData.messageTimestamp || Date.now() / 1000,
+              status: messageData.status || 'delivered',
+              fromMe: messageData.isFromMe || messageData.fromMe || false,
+              chatId: messageData.chatId,
+              senderId: messageData.senderId || messageData.chatId,
+              senderName: messageData.senderName || (messageData.isFromMe ? 'Tú' : messageData.chatId.split('@')[0]),
+              body: messageData.content || messageData.body || '',
+              type: messageData.messageType || messageData.type || 'text',
+              hasMedia: messageData.hasMedia || false,
+              media: messageData.media
+            };
+
+            console.log('📨 Formatted message:', formattedMessage);
+            
+            // Notificar al componente padre
+            if (onMessageReceived) {
+              onMessageReceived(formattedMessage);
+            }
+            
             return [...prev, formattedMessage];
           });
-
-          // Notificar al componente padre
-          if (onMessageReceived) {
-            onMessageReceived(formattedMessage);
-          }
+          
+          return; // No procesar más
         } else {
           console.log('📨 Message not for current chat:', messageData.chatId, 'vs', selectedChat?.id);
         }
