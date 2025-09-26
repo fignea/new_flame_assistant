@@ -19,6 +19,7 @@ import {
   Eye
 } from 'lucide-react';
 import { apiService, Contact, ScheduledMessage } from '../../services/api.service';
+import { useNotificationHelpers } from '../../components/NotificationSystem';
 
 interface ScheduledMessageWithContact extends ScheduledMessage {
   contact_name?: string;
@@ -26,6 +27,7 @@ interface ScheduledMessageWithContact extends ScheduledMessage {
 }
 
 export const ScheduledMessagesPage: React.FC = () => {
+  const { showSuccess, showError, showWarning } = useNotificationHelpers();
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessageWithContact[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +98,7 @@ export const ScheduledMessagesPage: React.FC = () => {
   // Crear programación
   const handleCreateMessage = async () => {
     if (!formData.contactId || !formData.content || !formData.scheduledDate || !formData.scheduledTime) {
-      alert('Por favor completa todos los campos requeridos');
+      showWarning('Campos requeridos', 'Por favor completa todos los campos requeridos');
       return;
     }
 
@@ -114,19 +116,20 @@ export const ScheduledMessagesPage: React.FC = () => {
         setShowCreateModal(false);
         resetForm();
         loadScheduledMessages();
+        showSuccess('Mensaje programado', 'El mensaje se ha programado exitosamente');
       } else {
-        alert('Error al crear el programación');
+        showError('Error al programar mensaje', 'No se pudo programar el mensaje');
       }
     } catch (error) {
       console.error('Error creating scheduled message:', error);
-      alert('Error al crear el programación');
+      showError('Error al programar mensaje', 'No se pudo programar el mensaje');
     }
   };
 
   // Actualizar programación
   const handleUpdateMessage = async () => {
     if (!editingMessage || !formData.contactId || !formData.content || !formData.scheduledDate || !formData.scheduledTime) {
-      alert('Por favor completa todos los campos requeridos');
+      showWarning('Campos requeridos', 'Por favor completa todos los campos requeridos');
       return;
     }
 
@@ -144,12 +147,13 @@ export const ScheduledMessagesPage: React.FC = () => {
         setEditingMessage(null);
         resetForm();
         loadScheduledMessages();
+        showSuccess('Mensaje actualizado', 'El mensaje programado se ha actualizado exitosamente');
       } else {
-        alert('Error al actualizar el programación');
+        showError('Error al actualizar mensaje', 'No se pudo actualizar el mensaje programado');
       }
     } catch (error) {
       console.error('Error updating scheduled message:', error);
-      alert('Error al actualizar el programación');
+      showError('Error al actualizar mensaje', 'No se pudo actualizar el mensaje programado');
     }
   };
 
@@ -160,12 +164,13 @@ export const ScheduledMessagesPage: React.FC = () => {
       if (response.success) {
         setShowDeleteConfirm(null);
         loadScheduledMessages();
+        showSuccess('Mensaje eliminado', 'El mensaje programado se ha eliminado exitosamente');
       } else {
-        alert('Error al eliminar el programación');
+        showError('Error al eliminar mensaje', 'No se pudo eliminar el mensaje programado');
       }
     } catch (error) {
       console.error('Error deleting scheduled message:', error);
-      alert('Error al eliminar el programación');
+      showError('Error al eliminar mensaje', 'No se pudo eliminar el mensaje programado');
     }
   };
 
@@ -175,12 +180,13 @@ export const ScheduledMessagesPage: React.FC = () => {
       const response = await apiService.cancelScheduledMessage(id);
       if (response.success) {
         loadScheduledMessages();
+        showSuccess('Mensaje cancelado', 'El mensaje programado se ha cancelado exitosamente');
       } else {
-        alert('Error al cancelar el programación');
+        showError('Error al cancelar mensaje', 'No se pudo cancelar el mensaje programado');
       }
     } catch (error) {
       console.error('Error cancelling scheduled message:', error);
-      alert('Error al cancelar el programación');
+      showError('Error al cancelar mensaje', 'No se pudo cancelar el mensaje programado');
     }
   };
 

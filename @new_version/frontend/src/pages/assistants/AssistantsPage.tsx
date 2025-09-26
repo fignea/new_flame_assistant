@@ -15,6 +15,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { apiService } from '../../services/api.service';
+import { useNotificationHelpers } from '../../components/NotificationSystem';
 
 interface Schedule {
   id: string;
@@ -42,6 +43,7 @@ interface Assistant {
 }
 
 export const AssistantsPage: React.FC = () => {
+  const { showSuccess, showError } = useNotificationHelpers();
   const [assistants, setAssistants] = useState<Assistant[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -119,12 +121,13 @@ export const AssistantsPage: React.FC = () => {
         setShowCreateModal(false);
         resetForm();
         loadAssistants(); // Recargar la lista
+        showSuccess('Asistente creado', 'El asistente se ha creado exitosamente');
       } else {
-        alert('Error al crear el asistente');
+        showError('Error al crear asistente', 'No se pudo crear el asistente');
       }
     } catch (error) {
       console.error('Error creating assistant:', error);
-      alert('Error al crear el asistente');
+      showError('Error al crear asistente', 'No se pudo crear el asistente');
     }
   };
 
@@ -168,12 +171,13 @@ export const AssistantsPage: React.FC = () => {
         setEditingAssistant(null);
         resetForm();
         loadAssistants(); // Recargar la lista
+        showSuccess('Asistente actualizado', 'El asistente se ha actualizado exitosamente');
       } else {
-        alert('Error al actualizar el asistente');
+        showError('Error al actualizar asistente', 'No se pudo actualizar el asistente');
       }
     } catch (error) {
       console.error('Error updating assistant:', error);
-      alert('Error al actualizar el asistente');
+      showError('Error al actualizar asistente', 'No se pudo actualizar el asistente');
     }
   };
 
@@ -183,12 +187,13 @@ export const AssistantsPage: React.FC = () => {
       if (response.success) {
         setShowDeleteConfirm(null);
         loadAssistants(); // Recargar la lista
+        showSuccess('Asistente eliminado', 'El asistente se ha eliminado exitosamente');
       } else {
-        alert('Error al eliminar el asistente');
+        showError('Error al eliminar asistente', 'No se pudo eliminar el asistente');
       }
     } catch (error) {
       console.error('Error deleting assistant:', error);
-      alert('Error al eliminar el asistente');
+      showError('Error al eliminar asistente', 'No se pudo eliminar el asistente');
     }
   };
 
@@ -199,12 +204,13 @@ export const AssistantsPage: React.FC = () => {
       });
       if (response.success) {
         loadAssistants(); // Recargar la lista
+        showSuccess('Estado actualizado', 'El estado del asistente se ha actualizado exitosamente');
       } else {
-        alert('Error al cambiar el estado del asistente');
+        showError('Error al cambiar estado', 'No se pudo cambiar el estado del asistente');
       }
     } catch (error) {
       console.error('Error toggling assistant status:', error);
-      alert('Error al cambiar el estado del asistente');
+      showError('Error al cambiar estado', 'No se pudo cambiar el estado del asistente');
     }
   };
 

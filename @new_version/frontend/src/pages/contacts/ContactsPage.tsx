@@ -22,8 +22,10 @@ import {
   Edit
 } from 'lucide-react';
 import { apiService, Contact, PaginatedResponse } from '../../services/api.service';
+import { useNotificationHelpers } from '../../components/NotificationSystem';
 
 export const ContactsPage: React.FC = () => {
+  const { showSuccess, showError } = useNotificationHelpers();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -107,14 +109,13 @@ export const ContactsPage: React.FC = () => {
         setShowSendMessageModal(false);
         setMessageText('');
         setSelectedContact(null);
-        // Mostrar notificación de éxito
-        alert('Mensaje enviado exitosamente');
+        showSuccess('Mensaje enviado', 'El mensaje se ha enviado exitosamente');
       } else {
-        alert('Error al enviar el mensaje: ' + (response.message || 'Error desconocido'));
+        showError('Error al enviar mensaje', response.message || 'Error desconocido');
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      alert('Error al enviar el mensaje');
+      showError('Error al enviar mensaje', 'No se pudo enviar el mensaje');
     } finally {
       setSendingMessage(false);
     }
@@ -140,13 +141,13 @@ export const ContactsPage: React.FC = () => {
         ));
         setShowEditModal(false);
         setEditingContact(null);
-        alert('Contacto actualizado exitosamente');
+        showSuccess('Contacto actualizado', 'Los cambios se han guardado exitosamente');
       } else {
-        alert('Error al actualizar el contacto: ' + (response.message || 'Error desconocido'));
+        showError('Error al actualizar contacto', response.message || 'Error desconocido');
       }
     } catch (error) {
       console.error('Error updating contact:', error);
-      alert('Error al actualizar el contacto');
+      showError('Error al actualizar contacto', 'No se pudieron guardar los cambios');
     }
   };
 
@@ -160,13 +161,13 @@ export const ContactsPage: React.FC = () => {
       if (response.success) {
         setContacts(prev => prev.filter(contact => contact.id !== showDeleteConfirm.id));
         setShowDeleteConfirm(null);
-        alert('Contacto eliminado exitosamente');
+        showSuccess('Contacto eliminado', 'El contacto se ha eliminado exitosamente');
       } else {
-        alert('Error al eliminar el contacto: ' + (response.message || 'Error desconocido'));
+        showError('Error al eliminar contacto', response.message || 'Error desconocido');
       }
     } catch (error) {
       console.error('Error deleting contact:', error);
-      alert('Error al eliminar el contacto');
+      showError('Error al eliminar contacto', 'No se pudo eliminar el contacto');
     } finally {
       setDeletingContact(false);
     }
@@ -186,13 +187,13 @@ export const ContactsPage: React.FC = () => {
             : contact
         ));
         setShowBlockConfirm(null);
-        alert('Contacto bloqueado exitosamente');
+        showSuccess('Contacto bloqueado', 'El contacto ha sido bloqueado exitosamente');
       } else {
-        alert('Error al bloquear el contacto: ' + (response.message || 'Error desconocido'));
+        showError('Error al bloquear contacto', response.message || 'Error desconocido');
       }
     } catch (error) {
       console.error('Error blocking contact:', error);
-      alert('Error al bloquear el contacto');
+      showError('Error al bloquear contacto', 'No se pudo bloquear el contacto');
     } finally {
       setBlockingContact(false);
     }
@@ -212,13 +213,13 @@ export const ContactsPage: React.FC = () => {
             : contact
         ));
         setShowUnblockConfirm(null);
-        alert('Contacto desbloqueado exitosamente');
+        showSuccess('Contacto desbloqueado', 'El contacto ha sido desbloqueado exitosamente');
       } else {
-        alert('Error al desbloquear el contacto: ' + (response.message || 'Error desconocido'));
+        showError('Error al desbloquear contacto', response.message || 'Error desconocido');
       }
     } catch (error) {
       console.error('Error unblocking contact:', error);
-      alert('Error al desbloquear el contacto');
+      showError('Error al desbloquear contacto', 'No se pudo desbloquear el contacto');
     } finally {
       setUnblockingContact(false);
     }

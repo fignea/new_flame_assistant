@@ -228,7 +228,11 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
 
     setIsSending(true);
     try {
-      const response = await apiService.sendMessage(selectedChat.id, newMessage.trim());
+      const response = await apiService.sendMessage({
+        contactId: selectedChat.id,
+        content: newMessage.trim(),
+        messageType: 'text'
+      });
       
       if (response.success && response.data) {
         // Agregar mensaje a la lista local

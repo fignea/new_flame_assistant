@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AppProvider, useApp } from './contexts/AppContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { NotificationProvider } from './components/NotificationSystem';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import LandingPage from './pages/LandingPage';
 import { LoginPage } from './pages/auth/LoginPage';
@@ -148,7 +149,9 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <AppProvider>
-          <AppContent />
+          <NotificationProvider>
+            <AppContent />
+          </NotificationProvider>
         </AppProvider>
       </ThemeProvider>
     </ErrorBoundary>
