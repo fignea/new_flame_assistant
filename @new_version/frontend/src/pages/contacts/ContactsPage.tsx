@@ -1,38 +1,461 @@
-import React from 'react';
-import { Users, Clock, Wrench } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  Users, 
+  Search, 
+  Filter, 
+  MoreVertical, 
+  MessageCircle, 
+  Phone, 
+  Mail, 
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  User,
+  Users as UsersIcon,
+  Eye,
+  Send
+} from 'lucide-react';
+import { apiService, Contact, PaginatedResponse } from '../../services/api.service';
 
 export const ContactsPage: React.FC = () => {
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalContacts, setTotalContacts] = useState(0);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [showContactDetails, setShowContactDetails] = useState(false);
+  const [filterType, setFilterType] = useState<'all' | 'individual' | 'groups'>('all');
+
+  const itemsPerPage = 20;
+
+  // Cargar contactos
+  const loadContacts = async (page: number = 1, search: string = '') => {
+    try {
+      setLoading(true);
+      const response = await apiService.getContacts({
+        page,
+        limit: itemsPerPage,
+        search: search || undefined
+      });
+
+      if (response.success && response.data) {
+        const data = response.data as PaginatedResponse<Contact>;
+        setContacts(data.data);
+        setTotalPages(data.pagination.pages);
+        setTotalContacts(data.pagination.total);
+      }
+    } catch (error) {
+      console.error('Error loading contacts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Efecto para cargar contactos al montar el componente
+  useEffect(() => {
+    loadContacts(currentPage, searchTerm);
+  }, [currentPage]);
+
+  // Efecto para búsqueda con debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchTerm !== '') {
+        loadContacts(1, searchTerm);
+        setCurrentPage(1);
+      } else {
+        loadContacts(1);
+        setCurrentPage(1);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  // Filtrar contactos por tipo
+  const filteredContacts = contacts.filter(contact => {
+    if (filterType === 'individual') return !contact.is_group;
+    if (filterType === 'groups') return contact.is_group;
+    return true;
+  });
+
+  // Formatear fecha
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  // Obtener iniciales del nombre
+  const getInitials = (name?: string) => {
+    if (!name) return '?';
+    return name
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  // Manejar búsqueda
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  };
+
+  // Manejar cambio de página
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // Manejar ver detalles del contacto
+  const handleViewContact = (contact: Contact) => {
+    setSelectedContact(contact);
+    setShowContactDetails(true);
+  };
+
+  // Manejar envío de mensaje
+  const handleSendMessage = (contact: Contact) => {
+    // Aquí podrías abrir un modal o navegar a una página de envío de mensajes
+    console.log('Enviar mensaje a:', contact);
+  };
+
+  // Renderizar paginación
+  const renderPagination = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+    const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(
+        <button
+          key={i}
+          onClick={() => handlePageChange(i)}
+          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+            i === currentPage
+              ? 'bg-green-500 text-white'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+          }`}
+        >
+          {i}
+        </button>
+      );
+    }
+
+    return (
+      <div className="flex items-center justify-between mt-6">
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, totalContacts)} de {totalContacts} contactos
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          {pages}
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card flex items-center justify-center">
-      <div className="text-center max-w-md mx-auto p-8">
-        <div className="relative mb-8">
-          <div className="w-24 h-24 bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-3xl flex items-center justify-center mx-auto">
-            <Wrench className="w-12 h-12 text-green-500" />
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent">
+                Gestión de Contactos
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">
+                Administra tu base de contactos de WhatsApp
+              </p>
+            </div>
+            <button
+              onClick={() => loadContacts(currentPage, searchTerm)}
+              disabled={loading}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>Actualizar</span>
+            </button>
           </div>
-          <div className="absolute -inset-2 bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-3xl blur animate-pulse"></div>
         </div>
         
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent mb-4">
-          Work in Progress
-        </h1>
-        
-        <p className="text-lg text-gray-600 dark:text-gray-400 mb-6">
-          La sección de Contactos está en desarrollo. Próximamente podrás gestionar tu base de contactos desde aquí.
-        </p>
-        
-        <div className="bg-white/50 dark:bg-dark-surface/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50">
-          <div className="flex items-center space-x-3 text-green-600 dark:text-green-400 mb-4">
-            <Clock className="w-5 h-5" />
-            <span className="font-medium">Funcionalidades próximas:</span>
+        {/* Filtros y búsqueda */}
+        <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-sm border border-gray-200 dark:border-dark-border p-6 mb-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Búsqueda */}
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Buscar contactos por nombre o número..."
+                  value={searchTerm}
+                  onChange={handleSearch}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-dark-card dark:text-white"
+                />
+              </div>
+            </div>
+
+            {/* Filtros */}
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setFilterType('all')}
+                className={`px-4 py-3 rounded-lg font-medium transition-colors ${
+                  filterType === 'all'
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-100 dark:bg-dark-card text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                Todos
+              </button>
+              <button
+                onClick={() => setFilterType('individual')}
+                className={`px-4 py-3 rounded-lg font-medium transition-colors ${
+                  filterType === 'individual'
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-100 dark:bg-dark-card text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                <User className="w-4 h-4 inline mr-2" />
+                Individuales
+              </button>
+              <button
+                onClick={() => setFilterType('groups')}
+                className={`px-4 py-3 rounded-lg font-medium transition-colors ${
+                  filterType === 'groups'
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-100 dark:bg-dark-card text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                <UsersIcon className="w-4 h-4 inline mr-2" />
+                Grupos
+              </button>
+            </div>
           </div>
-          <ul className="text-left space-y-2 text-sm text-gray-600 dark:text-gray-400">
-            <li>• Gestión completa de contactos</li>
-            <li>• Segmentación y etiquetas</li>
-            <li>• Importación masiva de datos</li>
-            <li>• Historial de interacciones</li>
-            <li>• Integración con CRM</li>
-          </ul>
         </div>
+
+        {/* Lista de contactos */}
+        <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-sm border border-gray-200 dark:border-dark-border overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-8 h-8 text-green-500 animate-spin" />
+              <span className="ml-3 text-gray-600 dark:text-gray-400">Cargando contactos...</span>
+            </div>
+          ) : filteredContacts.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                No se encontraron contactos
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                {searchTerm ? 'Intenta con otros términos de búsqueda' : 'No hay contactos disponibles'}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="divide-y divide-gray-200 dark:divide-dark-border">
+                {filteredContacts.map((contact) => (
+                  <div key={contact.id} className="p-6 hover:bg-gray-50 dark:hover:bg-dark-card transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        {/* Avatar */}
+                        <div className="relative">
+                          {contact.avatar_url ? (
+                            <img
+                              src={contact.avatar_url}
+                              alt={contact.name || 'Contacto'}
+                              className="w-12 h-12 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold ${
+                              contact.is_group 
+                                ? 'bg-blue-500' 
+                                : 'bg-green-500'
+                            }`}>
+                              {getInitials(contact.name)}
+                            </div>
+                          )}
+                          {contact.is_group && (
+                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                              <UsersIcon className="w-2.5 h-2.5 text-white" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Información del contacto */}
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                              {contact.name || 'Sin nombre'}
+                            </h3>
+                            {contact.is_group && (
+                              <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">
+                                Grupo
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-4 mt-1">
+                            {contact.phone_number && (
+                              <div className="flex items-center space-x-1 text-gray-600 dark:text-gray-400">
+                                <Phone className="w-4 h-4" />
+                                <span className="text-sm">{contact.phone_number}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center space-x-1 text-gray-600 dark:text-gray-400">
+                              <Calendar className="w-4 h-4" />
+                              <span className="text-sm">
+                                Agregado {formatDate(contact.created_at)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Acciones */}
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleViewContact(contact)}
+                          className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                          title="Ver detalles"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleSendMessage(contact)}
+                          className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                          title="Enviar mensaje"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                        <button className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Paginación */}
+              {totalPages > 1 && renderPagination()}
+            </>
+          )}
+        </div>
+
+        {/* Modal de detalles del contacto */}
+        {showContactDetails && selectedContact && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Detalles del Contacto
+                  </h2>
+                  <button
+                    onClick={() => setShowContactDetails(false)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="text-center mb-6">
+                  {selectedContact.avatar_url ? (
+                    <img
+                      src={selectedContact.avatar_url}
+                      alt={selectedContact.name || 'Contacto'}
+                      className="w-20 h-20 rounded-full object-cover mx-auto mb-4"
+                    />
+                  ) : (
+                    <div className={`w-20 h-20 rounded-full flex items-center justify-center text-white font-semibold text-2xl mx-auto mb-4 ${
+                      selectedContact.is_group 
+                        ? 'bg-blue-500' 
+                        : 'bg-green-500'
+                    }`}>
+                      {getInitials(selectedContact.name)}
+                    </div>
+                  )}
+                  
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                    {selectedContact.name || 'Sin nombre'}
+                  </h3>
+                  
+                  {selectedContact.is_group && (
+                    <span className="px-3 py-1 text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">
+                      Grupo de WhatsApp
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {selectedContact.phone_number && (
+                    <div className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-dark-card rounded-lg">
+                      <Phone className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Número de teléfono</p>
+                        <p className="font-medium text-gray-900 dark:text-white">{selectedContact.phone_number}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-dark-card rounded-lg">
+                    <MessageCircle className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">ID de WhatsApp</p>
+                      <p className="font-medium text-gray-900 dark:text-white font-mono text-sm">
+                        {selectedContact.whatsapp_id}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-dark-card rounded-lg">
+                    <Calendar className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Fecha de creación</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {formatDate(selectedContact.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 mt-6">
+                  <button
+                    onClick={() => handleSendMessage(selectedContact)}
+                    className="flex-1 bg-green-500 text-white py-3 px-4 rounded-lg hover:bg-green-600 transition-colors font-medium"
+                  >
+                    <Send className="w-4 h-4 inline mr-2" />
+                    Enviar Mensaje
+                  </button>
+                  <button
+                    onClick={() => setShowContactDetails(false)}
+                    className="flex-1 bg-gray-100 dark:bg-dark-card text-gray-700 dark:text-gray-300 py-3 px-4 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
