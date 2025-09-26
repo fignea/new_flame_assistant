@@ -80,6 +80,7 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -133,7 +134,11 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
       const response = await apiService.getWhatsAppMessagesNew(chatId, { limit: 50 });
       
       if (response.success && response.data) {
-        setMessages(response.data.messages || []);
+        // Filtrar mensajes de status y grupos
+        const filteredMessages = (response.data.messages || []).filter((message: WhatsAppMessage) => {
+          return !isStatusMessage(message) && !isGroupMessage(message.chatId);
+        });
+        setMessages(filteredMessages);
       } else {
         throw new Error(response.message || 'Error al cargar mensajes');
       }
@@ -145,10 +150,83 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
     }
   };
 
+  // Función para detectar mensajes de status
+  const isStatusMessage = (message: WhatsAppMessage): boolean => {
+    const statusPatterns = [
+      /^\[Status\]/i,
+      /^\[Estado\]/i,
+      /^\[Story\]/i,
+      /^\[Historia\]/i,
+      /^\[View Once\]/i,
+      /^\[Ver una vez\]/i,
+      /^\[Ephemeral\]/i,
+      /^\[Temporal\]/i,
+      /^\[Protocol Update\]/i,
+      /^\[Security Update\]/i,
+      /^\[Audio\]/i,
+      /^\[Image\]/i,
+      /^\[Video\]/i,
+      /^\[Document\]/i,
+      /^\[Sticker\]/i
+    ];
+
+    const statusContent = [
+      'Status',
+      'Estado',
+      'Story',
+      'Historia',
+      'View Once',
+      'Ver una vez',
+      'Ephemeral',
+      'Temporal',
+      'Protocol Update',
+      'Security Update',
+      '[Audio]',
+      '[Image]',
+      '[Video]',
+      '[Document]',
+      '[Sticker]'
+    ];
+
+    const statusMessageTypes = [
+      'ephemeral',
+      'view_once',
+      'view_once_image',
+      'view_once_video',
+      'protocol_update',
+      'security_update',
+      'audio',
+      'image',
+      'video',
+      'document',
+      'sticker'
+    ];
+
+    const messageContent = message.body || message.message?.conversation || '';
+    
+    // Filtrar mensajes que son solo emojis o símbolos
+    const isOnlyEmojis = /^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F0FF}\u{1F200}-\u{1F2FF}\s*]+$/u.test(messageContent);
+    
+    // Filtrar mensajes muy cortos que podrían ser estados
+    const isVeryShort = messageContent.trim().length <= 3 && !messageContent.includes(' ');
+    
+    return statusPatterns.some(pattern => pattern.test(messageContent)) ||
+           statusContent.some(status => messageContent.includes(status)) ||
+           statusMessageTypes.includes(message.type) ||
+           isOnlyEmojis ||
+           isVeryShort;
+  };
+
+  // Función para detectar mensajes de grupos
+  const isGroupMessage = (chatId: string): boolean => {
+    return chatId.includes('@g.us');
+  };
+
   // Enviar mensaje
   const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat) return;
+    if (!newMessage.trim() || !selectedChat || isSending) return;
 
+    setIsSending(true);
     try {
       const response = await apiService.sendMessage(selectedChat.id, newMessage.trim());
       
@@ -181,6 +259,8 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
     } catch (error) {
       console.error('Error sending message:', error);
       setError('Error al enviar el mensaje');
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -508,7 +588,7 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
 
                 <button
                   onClick={sendMessage}
-                  disabled={!newMessage.trim()}
+                  disabled={!newMessage.trim() || isSending}
                   className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="w-5 h-5" />

@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AppProvider, useApp } from './contexts/AppContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import LandingPage from './pages/LandingPage';
 import { LoginPage } from './pages/auth/LoginPage';
@@ -12,6 +13,7 @@ import { DocumentsPage } from './pages/documents/DocumentsPage';
 import { AssistantsPage } from './pages/assistants/AssistantsPage';
 import { IntegrationsPage } from './pages/integrations/IntegrationsPage';
 import { ConfigPage } from './pages/config/ConfigPage';
+import { ScheduledMessagesPage } from './pages/scheduled/ScheduledMessagesPage';
 
 // Componente para rutas protegidas
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -103,11 +105,21 @@ const AppContent: React.FC = () => {
             } 
           />
           <Route 
-            path="/integrations" 
+            path="/integrations"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
                   <IntegrationsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/scheduled"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <ScheduledMessagesPage />
                 </DashboardLayout>
               </ProtectedRoute>
             } 
@@ -133,11 +145,13 @@ const AppContent: React.FC = () => {
 
 function App() {
   return (
-    <ThemeProvider>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

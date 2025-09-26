@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Bot, 
   Plus, 
@@ -11,8 +11,10 @@ import {
   XCircle,
   MoreVertical,
   Play,
-  Pause
+  Pause,
+  RefreshCw
 } from 'lucide-react';
+import { apiService } from '../../services/api.service';
 
 interface Schedule {
   id: string;
@@ -40,48 +42,32 @@ interface Assistant {
 }
 
 export const AssistantsPage: React.FC = () => {
-  const [assistants, setAssistants] = useState<Assistant[]>([
-    {
-      id: '1',
-      name: 'Asistente de Ventas',
-      description: 'Asistente especializado en atención al cliente y ventas',
-      status: 'active',
-      type: 'ai',
-      integrations: ['whatsapp-web'],
-      createdAt: '2024-01-15',
-      lastUsed: '2024-01-20',
-      responses: {
-        aiPrompt: 'Eres un asistente de ventas especializado en productos tecnológicos. Responde de manera amigable y profesional.',
-        documents: ['catalogo-productos.pdf', 'politicas-ventas.docx']
-      }
-    },
-    {
-      id: '2',
-      name: 'Soporte Técnico',
-      description: 'Asistente para soporte técnico fuera del horario laboral',
-      status: 'inactive',
-      type: 'auto',
-      integrations: ['whatsapp-web'],
-      createdAt: '2024-01-10',
-      lastUsed: '2024-01-18',
-      responses: {
-        autoResponse: 'Hola! Gracias por contactarnos. Nuestro horario de atención es de 9:00 AM a 6:00 PM. Te responderemos pronto.',
-        schedule: [
-          { id: '1', dayOfWeek: 1, startTime: '09:00', endTime: '18:00', enabled: true }, // Lunes
-          { id: '2', dayOfWeek: 2, startTime: '09:00', endTime: '18:00', enabled: true }, // Martes
-          { id: '3', dayOfWeek: 3, startTime: '09:00', endTime: '18:00', enabled: true }, // Miércoles
-          { id: '4', dayOfWeek: 4, startTime: '09:00', endTime: '18:00', enabled: true }, // Jueves
-          { id: '5', dayOfWeek: 5, startTime: '09:00', endTime: '18:00', enabled: true }, // Viernes
-          { id: '6', dayOfWeek: 6, startTime: '10:00', endTime: '14:00', enabled: true }, // Sábado
-          { id: '7', dayOfWeek: 0, startTime: '00:00', endTime: '23:59', enabled: false }  // Domingo
-        ]
-      }
-    }
-  ]);
+  const [assistants, setAssistants] = useState<Assistant[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+
+  // Cargar asistentes desde el backend
+  const loadAssistants = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.getAssistants();
+      if (response.success && response.data) {
+        const data = response.data as any;
+        setAssistants(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading assistants:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAssistants();
+  }, []);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -111,29 +97,35 @@ export const AssistantsPage: React.FC = () => {
     { value: 6, label: 'Sábado', short: 'Sáb' }
   ];
 
-  const handleCreateAssistant = () => {
+  const handleCreateAssistant = async () => {
     if (!formData.name.trim()) return;
 
-    const newAssistant: Assistant = {
-      id: Date.now().toString(),
-      name: formData.name,
-      description: formData.description,
-      status: 'active',
-      type: formData.type,
-      integrations: formData.integrations,
-      createdAt: new Date().toISOString().split('T')[0],
-      lastUsed: new Date().toISOString().split('T')[0],
-      responses: {
-        autoResponse: formData.type === 'auto' ? formData.autoResponse : undefined,
-        aiPrompt: formData.type === 'ai' ? formData.aiPrompt : undefined,
-        documents: formData.documents.map(file => file.name),
-        schedule: formData.type === 'auto' ? formData.schedule : undefined
-      }
-    };
+    try {
+      const assistantData = {
+        name: formData.name,
+        description: formData.description,
+        type: formData.type,
+        integrations: formData.integrations,
+        responses: {
+          autoResponse: formData.type === 'auto' ? formData.autoResponse : undefined,
+          aiPrompt: formData.type === 'ai' ? formData.aiPrompt : undefined,
+          documents: formData.documents.map(file => file.name),
+          schedule: formData.type === 'auto' ? formData.schedule : undefined
+        }
+      };
 
-    setAssistants([...assistants, newAssistant]);
-    setShowCreateModal(false);
-    resetForm();
+      const response = await apiService.createAssistant(assistantData);
+      if (response.success) {
+        setShowCreateModal(false);
+        resetForm();
+        loadAssistants(); // Recargar la lista
+      } else {
+        alert('Error al crear el asistente');
+      }
+    } catch (error) {
+      console.error('Error creating assistant:', error);
+      alert('Error al crear el asistente');
+    }
   };
 
   const handleEditAssistant = (assistant: Assistant) => {
@@ -151,42 +143,69 @@ export const AssistantsPage: React.FC = () => {
     setShowCreateModal(true);
   };
 
-  const handleUpdateAssistant = () => {
+  const handleUpdateAssistant = async () => {
     if (!editingAssistant || !formData.name.trim()) return;
 
-    const updatedAssistant: Assistant = {
-      ...editingAssistant,
-      name: formData.name,
-      description: formData.description,
-      type: formData.type,
-      integrations: formData.integrations,
-      responses: {
-        autoResponse: formData.type === 'auto' ? formData.autoResponse : undefined,
-        aiPrompt: formData.type === 'ai' ? formData.aiPrompt : undefined,
-        documents: formData.documents.length > 0 
-          ? formData.documents.map(file => file.name)
-          : editingAssistant.responses.documents || [],
-        schedule: formData.type === 'auto' ? formData.schedule : undefined
+    try {
+      const updateData = {
+        name: formData.name,
+        description: formData.description,
+        type: formData.type,
+        integrations: formData.integrations,
+        responses: {
+          autoResponse: formData.type === 'auto' ? formData.autoResponse : undefined,
+          aiPrompt: formData.type === 'ai' ? formData.aiPrompt : undefined,
+          documents: formData.documents.length > 0 
+            ? formData.documents.map(file => file.name)
+            : editingAssistant.responses.documents || [],
+          schedule: formData.type === 'auto' ? formData.schedule : undefined
+        }
+      };
+
+      const response = await apiService.updateAssistant(editingAssistant.id, updateData);
+      if (response.success) {
+        setShowCreateModal(false);
+        setEditingAssistant(null);
+        resetForm();
+        loadAssistants(); // Recargar la lista
+      } else {
+        alert('Error al actualizar el asistente');
       }
-    };
-
-    setAssistants(assistants.map(a => a.id === editingAssistant.id ? updatedAssistant : a));
-    setShowCreateModal(false);
-    setEditingAssistant(null);
-    resetForm();
+    } catch (error) {
+      console.error('Error updating assistant:', error);
+      alert('Error al actualizar el asistente');
+    }
   };
 
-  const handleDeleteAssistant = (id: string) => {
-    setAssistants(assistants.filter(a => a.id !== id));
-    setShowDeleteConfirm(null);
+  const handleDeleteAssistant = async (id: string) => {
+    try {
+      const response = await apiService.deleteAssistant(id);
+      if (response.success) {
+        setShowDeleteConfirm(null);
+        loadAssistants(); // Recargar la lista
+      } else {
+        alert('Error al eliminar el asistente');
+      }
+    } catch (error) {
+      console.error('Error deleting assistant:', error);
+      alert('Error al eliminar el asistente');
+    }
   };
 
-  const toggleAssistantStatus = (id: string) => {
-    setAssistants(assistants.map(a => 
-      a.id === id 
-        ? { ...a, status: a.status === 'active' ? 'inactive' : 'active' }
-        : a
-    ));
+  const toggleAssistantStatus = async (id: string) => {
+    try {
+      const response = await apiService.updateAssistant(id, { 
+        status: assistants.find(a => a.id === id)?.status === 'active' ? 'inactive' : 'active' 
+      });
+      if (response.success) {
+        loadAssistants(); // Recargar la lista
+      } else {
+        alert('Error al cambiar el estado del asistente');
+      }
+    } catch (error) {
+      console.error('Error toggling assistant status:', error);
+      alert('Error al cambiar el estado del asistente');
+    }
   };
 
   const resetForm = () => {
@@ -277,21 +296,36 @@ export const AssistantsPage: React.FC = () => {
               Crea y gestiona tus asistentes de IA personalizados
             </p>
           </div>
-          <button
-            onClick={() => {
-              resetForm();
-              setEditingAssistant(null);
-              setShowCreateModal(true);
-            }}
-            className="mt-4 sm:mt-0 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-2"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Nuevo Asistente</span>
-          </button>
+          <div className="flex space-x-3">
+            <button
+              onClick={loadAssistants}
+              disabled={loading}
+              className="mt-4 sm:mt-0 bg-gray-500 text-white px-4 py-3 rounded-xl font-medium hover:bg-gray-600 transition-all duration-200 flex items-center space-x-2 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              <span>Actualizar</span>
+            </button>
+            <button
+              onClick={() => {
+                resetForm();
+                setEditingAssistant(null);
+                setShowCreateModal(true);
+              }}
+              className="mt-4 sm:mt-0 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-2"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Nuevo Asistente</span>
+            </button>
+          </div>
         </div>
 
         {/* Assistants Grid */}
-        {assistants.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
+            <p className="text-gray-600 dark:text-gray-400 mt-4">Cargando asistentes...</p>
+          </div>
+        ) : assistants.length === 0 ? (
           <div className="text-center py-12">
             <div className="w-24 h-24 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-3xl flex items-center justify-center mx-auto mb-6">
               <Bot className="w-12 h-12 text-purple-500" />

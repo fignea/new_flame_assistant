@@ -1,6 +1,6 @@
 // Configuración de la API
 const API_BASE_URL = 'http://localhost:3001';
-const WS_BASE_URL = 'ws://localhost:3001';
+const WS_BASE_URL = 'http://localhost:3001';
 
 export const apiConfig = {
   baseURL: API_BASE_URL,

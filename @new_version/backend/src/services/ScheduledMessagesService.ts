@@ -12,7 +12,7 @@ export class ScheduledMessagesService {
   }
 
   private startScheduler(): void {
-    // Ejecutar cada minuto para verificar mensajes programados
+    // Ejecutar cada minuto para verificar programación
     cron.schedule('* * * * *', async () => {
       if (this.isRunning) return; // Evitar ejecuciones concurrentes
       
@@ -31,7 +31,7 @@ export class ScheduledMessagesService {
 
   private async processPendingMessages(): Promise<void> {
     try {
-      // Obtener mensajes programados pendientes que ya deben enviarse
+      // Obtener programación pendientes que ya deben enviarse
       const result = await database.query(
         `SELECT sm.*, c.whatsapp_id, c.name as contact_name
          FROM scheduled_messages sm

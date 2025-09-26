@@ -124,7 +124,7 @@ class DatabaseConfig {
         )
       `);
 
-      // Tabla de mensajes programados
+      // Tabla de programación
       await this.pool.query(`
         CREATE TABLE IF NOT EXISTS scheduled_messages (
           id SERIAL PRIMARY KEY,
@@ -161,9 +161,10 @@ class DatabaseConfig {
           user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
           name VARCHAR(255) NOT NULL,
           description TEXT,
-          system_prompt TEXT,
-          model VARCHAR(100) DEFAULT 'gpt-3.5-turbo',
-          is_active BOOLEAN DEFAULT TRUE,
+          type VARCHAR(50) NOT NULL,
+          integrations TEXT DEFAULT '[]',
+          responses TEXT DEFAULT '{}',
+          status VARCHAR(50) DEFAULT 'active',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )

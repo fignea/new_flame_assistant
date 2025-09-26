@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   MessageSquare, 
   Users, 
@@ -10,44 +10,120 @@ import {
   CheckCircle,
   AlertCircle,
   BarChart3,
-  Activity
+  Activity,
+  RefreshCw
 } from 'lucide-react';
+import { apiService } from '../../services/api.service';
 
 export const DashboardPage: React.FC = () => {
-  const stats = [
+  const [stats, setStats] = useState([
     {
       title: 'Conversaciones Activas',
-      value: '24',
-      change: '+12%',
+      value: '0',
+      change: '+0%',
       changeType: 'positive',
       icon: MessageSquare,
       color: 'from-blue-500 to-cyan-500'
     },
     {
       title: 'Mensajes Hoy',
-      value: '1,247',
-      change: '+8%',
+      value: '0',
+      change: '+0%',
       changeType: 'positive',
       icon: Zap,
       color: 'from-purple-500 to-pink-500'
     },
     {
-      title: 'Contactos Nuevos',
-      value: '156',
-      change: '+23%',
+      title: 'Contactos Totales',
+      value: '0',
+      change: '+0%',
       changeType: 'positive',
       icon: Users,
       color: 'from-green-500 to-emerald-500'
     },
     {
-      title: 'Tiempo Respuesta',
-      value: '2.3m',
-      change: '-15%',
+      title: 'Programación',
+      value: '0',
+      change: '+0%',
       changeType: 'positive',
       icon: Clock,
       color: 'from-orange-500 to-red-500'
     }
-  ];
+  ]);
+
+  const [whatsappStatus, setWhatsappStatus] = useState<{
+    isConnected: boolean;
+    isAuthenticated: boolean;
+    phoneNumber?: string;
+    userName?: string;
+  } | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  // Cargar datos del dashboard
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // Cargar estado de WhatsApp
+      const whatsappResponse = await apiService.getWhatsAppStatus();
+      if (whatsappResponse.success) {
+        setWhatsappStatus(whatsappResponse.data);
+      }
+
+      // Cargar contactos
+      const contactsResponse = await apiService.getContacts({ page: 1, limit: 1 });
+      if (contactsResponse.success && contactsResponse.data) {
+        const contactsData = contactsResponse.data as any;
+        setStats(prev => prev.map(stat => 
+          stat.title === 'Contactos Totales' 
+            ? { ...stat, value: contactsData.pagination?.total?.toString() || '0' }
+            : stat
+        ));
+      }
+
+      // Cargar programación
+      const scheduledResponse = await apiService.getScheduledMessages({ page: 1, limit: 1 });
+      if (scheduledResponse.success && scheduledResponse.data) {
+        const scheduledData = scheduledResponse.data as any;
+        setStats(prev => prev.map(stat => 
+          stat.title === 'Programación' 
+            ? { ...stat, value: scheduledData.pagination?.total?.toString() || '0' }
+            : stat
+        ));
+      }
+
+      // Cargar estadísticas de mensajes
+      const messagesResponse = await apiService.getMessageStats();
+      if (messagesResponse.success && messagesResponse.data) {
+        const messagesData = messagesResponse.data;
+        setStats(prev => prev.map(stat => {
+          if (stat.title === 'Mensajes Hoy') {
+            return { ...stat, value: messagesData.today?.toString() || '0' };
+          }
+          if (stat.title === 'Conversaciones Activas') {
+            return { ...stat, value: messagesData.activeConversations?.toString() || '0' };
+          }
+          return stat;
+        }));
+      }
+
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboardData();
+    
+    // Actualizar datos cada 30 segundos
+    const interval = setInterval(loadDashboardData, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const recentActivities = [
     {
@@ -135,9 +211,24 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>Sistema Online</span>
+                <div className={`w-2 h-2 rounded-full animate-pulse ${
+                  whatsappStatus?.isConnected ? 'bg-green-500' : 'bg-red-500'
+                }`}></div>
+                <span>
+                  {whatsappStatus?.isConnected 
+                    ? `WhatsApp Conectado${whatsappStatus.userName ? ` - ${whatsappStatus.userName}` : ''}`
+                    : 'WhatsApp Desconectado'
+                  }
+                </span>
               </div>
+              <button
+                onClick={loadDashboardData}
+                disabled={loading}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
+                title="Actualizar datos"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
             </div>
           </div>
         </div>
@@ -180,7 +271,7 @@ export const DashboardPage: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">Actividad Reciente</h2>
                 <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
                   <Activity className="w-4 h-4" />
-                  <span>Tiempo real</span>
+                  <span>Última actualización: {lastUpdated.toLocaleTimeString()}</span>
                 </div>
               </div>
               <div className="space-y-4">

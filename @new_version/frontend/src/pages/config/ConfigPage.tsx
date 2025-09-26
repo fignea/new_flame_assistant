@@ -1,14 +1,69 @@
-import React, { useState } from 'react';
-import { Settings, User, Bell, Shield, Database, Palette, Globe, Key } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, User, Bell, Shield, Database, Palette, Globe, Key, RefreshCw } from 'lucide-react';
+import { apiService } from '../../services/api.service';
 
 export const ConfigPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('profile');
+  const [profile, setProfile] = useState({
+    name: '',
+    email: '',
+    created_at: ''
+  });
+  const [systemInfo, setSystemInfo] = useState<any>(null);
+  const [databaseStatus, setDatabaseStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Cargar datos del perfil
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.getProfile();
+      if (response.success && response.data) {
+        setProfile(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cargar información del sistema
+  const loadSystemInfo = async () => {
+    try {
+      const response = await apiService.get('/api/config/system-info');
+      if (response.success && response.data) {
+        setSystemInfo(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading system info:', error);
+    }
+  };
+
+  // Cargar estado de la base de datos
+  const loadDatabaseStatus = async () => {
+    try {
+      const response = await apiService.get('/api/config/database-status');
+      if (response.success && response.data) {
+        setDatabaseStatus(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading database status:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadProfile();
+    loadSystemInfo();
+    loadDatabaseStatus();
+  }, []);
 
   const tabs = [
     { id: 'profile', name: 'Perfil', icon: User },
     { id: 'notifications', name: 'Notificaciones', icon: Bell },
     { id: 'security', name: 'Seguridad', icon: Shield },
     { id: 'database', name: 'Base de Datos', icon: Database },
+    { id: 'system', name: 'Sistema', icon: Settings },
     { id: 'appearance', name: 'Apariencia', icon: Palette },
     { id: 'integrations', name: 'Integraciones', icon: Globe },
     { id: 'api', name: 'API Keys', icon: Key },
@@ -28,7 +83,8 @@ export const ConfigPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre</label>
                 <input
                   type="text"
-                  defaultValue="Admin User"
+                  value={profile.name}
+                  onChange={(e) => setProfile({...profile, name: e.target.value})}
                   className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
@@ -36,7 +92,8 @@ export const ConfigPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
                 <input
                   type="email"
-                  defaultValue="admin@flame.com"
+                  value={profile.email}
+                  onChange={(e) => setProfile({...profile, email: e.target.value})}
                   className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
@@ -124,15 +181,64 @@ export const ConfigPage: React.FC = () => {
               <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Estado de Conexión</h4>
                 <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Conectado</span>
+                  <div className={`w-2 h-2 rounded-full ${databaseStatus?.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {databaseStatus?.connected ? 'Conectado' : 'Desconectado'}
+                  </span>
                 </div>
               </div>
               <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Tipo de Base de Datos</h4>
-                <span className="text-sm text-gray-600 dark:text-gray-400">PostgreSQL 15</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {databaseStatus?.type || 'PostgreSQL'} {databaseStatus?.version || '15'}
+                </span>
               </div>
             </div>
+          </div>
+        );
+      
+      case 'system':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Información del Sistema</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Estadísticas y estado del sistema.</p>
+            </div>
+            {systemInfo ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Usuarios Totales</h4>
+                  <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{systemInfo.totalUsers}</span>
+                </div>
+                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Contactos</h4>
+                  <span className="text-2xl font-bold text-green-600 dark:text-green-400">{systemInfo.totalContacts}</span>
+                </div>
+                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Mensajes</h4>
+                  <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">{systemInfo.totalMessages}</span>
+                </div>
+                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Programación</h4>
+                  <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">{systemInfo.totalScheduledMessages}</span>
+                </div>
+                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Asistentes</h4>
+                  <span className="text-2xl font-bold text-pink-600 dark:text-pink-400">{systemInfo.totalAssistants}</span>
+                </div>
+                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Tiempo de Actividad</h4>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {Math.floor(systemInfo.systemUptime / 3600)}h {Math.floor((systemInfo.systemUptime % 3600) / 60)}m
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <RefreshCw className="w-8 h-8 text-gray-400 mx-auto mb-2 animate-spin" />
+                <p className="text-gray-500 dark:text-gray-400">Cargando información del sistema...</p>
+              </div>
+            )}
           </div>
         );
       
