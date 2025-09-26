@@ -878,11 +878,35 @@ export class WhatsAppService extends EventEmitter {
         }
       } else {
         // Para contactos individuales, crear un objeto básico
-        // ya que getContactInfo no está disponible en esta versión de Baileys
+        // La API de Baileys no proporciona getContactInfo en esta versión
         contactInfo = {
           name: undefined,
           notify: undefined
         };
+        
+        // Intentar obtener el nombre del contacto desde la base de datos existente
+        try {
+          const existingContact = await database.get(
+            'SELECT name FROM contacts WHERE whatsapp_id = $1',
+            [whatsappId]
+          );
+          if (existingContact && existingContact.name) {
+            contactInfo.name = existingContact.name;
+            logger.info(`✅ Usando nombre existente de la base de datos para ${whatsappId}: ${existingContact.name}`);
+          } else {
+            // Intentar obtener el nombre desde los mensajes recientes
+            const recentMessage = await database.get(
+              'SELECT sender_name FROM whatsapp_messages WHERE sender_id = $1 AND sender_name IS NOT NULL ORDER BY timestamp DESC LIMIT 1',
+              [whatsappId]
+            );
+            if (recentMessage && recentMessage.sender_name) {
+              contactInfo.name = recentMessage.sender_name;
+              logger.info(`✅ Usando nombre desde mensajes recientes para ${whatsappId}: ${recentMessage.sender_name}`);
+            }
+          }
+        } catch (error) {
+          logger.debug(`No se pudo obtener el nombre existente para ${whatsappId}:`, error);
+        }
       }
       
       if (!contactInfo) {
@@ -897,6 +921,24 @@ export class WhatsAppService extends EventEmitter {
         avatarUrl = profilePicture;
       } catch (error) {
         logger.debug(`No se pudo obtener la foto de perfil para ${whatsappId}:`, error);
+        // No lanzar error, continuar sin avatar
+      }
+
+      // Obtener el nombre del contacto
+      let contactName = contactInfo.name || contactInfo.subject || contactInfo.notify;
+      
+      // Si no tenemos nombre para contactos individuales, intentar obtenerlo de otra manera
+      if (!contactName && !isGroup) {
+        try {
+          // Intentar obtener el nombre usando el método de WhatsApp
+          const name = await this.getContactNameFromWhatsApp(activeSession, whatsappId);
+          if (name) {
+            contactName = name;
+            logger.info(`✅ Nombre obtenido para contacto individual ${whatsappId}: ${name}`);
+          }
+        } catch (error) {
+          logger.debug(`No se pudo obtener el nombre para ${whatsappId}:`, error);
+        }
       }
 
       // Extraer el número de teléfono si no es un grupo
@@ -907,7 +949,7 @@ export class WhatsAppService extends EventEmitter {
 
       const contactData: WhatsAppContact = {
         id: whatsappId,
-        name: contactInfo.subject || contactInfo.name || contactInfo.notify || undefined,
+        name: contactName || undefined,
         phoneNumber: phoneNumber,
         isGroup: isGroup,
         avatarUrl: avatarUrl,
@@ -925,6 +967,22 @@ export class WhatsAppService extends EventEmitter {
 
     } catch (error) {
       logger.error(`Error fetching contact data for ${whatsappId}:`, error);
+      return null;
+    }
+  }
+
+  // Método auxiliar para obtener el nombre del contacto desde WhatsApp
+  private async getContactNameFromWhatsApp(socket: WASocket, whatsappId: string): Promise<string | null> {
+    try {
+      // Por ahora, simplemente retornamos null ya que la API de Baileys
+      // no proporciona métodos directos para obtener nombres de contactos individuales
+      // en esta versión. Los nombres se obtienen principalmente cuando el usuario
+      // actualiza su perfil o cuando se reciben mensajes.
+      
+      logger.debug(`No se puede obtener el nombre del contacto ${whatsappId} - API limitada`);
+      return null;
+    } catch (error) {
+      logger.debug(`Error obteniendo nombre del contacto ${whatsappId}:`, error);
       return null;
     }
   }

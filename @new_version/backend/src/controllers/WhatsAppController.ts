@@ -834,6 +834,9 @@ export class WhatsAppController {
     try {
       const userId = req.user?.id;
       const { whatsappId } = req.params;
+      
+      // Decodificar el whatsappId que viene codificado en la URL
+      const decodedWhatsappId = decodeURIComponent(whatsappId);
 
       if (!userId) {
         return res.status(401).json({
@@ -842,17 +845,43 @@ export class WhatsAppController {
         });
       }
 
-      if (!whatsappId) {
+      if (!decodedWhatsappId) {
         return res.status(400).json({
           success: false,
           message: 'ID de WhatsApp es requerido'
         });
       }
 
-      logger.info(`🔄 Fetching contact data for WhatsApp ID: ${whatsappId}, User: ${userId}`);
+      logger.info(`🔄 Fetching contact data for WhatsApp ID: ${decodedWhatsappId}, User: ${userId}`);
+
+      // Verificar si hay una sesión activa de WhatsApp
+      const whatsappStatus = whatsappService.getConnectionStatus(userId);
+      if (!whatsappStatus.isConnected) {
+        logger.warn(`WhatsApp no está conectado. Intentando reconectar...`);
+        try {
+          await whatsappService.forceReconnect(userId);
+          // Esperar un momento para que la conexión se establezca
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (reconnectError) {
+          logger.error('Error al reconectar WhatsApp:', reconnectError);
+          return res.status(503).json({
+            success: false,
+            message: 'WhatsApp no está conectado. Por favor, reconecta desde la página de integraciones.'
+          });
+        }
+      }
 
       // Obtener datos actualizados desde WhatsApp
-      const contactData = await whatsappService.getContactData(whatsappId);
+      let contactData;
+      try {
+        contactData = await whatsappService.getContactData(decodedWhatsappId);
+      } catch (error) {
+        logger.error(`Error obteniendo datos del contacto ${decodedWhatsappId}:`, error);
+        return res.status(500).json({
+          success: false,
+          message: 'Error interno al obtener los datos del contacto/grupo'
+        });
+      }
 
       if (!contactData) {
         return res.status(404).json({
@@ -868,7 +897,7 @@ export class WhatsAppController {
           contactData.name || null,
           contactData.avatarUrl || null,
           contactData.phoneNumber || null,
-          whatsappId,
+          decodedWhatsappId,
           userId
         ]
       );

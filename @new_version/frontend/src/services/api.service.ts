@@ -447,7 +447,7 @@ export class ApiService {
   }
 
   async getContactData(whatsappId: string) {
-    return this.get<Contact>(`/api/whatsapp/contacts/data/${whatsappId}`);
+    return this.get<Contact>(`/api/whatsapp/contacts/data/${encodeURIComponent(whatsappId)}`);
   }
 
   // Métodos para programación
