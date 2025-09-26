@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { io, Socket } from 'socket.io-client';
 import { wsConfig } from '../config/api';
 
 export interface WebSocketMessage {
@@ -30,36 +31,27 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
 
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
 
   const connect = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (socketRef.current?.connected) {
       return;
     }
 
     try {
-      const ws = new WebSocket(wsConfig.url);
-      wsRef.current = ws;
+      const socket = io(wsConfig.url, wsConfig.options);
+      socketRef.current = socket;
 
-      ws.onopen = () => {
+      socket.on('connect', () => {
         setIsConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
         onConnect?.();
-      };
+      });
 
-      ws.onmessage = (event) => {
-        try {
-          const message: WebSocketMessage = JSON.parse(event.data);
-          onMessage?.(message);
-        } catch (err) {
-          console.error('Error parsing WebSocket message:', err);
-        }
-      };
-
-      ws.onclose = () => {
+      socket.on('disconnect', () => {
         setIsConnected(false);
         onDisconnect?.();
         
@@ -70,16 +62,25 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
             connect();
           }, reconnectInterval);
         }
-      };
+      });
 
-      ws.onerror = (event) => {
-        setError('WebSocket connection error');
-        onError?.(event);
-      };
+      socket.on('error', (err) => {
+        setError('Socket.IO connection error');
+        onError?.(err);
+      });
+
+      // Escuchar todos los eventos de mensaje
+      socket.onAny((eventName, ...args) => {
+        onMessage?.({
+          type: eventName,
+          data: args[0],
+          timestamp: Date.now()
+        });
+      });
 
     } catch (err) {
-      setError('Failed to create WebSocket connection');
-      console.error('WebSocket connection error:', err);
+      setError('Failed to create Socket.IO connection');
+      console.error('Socket.IO connection error:', err);
     }
   };
 
@@ -89,34 +90,32 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
       reconnectTimeoutRef.current = null;
     }
     
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
     }
     
     setIsConnected(false);
   };
 
   const sendMessage = (message: any) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('message', message);
     } else {
-      console.warn('WebSocket is not connected');
+      console.warn('Socket.IO is not connected');
     }
   };
 
   const joinRoom = (room: string) => {
-    sendMessage({
-      type: 'join-room',
-      room
-    });
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('join-room', room);
+    }
   };
 
   const leaveRoom = (room: string) => {
-    sendMessage({
-      type: 'leave-room',
-      room
-    });
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('leave-room', room);
+    }
   };
 
   const joinUserRoom = (userId: string) => {

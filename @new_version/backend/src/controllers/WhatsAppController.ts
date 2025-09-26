@@ -829,6 +829,60 @@ export class WhatsAppController {
     }
   }
 
+  // Actualizar nombre del contacto manualmente
+  public async updateContactName(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+    try {
+      const userId = req.user?.id;
+      const { whatsappId } = req.params;
+      const { name } = req.body;
+      
+      // Decodificar el whatsappId que viene codificado en la URL
+      const decodedWhatsappId = decodeURIComponent(whatsappId);
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!decodedWhatsappId || !name) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de WhatsApp y nombre son requeridos'
+        });
+      }
+
+      logger.info(`🔄 Updating contact name for WhatsApp ID: ${decodedWhatsappId}, Name: ${name}, User: ${userId}`);
+
+      // Actualizar el nombre del contacto en la base de datos
+      const result = await database.query(
+        'UPDATE contacts SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE whatsapp_id = $2 AND user_id = $3 RETURNING *',
+        [name, decodedWhatsappId, userId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Contacto no encontrado'
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: result.rows[0],
+        message: 'Nombre del contacto actualizado exitosamente'
+      });
+
+    } catch (error) {
+      logger.error('Update contact name error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al actualizar el nombre del contacto'
+      });
+    }
+  }
+
   // Obtener datos actualizados del contacto/grupo desde WhatsApp
   public async getContactData(req: AuthenticatedRequest, res: Response<ApiResponse>) {
     try {

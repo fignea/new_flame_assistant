@@ -33,6 +33,7 @@ router.get('/chats/:chatId/messages', authenticate, whatsappController.getChatMe
 // Contactos (con autenticación)
 router.get('/contacts', authenticate, whatsappController.getContacts.bind(whatsappController));
 router.get('/contacts/data/:whatsappId', authenticate, whatsappController.getContactData.bind(whatsappController));
+router.put('/contacts/name/:whatsappId', authenticate, whatsappController.updateContactName.bind(whatsappController));
 router.get('/contacts/:id', authenticate, whatsappController.getContactById.bind(whatsappController));
 router.put('/contacts/:id', authenticate, whatsappController.updateContact.bind(whatsappController));
 router.post('/contacts/:id/block', authenticate, whatsappController.blockContact.bind(whatsappController));

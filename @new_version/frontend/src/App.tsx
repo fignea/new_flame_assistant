@@ -4,6 +4,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { AppProvider, useApp } from './contexts/AppContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationProvider } from './components/NotificationSystem';
+import { useWhatsAppNotifications } from './hooks/useWhatsAppNotifications';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import LandingPage from './pages/LandingPage';
 import { LoginPage } from './pages/auth/LoginPage';
@@ -16,6 +17,12 @@ import { IntegrationsPage } from './pages/integrations/IntegrationsPage';
 import { ConfigPage } from './pages/config/ConfigPage';
 import { ScheduledMessagesPage } from './pages/scheduled/ScheduledMessagesPage';
 
+// Componente para manejar notificaciones de WhatsApp
+const WhatsAppNotificationHandler: React.FC = () => {
+  useWhatsAppNotifications();
+  return null;
+};
+
 // Componente para rutas protegidas
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useApp();
@@ -24,7 +31,12 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/login" replace />;
   }
   
-  return <>{children}</>;
+  return (
+    <>
+      <WhatsAppNotificationHandler />
+      {children}
+    </>
+  );
 };
 
 // Componente para rutas públicas (solo accesibles si no estás logueado)

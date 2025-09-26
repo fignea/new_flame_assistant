@@ -894,14 +894,20 @@ export class WhatsAppService extends EventEmitter {
             contactInfo.name = existingContact.name;
             logger.info(`✅ Usando nombre existente de la base de datos para ${whatsappId}: ${existingContact.name}`);
           } else {
-            // Intentar obtener el nombre desde los mensajes recientes
-            const recentMessage = await database.get(
-              'SELECT sender_name FROM whatsapp_messages WHERE sender_id = $1 AND sender_name IS NOT NULL ORDER BY timestamp DESC LIMIT 1',
-              [whatsappId]
-            );
-            if (recentMessage && recentMessage.sender_name) {
-              contactInfo.name = recentMessage.sender_name;
-              logger.info(`✅ Usando nombre desde mensajes recientes para ${whatsappId}: ${recentMessage.sender_name}`);
+            logger.info(`⚠️ No se encontró nombre en la base de datos para ${whatsappId}`);
+            // Para contactos individuales, intentar obtener el nombre desde WhatsApp directamente
+            // Esto es limitado en Baileys, pero podemos intentar
+            try {
+              // Intentar obtener el nombre usando el método de WhatsApp
+              const name = await this.getContactNameFromWhatsApp(activeSession, whatsappId);
+              if (name) {
+                contactInfo.name = name;
+                logger.info(`✅ Nombre obtenido desde WhatsApp para ${whatsappId}: ${name}`);
+              } else {
+                logger.info(`⚠️ No se pudo obtener el nombre desde WhatsApp para ${whatsappId}`);
+              }
+            } catch (error) {
+              logger.debug(`Error obteniendo nombre desde WhatsApp para ${whatsappId}:`, error);
             }
           }
         } catch (error) {
@@ -974,11 +980,19 @@ export class WhatsAppService extends EventEmitter {
   // Método auxiliar para obtener el nombre del contacto desde WhatsApp
   private async getContactNameFromWhatsApp(socket: WASocket, whatsappId: string): Promise<string | null> {
     try {
-      // Por ahora, simplemente retornamos null ya que la API de Baileys
-      // no proporciona métodos directos para obtener nombres de contactos individuales
-      // en esta versión. Los nombres se obtienen principalmente cuando el usuario
-      // actualiza su perfil o cuando se reciben mensajes.
+      // La API de Baileys tiene limitaciones para obtener nombres de contactos individuales
+      // En esta versión, los nombres se obtienen principalmente cuando:
+      // 1. El usuario actualiza su perfil
+      // 2. Se reciben mensajes con información del remitente
+      // 3. Se sincroniza la lista de contactos
       
+      logger.debug(`Intentando obtener nombre del contacto ${whatsappId} desde WhatsApp`);
+      
+      // Por ahora, la API de Baileys no proporciona métodos directos para obtener
+      // nombres de contactos individuales en esta versión. Los nombres se obtienen
+      // principalmente cuando se reciben mensajes o cuando el usuario actualiza su perfil.
+      
+      // TODO: Implementar métodos alternativos cuando estén disponibles en Baileys
       logger.debug(`No se puede obtener el nombre del contacto ${whatsappId} - API limitada`);
       return null;
     } catch (error) {

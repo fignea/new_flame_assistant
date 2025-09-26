@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Info, X, MessageCircle } from 'lucide-react';
 
 export interface Notification {
   id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
+  type: 'success' | 'error' | 'warning' | 'info' | 'message';
   title: string;
   message?: string;
   duration?: number;
@@ -101,6 +101,8 @@ const NotificationItem: React.FC<NotificationItemProps> = ({ notification, onRem
         return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
       case 'info':
         return <Info className="w-5 h-5 text-blue-500" />;
+      case 'message':
+        return <MessageCircle className="w-5 h-5 text-purple-500" />;
       default:
         return <Info className="w-5 h-5 text-gray-500" />;
     }
@@ -116,6 +118,8 @@ const NotificationItem: React.FC<NotificationItemProps> = ({ notification, onRem
         return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800';
       case 'info':
         return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
+      case 'message':
+        return 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800';
       default:
         return 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800';
     }
@@ -131,6 +135,8 @@ const NotificationItem: React.FC<NotificationItemProps> = ({ notification, onRem
         return 'text-yellow-800 dark:text-yellow-200';
       case 'info':
         return 'text-blue-800 dark:text-blue-200';
+      case 'message':
+        return 'text-purple-800 dark:text-purple-200';
       default:
         return 'text-gray-800 dark:text-gray-200';
     }
@@ -197,10 +203,15 @@ export const useNotificationHelpers = () => {
     addNotification({ type: 'info', title, message });
   }, [addNotification]);
 
+  const showMessage = useCallback((title: string, message?: string, duration?: number) => {
+    addNotification({ type: 'message', title, message, duration: duration || 8000 });
+  }, [addNotification]);
+
   return {
     showSuccess,
     showError,
     showWarning,
     showInfo,
+    showMessage,
   };
 };
