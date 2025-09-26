@@ -200,7 +200,6 @@ export const ContactsPage: React.FC = () => {
     setShowContactDetails(true);
   };
 
-
   // Renderizar paginación
   const renderPagination = () => {
     const pages = [];
@@ -538,7 +537,6 @@ export const ContactsPage: React.FC = () => {
             </div>
           </div>
         )}
-
         {/* Modal de envío de mensaje */}
         {showSendMessageModal && selectedContact && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

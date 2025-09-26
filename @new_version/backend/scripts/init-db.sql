@@ -52,12 +52,15 @@ CREATE TABLE IF NOT EXISTS contacts (
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    whatsapp_message_id VARCHAR(255) NOT NULL,
+    contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
     chat_id VARCHAR(255) NOT NULL,
-    message_id VARCHAR(255) UNIQUE NOT NULL,
-    content TEXT,
+    content TEXT NOT NULL,
     message_type VARCHAR(50) DEFAULT 'text',
     is_from_me BOOLEAN DEFAULT FALSE,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    timestamp TIMESTAMP NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending',
+    media_url TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
