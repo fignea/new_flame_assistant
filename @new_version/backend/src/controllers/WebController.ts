@@ -89,6 +89,8 @@ export class WebController {
 
       // Obtener conversación completa con datos del visitante
       const fullConversation = await this.getConversationById(conversation.id, userId);
+      
+      logger.info(`Conversation created with ID: ${conversation.id}, fullConversation: ${JSON.stringify(fullConversation)}`);
 
       // Emitir evento de nueva conversación
       if (io && fullConversation) {
@@ -97,7 +99,7 @@ export class WebController {
 
       return res.json({
         success: true,
-        data: fullConversation!,
+        data: fullConversation || undefined,
         message: 'Conversación creada/obtenida exitosamente'
       });
 
@@ -168,8 +170,8 @@ export class WebController {
         status: row.status,
         assigned_to: row.assigned_to,
         priority: row.priority,
-        tags: JSON.parse(row.tags || '[]'),
-        metadata: JSON.parse(row.metadata || '{}'),
+        tags: typeof row.tags === 'string' ? JSON.parse(row.tags || '[]') : (row.tags || []),
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {}),
         last_message_at: row.last_message_at,
         created_at: row.created_at,
         updated_at: row.updated_at,
@@ -243,8 +245,8 @@ export class WebController {
         status: row.status,
         assigned_to: row.assigned_to,
         priority: row.priority,
-        tags: JSON.parse(row.tags || '[]'),
-        metadata: JSON.parse(row.metadata || '{}'),
+        tags: typeof row.tags === 'string' ? JSON.parse(row.tags || '[]') : (row.tags || []),
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {}),
         last_message_at: row.last_message_at,
         created_at: row.created_at,
         updated_at: row.updated_at,
@@ -320,7 +322,7 @@ export class WebController {
         content: row.content,
         message_type: row.message_type,
         is_read: row.is_read,
-        metadata: JSON.parse(row.metadata || '{}'),
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {}),
         created_at: row.created_at,
         sender_name: row.sender_type === 'visitor' ? row.visitor_name : row.agent_name
       }));
@@ -364,8 +366,13 @@ export class WebController {
         });
       }
 
+      // Determinar si es un agente autenticado o un visitante del widget
+      const isAuthenticatedAgent = req.user && req.user.id;
+      const senderType = isAuthenticatedAgent ? 'agent' : 'visitor';
+      const senderId = isAuthenticatedAgent ? req.user.id : conversation.visitor_id;
+      
       // Agregar mensaje
-      const message = await this.addMessage(conversation_id, 'agent', userId, content, message_type, metadata);
+      const message = await this.addMessage(conversation_id, senderType, senderId, content, message_type, metadata);
 
       // Actualizar timestamp de última actividad
       await database.query(
@@ -387,6 +394,113 @@ export class WebController {
 
     } catch (error) {
       logger.error('Error sending web message:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Enviar mensaje como agente (requiere autenticación)
+  public async sendAgentMessage(req: AuthenticatedRequest, res: Response<ApiResponse<WebMessage>>) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      const { conversation_id, content, message_type = 'text', metadata = {} }: SendWebMessageRequest = req.body;
+
+      if (!conversation_id || !content) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID de conversación y contenido son requeridos'
+        });
+      }
+
+      // Verificar que la conversación pertenece al usuario
+      const conversation = await this.getConversationById(conversation_id, userId);
+      if (!conversation) {
+        return res.status(404).json({
+          success: false,
+          message: 'Conversación no encontrada'
+        });
+      }
+
+      // Agregar mensaje como agente
+      const message = await this.addMessage(conversation_id, 'agent', userId, content, message_type, metadata);
+
+      // Actualizar timestamp de última actividad
+      await database.query(
+        'UPDATE web_conversations SET last_message_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [conversation_id]
+      );
+
+      // Emitir evento de nuevo mensaje
+      if (io) {
+        io.to(`web:conversation:${conversation_id}`).emit('web:message:new', message);
+        io.to(`web:${userId}`).emit('web:message:new', message);
+      }
+
+      return res.json({
+        success: true,
+        data: message,
+        message: 'Mensaje enviado exitosamente'
+      });
+
+    } catch (error) {
+      logger.error('Error sending agent message:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
+  // Obtener mensajes de una conversación (público para el widget)
+  public async getMessagesPublic(req: any, res: Response<ApiResponse<WebMessage[]>>) {
+    try {
+      const { conversationId } = req.params;
+      const { limit = 50, offset = 0 } = req.query;
+
+      const result = await database.query(
+        `SELECT 
+          wm.*,
+          wv.name as visitor_name,
+          u.name as agent_name
+        FROM web_messages wm
+        LEFT JOIN web_visitors wv ON wm.sender_type = 'visitor' AND wm.sender_id = wv.id
+        LEFT JOIN users u ON wm.sender_type = 'agent' AND wm.sender_id = u.id
+        WHERE wm.conversation_id = $1
+        ORDER BY wm.created_at ASC
+        LIMIT $2 OFFSET $3`,
+        [conversationId, limit, offset]
+      );
+
+      const messages = result.rows.map((row: any) => ({
+        id: row.id,
+        conversation_id: row.conversation_id,
+        sender_type: row.sender_type,
+        sender_id: row.sender_id,
+        content: row.content,
+        message_type: row.message_type,
+        is_read: row.is_read,
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {}),
+        created_at: row.created_at,
+        sender_name: row.sender_type === 'visitor' ? row.visitor_name : row.agent_name
+      }));
+
+      return res.json({
+        success: true,
+        data: messages,
+        message: 'Mensajes obtenidos exitosamente'
+      });
+
+    } catch (error) {
+      logger.error('Error getting web messages (public):', error);
       return res.status(500).json({
         success: false,
         message: 'Error interno del servidor'

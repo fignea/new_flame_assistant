@@ -1013,7 +1013,7 @@ export const InboxPage: React.FC = () => {
     const matchesPriority = priorityFilter === 'all' || conversation.priority === priorityFilter;
     const matchesPlatform = platformFilter === 'all' || conversation.platform === platformFilter;
     const matchesWhatsApp = !showWhatsAppOnly || conversation.isWhatsApp;
-    const matchesWeb = !webChatEnabled || conversation.isWeb || conversation.isWhatsApp;
+    const matchesWeb = webChatEnabled ? (conversation.isWeb || conversation.isWhatsApp) : !conversation.isWeb;
     
     return matchesSearch && matchesStatus && matchesPriority && matchesPlatform && matchesWhatsApp && matchesWeb;
   });

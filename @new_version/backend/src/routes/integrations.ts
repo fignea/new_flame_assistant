@@ -8,6 +8,7 @@ const router = Router();
 // Rutas públicas para el widget web (sin autenticación)
 router.post('/web/conversations', webController.createConversation.bind(webController));
 router.post('/web/messages', webController.sendMessage.bind(webController));
+router.get('/web/conversations/:conversationId/messages', webController.getMessagesPublic.bind(webController));
 router.get('/web/widget-script', webController.getWidgetScript.bind(webController));
 
 // Aplicar autenticación a las rutas restantes
@@ -33,7 +34,7 @@ router.get('/whatsapp/stats', whatsappController.getStats.bind(whatsappControlle
 
 // Rutas de integración Web Chat (requieren autenticación)
 router.get('/web/conversations', webController.getConversations.bind(webController));
-router.get('/web/conversations/:conversationId/messages', webController.getMessages.bind(webController));
+router.post('/web/agent-messages', webController.sendAgentMessage.bind(webController));
 router.put('/web/conversations/:conversationId', webController.updateConversation.bind(webController));
 router.post('/web/conversations/:conversationId/read', webController.markMessagesAsRead.bind(webController));
 router.get('/web/stats', webController.getStats.bind(webController));

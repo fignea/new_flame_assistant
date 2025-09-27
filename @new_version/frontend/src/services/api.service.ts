@@ -541,7 +541,7 @@ export class ApiService {
     message_type?: 'text' | 'image' | 'video' | 'audio' | 'file' | 'emoji';
     metadata?: Record<string, any>;
   }) {
-    return this.post('/api/integrations/web/messages', data);
+    return this.post('/api/integrations/web/agent-messages', data);
   }
 
   async markWebChatMessagesAsRead(conversationId: string) {

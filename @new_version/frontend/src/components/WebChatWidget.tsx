@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send } from 'lucide-react';
+import io, { Socket } from 'socket.io-client';
 
 interface WebChatWidgetProps {
   userId: number;
@@ -31,8 +32,22 @@ export const WebChatWidget: React.FC<WebChatWidgetProps> = ({
   }>>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [sessionId] = useState(() => 'session_' + Math.random().toString(36).substr(2, 9));
-  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [sessionId] = useState(() => {
+    // Persistir sessionId en localStorage
+    const stored = localStorage.getItem('flame_chat_session_id');
+    if (stored) return stored;
+    const newId = 'session_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('flame_chat_session_id', newId);
+    return newId;
+  });
+  const [conversationId, setConversationId] = useState<number | null>(() => {
+    // Persistir conversationId en sessionStorage
+    const stored = sessionStorage.getItem('flame_chat_conversation_id');
+    return stored ? parseInt(stored) : null;
+  });
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll automático a los mensajes
@@ -43,6 +58,121 @@ export const WebChatWidget: React.FC<WebChatWidgetProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Inicializar WebSocket
+  useEffect(() => {
+    const socketUrl = apiUrl.replace('/api', '');
+    const newSocket = io(socketUrl, {
+      transports: ['websocket', 'polling']
+    });
+
+    newSocket.on('connect', () => {
+      console.log('WebSocket conectado');
+      setIsConnected(true);
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('WebSocket desconectado');
+      setIsConnected(false);
+    });
+
+    // Escuchar mensajes del agente
+    newSocket.on('web:message:new', (message: any) => {
+      if (message.conversation_id === conversationId) {
+        setMessages(prev => [...prev, {
+          id: message.id.toString(),
+          content: message.content,
+          sender: 'agent' as const,
+          timestamp: new Date(message.created_at)
+        }]);
+      }
+    });
+
+    // Escuchar indicador de escritura
+    newSocket.on('web:typing:start', () => {
+      setIsTyping(true);
+    });
+
+    newSocket.on('web:typing:stop', () => {
+      setIsTyping(false);
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.close();
+    };
+  }, [apiUrl, conversationId]);
+
+  // Polling como respaldo
+  useEffect(() => {
+    if (!isConnected && conversationId) {
+      const interval = setInterval(async () => {
+        try {
+          const response = await fetch(`${apiUrl}/conversations/${conversationId}/messages?limit=50`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.data) {
+              const newMessages = data.data.map((msg: any) => ({
+                id: msg.id.toString(),
+                content: msg.content,
+                sender: msg.sender_type as 'visitor' | 'agent',
+                timestamp: new Date(msg.created_at)
+              }));
+              setMessages(prev => {
+                const existingIds = new Set(prev.map(m => m.id));
+                const uniqueNew = newMessages.filter((m: any) => !existingIds.has(m.id));
+                return [...prev, ...uniqueNew].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error en polling:', error);
+        }
+      }, 3000); // Polling cada 3 segundos
+
+      setPollingInterval(interval);
+    } else if (pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
+    }
+
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [isConnected, conversationId, apiUrl]);
+
+  // Cargar mensajes existentes al abrir el widget
+  useEffect(() => {
+    if (isOpen && conversationId) {
+      loadMessages();
+    }
+  }, [isOpen, conversationId]);
+
+  // Cargar mensajes existentes
+  const loadMessages = async () => {
+    if (!conversationId) return;
+    
+    try {
+      const response = await fetch(`${apiUrl}/conversations/${conversationId}/messages?limit=50`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          const loadedMessages = data.data.map((msg: any) => ({
+            id: msg.id.toString(),
+            content: msg.content,
+            sender: msg.sender_type as 'visitor' | 'agent',
+            timestamp: new Date(msg.created_at)
+          }));
+          setMessages(loadedMessages);
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando mensajes:', error);
+    }
+  };
 
   // Enviar mensaje
   const sendMessage = async () => {
@@ -79,7 +209,9 @@ export const WebChatWidget: React.FC<WebChatWidgetProps> = ({
 
         if (response.ok) {
           const data = await response.json();
-          setConversationId(data.data.id);
+          const newConversationId = data.data.id;
+          setConversationId(newConversationId);
+          sessionStorage.setItem('flame_chat_conversation_id', newConversationId.toString());
         }
       } else {
         // Enviar mensaje a conversación existente
