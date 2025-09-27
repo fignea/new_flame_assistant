@@ -596,6 +596,9 @@ export class WebController {
       const { domain } = req.query;
 
       const script = `
+<!-- Flame Chat Widget -->
+<script src="https://cdn.jsdelivr.net/gh/flame-ai/chat-widget@latest/dist/flame-chat-widget.min.js"></script>
+<script>
 (function() {
   // Configuración del widget
   const config = {
@@ -814,13 +817,14 @@ export class WebController {
     }
   }
 
-  // Cargar cuando el DOM esté listo
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+  // Inicializar el widget de Flame Chat
+  if (window.FlameChatWidget) {
+    window.FlameChatWidget.init(config);
   } else {
-    init();
+    console.error('Flame Chat Widget no se pudo cargar. Verifica que el script esté incluido correctamente.');
   }
 })();
+</script>
       `;
 
       return res.json({
