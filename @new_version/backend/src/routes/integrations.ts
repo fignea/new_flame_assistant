@@ -5,7 +5,12 @@ import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
-// Aplicar autenticación a todas las rutas
+// Rutas públicas para el widget web (sin autenticación)
+router.post('/web/conversations', webController.createConversation.bind(webController));
+router.post('/web/messages', webController.sendMessage.bind(webController));
+router.get('/web/widget-script', webController.getWidgetScript.bind(webController));
+
+// Aplicar autenticación a las rutas restantes
 router.use(authenticate);
 
 // Rutas de integración de WhatsApp
@@ -26,14 +31,11 @@ router.get('/whatsapp/contacts/:id', whatsappController.getContactById.bind(what
 // Estadísticas
 router.get('/whatsapp/stats', whatsappController.getStats.bind(whatsappController));
 
-// Rutas de integración Web Chat
-router.post('/web/conversations', webController.createConversation.bind(webController));
+// Rutas de integración Web Chat (requieren autenticación)
 router.get('/web/conversations', webController.getConversations.bind(webController));
 router.get('/web/conversations/:conversationId/messages', webController.getMessages.bind(webController));
-router.post('/web/messages', webController.sendMessage.bind(webController));
 router.put('/web/conversations/:conversationId', webController.updateConversation.bind(webController));
 router.post('/web/conversations/:conversationId/read', webController.markMessagesAsRead.bind(webController));
 router.get('/web/stats', webController.getStats.bind(webController));
-router.get('/web/widget-script', webController.getWidgetScript.bind(webController));
 
 export default router;

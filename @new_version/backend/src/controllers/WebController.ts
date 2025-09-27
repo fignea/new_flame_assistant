@@ -12,16 +12,11 @@ export function setSocketIO(socketIO: any) {
 }
 
 export class WebController {
-  // Crear o obtener conversación web
-  public async createConversation(req: AuthenticatedRequest, res: Response<ApiResponse<WebConversation>>) {
+  // Crear o obtener conversación web (público para widget)
+  public async createConversation(req: any, res: Response<ApiResponse<WebConversation>>) {
     try {
-      const userId = req.user?.id;
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
+      // Para el widget público, usar un userId por defecto o del header
+      const userId = req.user?.id || req.headers['x-user-id'] || 1;
 
       const { visitor, initial_message }: CreateWebConversationRequest = req.body;
 
@@ -80,7 +75,7 @@ export class WebController {
         const title = visitor.name || visitor.email || `Visitante ${visitor.session_id.slice(0, 8)}`;
         const conversationResult = await database.query(
           `INSERT INTO web_conversations (user_id, visitor_id, title, status, priority, tags, metadata)
-           VALUES ($1, $2, $3, 'active', 'normal', '[]', '{}')
+           VALUES ($1, $2, $3, 'active', 'normal', ARRAY[]::text[], '{}')
            RETURNING *`,
           [userId, visitorRecord.id, title]
         );
@@ -346,15 +341,10 @@ export class WebController {
   }
 
   // Enviar mensaje
-  public async sendMessage(req: AuthenticatedRequest, res: Response<ApiResponse<WebMessage>>) {
+  public async sendMessage(req: any, res: Response<ApiResponse<WebMessage>>) {
     try {
-      const userId = req.user?.id;
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
+      // Para el widget público, usar un userId por defecto o del header
+      const userId = req.user?.id || req.headers['x-user-id'] || 1;
 
       const { conversation_id, content, message_type = 'text', metadata = {} }: SendWebMessageRequest = req.body;
 
@@ -417,7 +407,7 @@ export class WebController {
       `INSERT INTO web_messages (conversation_id, sender_type, sender_id, content, message_type, metadata)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [conversationId, senderType, senderId, content, messageType, JSON.stringify(metadata)]
+      [conversationId, senderType, senderId, content, messageType, JSON.stringify(metadata || {})]
     );
 
     const row = result.rows[0];
@@ -429,7 +419,7 @@ export class WebController {
       content: row.content,
       message_type: row.message_type,
       is_read: row.is_read,
-      metadata: JSON.parse(row.metadata || '{}'),
+      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {}),
       created_at: row.created_at
     };
   }
