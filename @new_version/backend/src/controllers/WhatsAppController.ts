@@ -10,17 +10,18 @@ export class WhatsAppController {
   public async createSession(req: AuthenticatedRequest, res: Response<ApiResponse>) {
     try {
       const userId = req.user?.id;
+      const organizationId = req.user?.organizationId;
       
-      if (!userId) {
+      if (!userId || !organizationId) {
         return res.status(401).json({
           success: false,
-          message: 'Usuario no autenticado'
+          message: 'Usuario no autenticado o sin organización'
         });
       }
 
-      logger.info(`🔄 Creating WhatsApp session for user ${userId}`);
+      logger.info(`🔄 Creating WhatsApp session for user ${userId} in organization ${organizationId}`);
 
-      const result = await whatsappService.createSession(userId);
+      const result = await whatsappService.createSession(userId, organizationId);
 
       return res.json({
         success: true,

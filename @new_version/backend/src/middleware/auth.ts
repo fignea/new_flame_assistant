@@ -6,6 +6,7 @@ import { database } from '../config/database';
 export interface JwtPayload {
   userId: number;
   email: string;
+  organizationId?: number;
 }
 
 export const authenticate = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -33,24 +34,33 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
     try {
       const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
       
-      // Verificar que el usuario existe
-      const user = await database.get(
-        'SELECT id, email, name FROM users WHERE id = $1',
+      // Verificar que el usuario existe y obtener su organización por defecto
+      const userWithOrg = await database.get(
+        `SELECT u.id, u.email, u.name, 
+                COALESCE(or_role.organization_id, 1) as organization_id,
+                or_role.role
+         FROM users u
+         LEFT JOIN organization_roles or_role ON u.id = or_role.user_id
+         WHERE u.id = $1
+         ORDER BY or_role.joined_at ASC
+         LIMIT 1`,
         [decoded.userId]
-      ) as User;
+      );
 
-      if (!user) {
+      if (!userWithOrg) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no válido'
         });
       }
 
-      // Agregar usuario al request
+      // Agregar usuario al request con información de organización
       req.user = {
-        id: user.id,
-        email: user.email,
-        name: user.name
+        id: userWithOrg.id,
+        email: userWithOrg.email,
+        name: userWithOrg.name,
+        organizationId: userWithOrg.organization_id,
+        role: userWithOrg.role
       };
 
       next();
@@ -88,3 +98,6 @@ export const generateToken = (user: User): string => {
     } as jwt.SignOptions
   );
 };
+
+// Alias para compatibilidad
+export const authenticateToken = authenticate;

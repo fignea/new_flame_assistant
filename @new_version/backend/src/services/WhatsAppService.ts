@@ -31,6 +31,7 @@ export class WhatsAppService extends EventEmitter {
     qrCode?: string;
     sessionId: string;
     userId: number;
+    organizationId: number;
   }> = new Map();
 
   private connectionMonitors: Map<number, NodeJS.Timeout> = new Map();
@@ -57,7 +58,7 @@ export class WhatsAppService extends EventEmitter {
       
       // Obtener sesiones existentes de la base de datos
       const result = await database.query(
-        `SELECT user_id, session_id, phone_number, name, is_connected, created_at 
+        `SELECT user_id, organization_id, session_id, phone_number, name, is_connected, created_at 
          FROM whatsapp_sessions 
          WHERE created_at > NOW() - INTERVAL '24 hours'
          ORDER BY created_at DESC`
@@ -76,6 +77,7 @@ export class WhatsAppService extends EventEmitter {
           isAuthenticated: false,
           sessionId,
           userId,
+          organizationId: row.organization_id || 1, // Fallback a organización por defecto
           phoneNumber: row.phone_number,
           userName: row.name
         };
@@ -128,8 +130,8 @@ export class WhatsAppService extends EventEmitter {
     this.connectionMonitors.set(userId, timeout);
   }
 
-  public async createSession(userId: number): Promise<{ sessionId: string; qrCode?: string }> {
-    logger.info(`🔄 Creating WhatsApp session for user ${userId}`);
+  public async createSession(userId: number, organizationId: number): Promise<{ sessionId: string; qrCode?: string }> {
+    logger.info(`🔄 Creating WhatsApp session for user ${userId} in organization ${organizationId}`);
 
     // Verificar si ya existe una sesión activa
     const existingSession = this.sessions.get(userId);
@@ -142,7 +144,7 @@ export class WhatsAppService extends EventEmitter {
     }
 
     // Crear nueva sesión
-    const sessionId = `wa_${userId}_${Date.now()}`;
+    const sessionId = `wa_${organizationId}_${userId}_${Date.now()}`;
     
     // Limpiar sesión anterior si existe
     if (existingSession) {
@@ -155,7 +157,8 @@ export class WhatsAppService extends EventEmitter {
       isConnected: false,
       isAuthenticated: false,
       sessionId,
-      userId
+      userId,
+      organizationId
     };
 
     this.sessions.set(userId, session);
@@ -163,11 +166,11 @@ export class WhatsAppService extends EventEmitter {
     // Crear sesión en base de datos
     try {
       await database.query(
-        `INSERT INTO whatsapp_sessions (user_id, session_id, is_connected, created_at, updated_at) 
-         VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `INSERT INTO whatsapp_sessions (user_id, organization_id, session_id, is_connected, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          ON CONFLICT (session_id) 
          DO UPDATE SET updated_at = CURRENT_TIMESTAMP`,
-        [userId, sessionId, false]
+        [userId, organizationId, sessionId, false]
       );
     } catch (error) {
       console.error(`❌ Error creating session in database for user ${userId}:`, error);
@@ -643,21 +646,27 @@ export class WhatsAppService extends EventEmitter {
 
   private async saveMessage(message: WhatsAppMessage, userId: number): Promise<void> {
     try {
+      const session = this.sessions.get(userId);
+      if (!session) return;
+
+      const organizationId = session.organizationId;
+      
       // Generar chat_hash para el mensaje
-      const chatHash = generateDeterministicHash(`${message.chatId}_${userId}`, 44);
+      const chatHash = generateDeterministicHash(`${message.chatId}_${organizationId}`, 44);
       
       // Buscar o crear contacto
       let contact = await database.get(
-        `SELECT id, chat_hash FROM contacts WHERE user_id = $1 AND whatsapp_id = $2`,
-        [userId, message.chatId]
+        `SELECT id, chat_hash FROM contacts WHERE user_id = $1 AND organization_id = $2 AND whatsapp_id = $3`,
+        [userId, organizationId, message.chatId]
       );
 
       if (!contact) {
         const result = await database.run(
-          `INSERT INTO contacts (user_id, whatsapp_id, name, phone_number, is_group, chat_hash) 
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+          `INSERT INTO contacts (user_id, organization_id, whatsapp_id, name, phone_number, is_group, chat_hash) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             userId,
+            organizationId,
             message.chatId,
             message.senderName || message.chatId.split('@')[0],
             message.chatId.includes('@s.whatsapp.net') ? message.chatId.split('@')[0] : null,
@@ -671,11 +680,12 @@ export class WhatsAppService extends EventEmitter {
       // Guardar mensaje con chat_hash
       await database.run(
         `INSERT INTO messages 
-         (user_id, whatsapp_message_id, chat_id, content, message_type, 
+         (user_id, organization_id, whatsapp_message_id, chat_id, content, message_type, 
           is_from_me, timestamp, chat_hash) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           userId,
+          organizationId,
           message.id,
           message.chatId,
           message.content,
@@ -692,14 +702,19 @@ export class WhatsAppService extends EventEmitter {
 
   private async saveContact(contact: WhatsAppContact, userId: number): Promise<void> {
     try {
+      const session = this.sessions.get(userId);
+      if (!session) return;
+
+      const organizationId = session.organizationId;
+      
       // Generar chat_hash determinístico para el contacto
-      const chatHash = generateDeterministicHash(`${contact.id}_${userId}`, 44);
+      const chatHash = generateDeterministicHash(`${contact.id}_${organizationId}`, 44);
       
       await database.run(
         `INSERT INTO contacts 
-         (user_id, whatsapp_id, name, phone_number, is_group, avatar_url, chat_hash, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-         ON CONFLICT (user_id, whatsapp_id) 
+         (user_id, organization_id, whatsapp_id, name, phone_number, is_group, avatar_url, chat_hash, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+         ON CONFLICT (user_id, organization_id, whatsapp_id) 
          DO UPDATE SET 
            name = EXCLUDED.name,
            phone_number = EXCLUDED.phone_number,
@@ -709,6 +724,7 @@ export class WhatsAppService extends EventEmitter {
            updated_at = CURRENT_TIMESTAMP`,
         [
           userId,
+          organizationId,
           contact.id,
           contact.name,
           contact.phoneNumber,
@@ -837,9 +853,14 @@ export class WhatsAppService extends EventEmitter {
   // Verificar si un contacto está bloqueado
   private async isContactBlocked(whatsappId: string, userId: number): Promise<boolean> {
     try {
+      const session = this.sessions.get(userId);
+      if (!session) return false;
+
+      const organizationId = session.organizationId;
+      
       const contact = await database.get(
-        'SELECT is_blocked FROM contacts WHERE whatsapp_id = $1 AND user_id = $2',
-        [whatsappId, userId]
+        'SELECT is_blocked FROM contacts WHERE whatsapp_id = $1 AND user_id = $2 AND organization_id = $3',
+        [whatsappId, userId, organizationId]
       );
       
       return contact ? contact.is_blocked : false;
@@ -961,8 +982,9 @@ export class WhatsAppService extends EventEmitter {
         
         // Intentar obtener el nombre del contacto desde la base de datos existente
         try {
+          // Buscar en todas las organizaciones por ahora, ya que no tenemos contexto de organización específica
           const existingContact = await database.get(
-            'SELECT name FROM contacts WHERE whatsapp_id = $1',
+            'SELECT name FROM contacts WHERE whatsapp_id = $1 LIMIT 1',
             [whatsappId]
           );
           if (existingContact && existingContact.name) {

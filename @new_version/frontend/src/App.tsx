@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AppProvider, useApp } from './contexts/AppContext';
+import { OrganizationProvider } from './contexts/OrganizationContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationProvider } from './components/NotificationSystem';
 import { useWhatsAppNotifications } from './hooks/useWhatsAppNotifications';
@@ -17,6 +18,7 @@ import { IntegrationsPage } from './pages/integrations/IntegrationsPage';
 import { ConfigPage } from './pages/config/ConfigPage';
 import { ScheduledMessagesPage } from './pages/scheduled/ScheduledMessagesPage';
 import { WidgetDemoPage } from './pages/web-chat/WidgetDemoPage';
+import { OrganizationsPage } from './pages/organizations/OrganizationsPage';
 
 // Componente para manejar notificaciones de WhatsApp
 const WhatsAppNotificationHandler: React.FC = () => {
@@ -190,6 +192,16 @@ const AppContent: React.FC = () => {
               </ProtectedRoute>
             } 
           />
+          <Route 
+            path="/organizations" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <OrganizationsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
           
           {/* Redirección por defecto */}
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -204,9 +216,11 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <AppProvider>
-          <NotificationProvider>
-            <AppContent />
-          </NotificationProvider>
+          <OrganizationProvider>
+            <NotificationProvider>
+              <AppContent />
+            </NotificationProvider>
+          </OrganizationProvider>
         </AppProvider>
       </ThemeProvider>
     </ErrorBoundary>

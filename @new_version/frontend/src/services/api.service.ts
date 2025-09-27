@@ -95,7 +95,13 @@ export class ApiService {
     };
 
     try {
-      const response = await fetch(url, config);
+      // Asegurar que fetch esté disponible
+      const fetchFn = globalThis.fetch || window.fetch;
+      if (!fetchFn) {
+        throw new Error('Fetch API no está disponible');
+      }
+
+      const response = await fetchFn(url, config);
       const data = await response.json();
 
       if (!response.ok) {

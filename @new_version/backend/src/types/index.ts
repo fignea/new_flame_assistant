@@ -6,6 +6,8 @@ export interface AuthenticatedRequest extends Request {
     id: number;
     email: string;
     name: string;
+    organizationId?: number;
+    role?: string;
   };
 }
 
@@ -19,9 +21,43 @@ export interface User {
   updated_at: string;
 }
 
+// Modelos Multi-Tenant
+export interface Organization {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string;
+  settings: Record<string, any>;
+  plan: 'free' | 'pro' | 'enterprise';
+  max_users: number;
+  max_whatsapp_sessions: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganizationRole {
+  id: number;
+  organization_id: number;
+  user_id: number;
+  role: 'owner' | 'admin' | 'member';
+  permissions: Record<string, any>;
+  invited_by?: number;
+  joined_at: string;
+  organization?: Organization;
+  user?: User;
+}
+
+export interface UserWithOrganization extends User {
+  organizations: OrganizationRole[];
+  currentOrganization?: Organization;
+  currentRole?: string;
+}
+
 export interface WhatsAppSession {
   id: number;
   user_id: number;
+  organization_id: number;
   session_id: string;
   phone_number?: string;
   name?: string;
@@ -34,6 +70,7 @@ export interface WhatsAppSession {
 export interface Contact {
   id: number;
   user_id: number;
+  organization_id: number;
   whatsapp_id: string;
   name?: string;
   phone_number?: string;
@@ -46,6 +83,7 @@ export interface Contact {
 export interface Message {
   id: number;
   user_id: number;
+  organization_id: number;
   whatsapp_message_id: string;
   contact_id?: number;
   chat_id: string;
@@ -61,6 +99,7 @@ export interface Message {
 export interface ScheduledMessage {
   id: number;
   user_id: number;
+  organization_id: number;
   contact_id: number;
   content: string;
   message_type: 'text' | 'image' | 'video' | 'audio' | 'document';
@@ -297,4 +336,54 @@ export interface UpdateWebConversationRequest {
 export interface WebChatWidgetScriptRequest {
   user_id: number;
   domain?: string;
+}
+
+// Multi-Tenant Request/Response DTOs
+export interface CreateOrganizationRequest {
+  name: string;
+  slug: string;
+  description?: string;
+  plan?: 'free' | 'pro' | 'enterprise';
+}
+
+export interface UpdateOrganizationRequest {
+  name?: string;
+  description?: string;
+  settings?: Record<string, any>;
+  plan?: 'free' | 'pro' | 'enterprise';
+  max_users?: number;
+  max_whatsapp_sessions?: number;
+  is_active?: boolean;
+}
+
+export interface InviteUserRequest {
+  email: string;
+  role: 'admin' | 'member';
+  permissions?: Record<string, any>;
+}
+
+export interface UpdateUserRoleRequest {
+  role: 'owner' | 'admin' | 'member';
+  permissions?: Record<string, any>;
+}
+
+export interface SwitchOrganizationRequest {
+  organization_id: number;
+}
+
+export interface OrganizationStats {
+  total_users: number;
+  total_whatsapp_sessions: number;
+  total_contacts: number;
+  total_messages: number;
+  total_assistants: number;
+  total_web_conversations: number;
+  active_whatsapp_sessions: number;
+  online_visitors: number;
+}
+
+export interface OrganizationWithStats extends Organization {
+  stats: OrganizationStats;
+  user_count: number;
+  role?: string;
 }

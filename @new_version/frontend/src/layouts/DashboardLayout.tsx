@@ -13,10 +13,12 @@ import {
   Moon,
   Flame,
   LogOut,
-  Clock
+  Clock,
+  Building2
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useApp } from '../contexts/AppContext';
+import { OrganizationSelector } from '../components/OrganizationSelector';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -37,6 +39,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
     { name: 'Documentos', href: '/documents', icon: FileText },
     { name: 'Asistentes', href: '/assistants', icon: Bot },
     { name: 'Integraciones', href: '/integrations', icon: Zap },
+    { name: 'Organizaciones', href: '/organizations', icon: Building2 },
     { name: 'Configuración', href: '/config', icon: Settings },
   ];
 
@@ -170,6 +173,20 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
             <span className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               FLAME
             </span>
+          </div>
+        </div>
+
+        {/* Desktop header */}
+        <div className="hidden md:block bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-dark-border/50">
+          <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex items-center space-x-4">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Dashboard
+              </h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <OrganizationSelector />
+            </div>
           </div>
         </div>
 

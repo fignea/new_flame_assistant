@@ -5,6 +5,78 @@
     <link rel="icon" type="image/svg+xml" href="/flame.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Flame Assistant - Standalone</title>
+    <script>
+      // Polyfills críticos para fetch y Request
+      if (!window.fetch) {
+        console.log('Cargando polyfill de fetch...');
+        // Polyfill básico de fetch
+        window.fetch = function(input, init) {
+          return new Promise(function(resolve, reject) {
+            var xhr = new XMLHttpRequest();
+            xhr.open(init?.method || 'GET', input);
+            
+            if (init?.headers) {
+              Object.keys(init.headers).forEach(function(key) {
+                xhr.setRequestHeader(key, init.headers[key]);
+              });
+            }
+            
+            xhr.onload = function() {
+              resolve({
+                ok: xhr.status >= 200 && xhr.status < 300,
+                status: xhr.status,
+                statusText: xhr.statusText,
+                json: function() {
+                  return Promise.resolve(JSON.parse(xhr.responseText));
+                },
+                text: function() {
+                  return Promise.resolve(xhr.responseText);
+                }
+              });
+            };
+            
+            xhr.onerror = function() {
+              reject(new Error('Network error'));
+            };
+            
+            xhr.send(init?.body);
+          });
+        };
+      }
+      
+      // Asegurar que Request esté disponible
+      if (!window.Request) {
+        window.Request = function(input, init) {
+          this.url = input;
+          this.method = init?.method || 'GET';
+          this.headers = new Headers(init?.headers);
+          this.body = init?.body;
+        };
+      }
+      
+      // Asegurar que Headers esté disponible
+      if (!window.Headers) {
+        window.Headers = function(init) {
+          this._headers = {};
+          if (init) {
+            Object.keys(init).forEach(function(key) {
+              this._headers[key.toLowerCase()] = init[key];
+            }, this);
+          }
+        };
+        window.Headers.prototype.get = function(name) {
+          return this._headers[name.toLowerCase()] || null;
+        };
+        window.Headers.prototype.set = function(name, value) {
+          this._headers[name.toLowerCase()] = value;
+        };
+        window.Headers.prototype.has = function(name) {
+          return name.toLowerCase() in this._headers;
+        };
+      }
+      
+      console.log('Polyfills cargados correctamente');
+    </script>
   </head>
   <body>
     <div id="root"></div>
