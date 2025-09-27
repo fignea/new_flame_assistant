@@ -394,6 +394,12 @@ export class WhatsAppService extends EventEmitter {
 
         const whatsappMessage = this.convertBaileysMessage(message);
         if (whatsappMessage) {
+          // Filtrar mensajes vacíos o sin contenido útil
+          if (!whatsappMessage.content || whatsappMessage.content.trim() === '' || whatsappMessage.content === '[Protocol Update]') {
+            console.log(`🚫 Filtering out empty or protocol message: ${whatsappMessage.content}`);
+            continue;
+          }
+
           // Verificar si el contacto está bloqueado (solo para mensajes entrantes)
           if (!whatsappMessage.isFromMe) {
             const isBlocked = await this.isContactBlocked(whatsappMessage.senderId, userId);
@@ -527,12 +533,14 @@ export class WhatsAppService extends EventEmitter {
         messageContent = `[Reaction] ${content.reactionMessage.text || '👍'}`;
         messageType = 'reaction';
       } else if (content.senderKeyDistributionMessage) {
-        messageContent = '[Security Update]';
-        messageType = 'security_update';
+        // Mensajes de distribución de claves de seguridad - no mostrar como mensajes normales
+        console.log(`🔍 Security update message detected`);
+        return null; // No procesar mensajes de seguridad
       } else if (content.protocolMessage) {
         // Manejar actualizaciones de protocolo (leído, recibido, etc.)
-        messageContent = '[Protocol Update]';
-        messageType = 'protocol_update';
+        // Estos mensajes no deben mostrarse como mensajes normales
+        console.log(`🔍 Protocol message detected: ${JSON.stringify(content.protocolMessage)}`);
+        return null; // No procesar mensajes de protocolo
       } else if (content.listMessage) {
         messageContent = `[List] ${content.listMessage.description || 'List Message'}`;
         messageType = 'list';
@@ -579,6 +587,12 @@ export class WhatsAppService extends EventEmitter {
         console.log(`🔍 Unknown message type: ${unknownType}`);
         messageContent = `[Unknown: ${unknownType}]`;
         messageType = 'unknown';
+      }
+
+      // Validar que el mensaje tenga contenido válido
+      if (!messageContent || messageContent.trim() === '') {
+        console.log(`🚫 Empty message content detected, skipping message`);
+        return null;
       }
 
       // Determinar el nombre del remitente
