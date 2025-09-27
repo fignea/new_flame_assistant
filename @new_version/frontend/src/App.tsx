@@ -113,6 +113,16 @@ const AppContent: React.FC = () => {
             } 
           />
           <Route 
+            path="/inbox/:conversationId" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <InboxPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
             path="/contacts" 
             element={
               <ProtectedRoute>

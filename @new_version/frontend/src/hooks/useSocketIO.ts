@@ -126,6 +126,31 @@ export const useSocketIO = (options: UseSocketIOOptions = {}) => {
         });
       });
 
+      // Escuchar eventos de web chat
+      socket.on('web:message:new', (data) => {
+        onMessage?.({
+          type: 'web:message:new',
+          data,
+          timestamp: Date.now()
+        });
+      });
+
+      socket.on('web:conversation:new', (data) => {
+        onMessage?.({
+          type: 'web:conversation:new',
+          data,
+          timestamp: Date.now()
+        });
+      });
+
+      socket.on('web:conversation:updated', (data) => {
+        onMessage?.({
+          type: 'web:conversation:updated',
+          data,
+          timestamp: Date.now()
+        });
+      });
+
       socket.on('whatsapp:contact', (data) => {
         onMessage?.({
           type: 'whatsapp:contact',

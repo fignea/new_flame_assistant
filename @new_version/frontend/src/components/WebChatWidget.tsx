@@ -78,13 +78,20 @@ export const WebChatWidget: React.FC<WebChatWidgetProps> = ({
 
     // Escuchar mensajes del agente
     newSocket.on('web:message:new', (message: any) => {
-      if (message.conversation_id === conversationId) {
-        setMessages(prev => [...prev, {
-          id: message.id.toString(),
-          content: message.content,
-          sender: 'agent' as const,
-          timestamp: new Date(message.created_at)
-        }]);
+      if (message.conversation_id === conversationId && message.sender_type === 'agent') {
+        setMessages(prev => {
+          // Verificar si el mensaje ya existe para evitar duplicados
+          const exists = prev.find(m => m.id === message.id.toString());
+          if (!exists) {
+            return [...prev, {
+              id: message.id.toString(),
+              content: message.content,
+              sender: 'agent' as const,
+              timestamp: new Date(message.created_at)
+            }];
+          }
+          return prev;
+        });
       }
     });
 

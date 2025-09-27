@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   MessageSquare, 
   Search, 
@@ -159,7 +160,10 @@ interface Conversation {
 
 export const InboxPage: React.FC = () => {
   const { isAuthenticated, user } = useApp();
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const { conversationId } = useParams<{ conversationId?: string }>();
+  const navigate = useNavigate();
+  
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(conversationId || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -234,6 +238,76 @@ export const InboxPage: React.FC = () => {
           isConnected: false,
           isAuthenticated: false
         }));
+      } else if (message.type === 'web:message:new') {
+        // Nuevo mensaje de web chat
+        const newMessage = message.data;
+        console.log('Nuevo mensaje web recibido:', newMessage);
+        console.log('Conversación seleccionada:', selectedConversation);
+        
+        // Agregar mensaje a la lista si es la conversación actual
+        if (selectedConversation && selectedConversation.startsWith('web_')) {
+          const conversationId = parseInt(selectedConversation.replace('web_', ''));
+          console.log('ID de conversación seleccionada:', conversationId);
+          console.log('ID de mensaje recibido:', newMessage.conversation_id);
+          console.log('¿Coinciden?', newMessage.conversation_id === conversationId);
+          
+          if (newMessage.conversation_id === conversationId) {
+            console.log('Agregando mensaje a la lista');
+            setWebMessages(prev => {
+              console.log('Mensajes actuales:', prev.length);
+              // Verificar si el mensaje ya existe para evitar duplicados
+              const exists = prev.find(m => m.id === newMessage.id);
+              if (exists) {
+                console.log('Mensaje ya existe, no se agrega');
+                return prev;
+              }
+              const newList = [...prev, newMessage];
+              console.log('Nueva lista de mensajes:', newList.length);
+              return newList;
+            });
+          } else {
+            console.log('Mensaje no coincide con conversación seleccionada');
+          }
+        } else {
+          console.log('No hay conversación web seleccionada, selectedConversation:', selectedConversation);
+          console.log('Mensaje recibido para conversación no seleccionada, se actualizará la lista de conversaciones');
+        }
+        
+        // Actualizar la lista de conversaciones web
+        setWebConversations(prev => {
+          return prev.map(conv => {
+            if (conv.id === newMessage.conversation_id) {
+              return {
+                ...conv,
+                last_message_at: newMessage.created_at,
+                unread_count: newMessage.sender_type === 'visitor' ? (conv.unread_count || 0) + 1 : conv.unread_count
+              };
+            }
+            return conv;
+          });
+        });
+      } else if (message.type === 'web:conversation:new') {
+        // Nueva conversación de web chat
+        const newConversation = message.data;
+        console.log('Nueva conversación web recibida:', newConversation);
+        
+        setWebConversations(prev => {
+          const exists = prev.find(conv => conv.id === newConversation.id);
+          if (!exists) {
+            return [newConversation, ...prev];
+          }
+          return prev;
+        });
+      } else if (message.type === 'web:conversation:updated') {
+        // Conversación web actualizada
+        const updatedConversation = message.data;
+        console.log('Conversación web actualizada:', updatedConversation);
+        
+        setWebConversations(prev => {
+          return prev.map(conv => 
+            conv.id === updatedConversation.id ? updatedConversation : conv
+          );
+        });
       }
     },
     onConnect: () => {
@@ -265,6 +339,24 @@ export const InboxPage: React.FC = () => {
       loadWhatsAppChats();
     }
   }, [whatsappStatus?.isConnected]);
+
+  // Sincronizar URL con estado de conversación seleccionada
+  useEffect(() => {
+    if (conversationId && conversationId !== selectedConversation) {
+      console.log('URL cambió, actualizando conversación seleccionada:', conversationId);
+      setSelectedConversation(conversationId);
+    } else if (!conversationId && selectedConversation) {
+      console.log('URL sin conversación, limpiando selección');
+      setSelectedConversation(null);
+    }
+  }, [conversationId, selectedConversation]);
+
+  // Manejar selección de conversación
+  const handleSelectConversation = (conversationId: string) => {
+    console.log('Seleccionando conversación:', conversationId);
+    setSelectedConversation(conversationId);
+    navigate(`/inbox/${conversationId}`);
+  };
 
   // Cargar conversaciones web cuando esté habilitado
   useEffect(() => {
@@ -327,6 +419,7 @@ export const InboxPage: React.FC = () => {
       });
       
       if (response.success && response.data) {
+        console.log('Conversaciones web cargadas:', response.data);
         setWebConversations(response.data);
       }
     } catch (error) {
@@ -345,6 +438,8 @@ export const InboxPage: React.FC = () => {
       });
       
       if (response.success && response.data) {
+        console.log('Mensajes cargados desde API:', response.data);
+        console.log('Últimos 3 mensajes:', response.data.slice(-3));
         setWebMessages(response.data);
         // Marcar mensajes como leídos
         await apiService.markWebChatMessagesAsRead(conversationId.toString());
@@ -955,6 +1050,7 @@ export const InboxPage: React.FC = () => {
   ]);
 
   // Combinar conversaciones normales con chats de WhatsApp y conversaciones web
+  console.log('Conversaciones web disponibles:', webConversations);
   const allConversations = [
     ...conversations.map(conv => ({
       ...conv,
@@ -1273,7 +1369,7 @@ export const InboxPage: React.FC = () => {
                   return (
                     <div
                       key={conversation.id}
-                      onClick={() => setSelectedConversation(conversation.id)}
+                      onClick={() => handleSelectConversation(conversation.id)}
                       className={`p-4 rounded-xl cursor-pointer transition-all duration-200 mb-2 ${
                         selectedConversation === conversation.id
                           ? 'bg-purple-500/10 border-2 border-purple-500/50'
@@ -1429,41 +1525,49 @@ export const InboxPage: React.FC = () => {
                   )
                 ) : selectedConv.isWeb ? (
                   // Mostrar mensajes web
+                  (() => {
+                    console.log('selectedConv.isWeb es true, renderizando mensajes web');
+                    console.log('selectedConv:', selectedConv);
+                    return null;
+                  })() ||
                   webMessages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-32 text-center">
                       <Globe className="w-8 h-8 text-gray-400 mb-2" />
                       <p className="text-gray-500">No hay mensajes en esta conversación</p>
                     </div>
                   ) : (
-                    webMessages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`flex ${message.sender_type === 'agent' ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
-                          message.sender_type === 'agent'
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
-                        }`}>
-                          {message.sender_type !== 'agent' && (
-                            <div className="text-xs opacity-75 mb-1">
-                              {message.sender_name || 'Visitante'}
-                            </div>
-                          )}
-                          <p className="text-sm">{message.content}</p>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="text-xs opacity-70">
-                              {formatTimeForBubble(message.created_at)}
-                            </span>
-                            {message.sender_type === 'agent' && (
-                              <div className="flex items-center space-x-1">
-                                <CheckCircle className="w-3 h-3" />
+                    webMessages.map((message, index) => {
+                      console.log(`Renderizando mensaje ${index + 1}/${webMessages.length}:`, message);
+                      return (
+                        <div
+                          key={message.id}
+                          className={`flex ${message.sender_type === 'agent' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                            message.sender_type === 'agent'
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                          }`}>
+                            {message.sender_type !== 'agent' && (
+                              <div className="text-xs opacity-75 mb-1">
+                                {message.sender_name || 'Visitante'}
                               </div>
                             )}
+                            <p className="text-sm">{message.content}</p>
+                            <div className="flex items-center justify-between mt-1">
+                              <span className="text-xs opacity-70">
+                                {formatTimeForBubble(message.created_at)}
+                              </span>
+                              {message.sender_type === 'agent' && (
+                                <div className="flex items-center space-x-1">
+                                  <CheckCircle className="w-3 h-3" />
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )
                 ) : (
                   // Mostrar mensajes normales
