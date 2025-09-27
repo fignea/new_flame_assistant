@@ -108,12 +108,10 @@ export const WebChatWidget: React.FC<WebChatWidgetProps> = ({
     }
   };
 
-  const positionClasses = position === 'bottom-right' 
-    ? 'right-4 bottom-4' 
-    : 'left-4 bottom-4';
+  // Las clases de posición se manejan con estilos inline para mayor flexibilidad
 
   return (
-    <div className="fixed z-50" style={{ [position]: '16px', bottom: '16px' }}>
+    <div className="fixed z-50" style={{ [position]: '15px', bottom: '15px' }}>
       {/* Botón flotante */}
       {!isOpen && (
         <button

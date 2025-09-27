@@ -68,13 +68,15 @@ interface WhatsAppMessageManagerProps {
   isConnected: boolean;
   onMessageSent?: (message: WhatsAppMessage) => void;
   onMessageReceived?: (message: WhatsAppMessage) => void;
+  onNotification?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
 const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
   userId,
   isConnected,
   onMessageSent,
-  onMessageReceived
+  onMessageReceived,
+  onNotification
 }) => {
   const [chats, setChats] = useState<WhatsAppChat[]>([]);
   const [selectedChat, setSelectedChat] = useState<WhatsAppChat | null>(null);
@@ -571,13 +573,13 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
           participants: updatedData.isGroup ? prev.participants : [selectedChat.id]
         } : null);
         
-        alert('Datos actualizados exitosamente');
+        onNotification?.('success', 'Datos actualizados exitosamente');
       } else {
-        alert('Error al obtener datos: ' + (response.message || 'Error desconocido'));
+        onNotification?.('error', 'Error al obtener datos: ' + (response.message || 'Error desconocido'));
       }
     } catch (error) {
       console.error('Error fetching contact data:', error);
-      alert('Error al obtener los datos del contacto/grupo');
+      onNotification?.('error', 'Error al obtener los datos del contacto/grupo');
     } finally {
       setIsUpdatingData(false);
     }
@@ -587,7 +589,7 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
   const editContact = () => {
     if (!selectedChat) return;
     // Aquí podrías abrir un modal de edición o navegar a la página de contactos
-    alert('Función de edición - Implementar modal o navegación');
+    onNotification?.('info', 'Función de edición - Implementar modal o navegación');
   };
 
   // Bloquear/Desbloquear contacto
@@ -596,10 +598,10 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
     
     try {
       // Aquí implementarías la lógica de bloqueo
-      alert('Función de bloqueo - Implementar lógica de bloqueo');
+      onNotification?.('info', 'Función de bloqueo - Implementar lógica de bloqueo');
     } catch (error) {
       console.error('Error toggling block:', error);
-      alert('Error al cambiar el estado de bloqueo');
+      onNotification?.('error', 'Error al cambiar el estado de bloqueo');
     }
   };
 
@@ -610,10 +612,10 @@ const WhatsAppMessageManager: React.FC<WhatsAppMessageManagerProps> = ({
     if (confirm('¿Estás seguro de que quieres eliminar este contacto?')) {
       try {
         // Aquí implementarías la lógica de eliminación
-        alert('Función de eliminación - Implementar lógica de eliminación');
+        onNotification?.('info', 'Función de eliminación - Implementar lógica de eliminación');
       } catch (error) {
         console.error('Error deleting contact:', error);
-        alert('Error al eliminar el contacto');
+        onNotification?.('error', 'Error al eliminar el contacto');
       }
     }
   };

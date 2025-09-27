@@ -41,7 +41,8 @@ export const WidgetDemoPage: React.FC = () => {
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(generateScript());
-    alert('Código copiado al portapapeles');
+    // TODO: Implementar notificaciones en esta página
+    console.log('Código copiado al portapapeles');
   };
 
   const downloadScript = () => {

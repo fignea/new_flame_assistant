@@ -597,7 +597,7 @@ export class WebController {
 
       const script = `
 <!-- Flame Chat Widget -->
-<script src="https://cdn.jsdelivr.net/gh/flame-ai/chat-widget@latest/dist/flame-chat-widget.min.js"></script>
+<script src="https://your-domain.com/dist/flame-chat-widget.min.js"></script>
 <script>
 (function() {
   // Configuración del widget

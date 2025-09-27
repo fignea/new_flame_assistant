@@ -5,6 +5,7 @@ import { Settings, Copy, Download, X } from 'lucide-react';
 interface WebChatDemoModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onNotification?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
 export const WebChatDemoModal: React.FC<WebChatDemoModalProps> = ({ isOpen, onClose }) => {
@@ -18,12 +19,16 @@ export const WebChatDemoModal: React.FC<WebChatDemoModalProps> = ({ isOpen, onCl
     showAvatar: true,
     enableSound: true
   });
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
 
 
   const generateScript = () => {
     return `
 <!-- Flame Chat Widget -->
-<script src="https://cdn.jsdelivr.net/gh/flame-ai/chat-widget@latest/dist/flame-chat-widget.min.js"></script>
+<script src="https://your-domain.com/dist/flame-chat-widget.min.js"></script>
 <script>
 (function() {
   const config = {
@@ -50,19 +55,36 @@ export const WebChatDemoModal: React.FC<WebChatDemoModalProps> = ({ isOpen, onCl
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(generateScript());
-    alert('Código copiado al portapapeles');
+    setNotification({
+      type: 'success',
+      message: 'Código copiado al portapapeles'
+    });
+    setTimeout(() => setNotification(null), 3000);
   };
 
   const downloadScript = () => {
-    const blob = new Blob([generateScript()], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'flame-chat-widget.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      const blob = new Blob([generateScript()], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'flame-chat-widget.html';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setNotification({
+        type: 'success',
+        message: 'Archivo descargado exitosamente'
+      });
+      setTimeout(() => setNotification(null), 3000);
+    } catch (error) {
+      setNotification({
+        type: 'error',
+        message: 'Error al descargar el archivo'
+      });
+      setTimeout(() => setNotification(null), 3000);
+    }
   };
 
   if (!isOpen) return null;
@@ -94,7 +116,7 @@ export const WebChatDemoModal: React.FC<WebChatDemoModalProps> = ({ isOpen, onCl
           <div className="flex items-center justify-between p-6 border-b border-gray-700 bg-gradient-to-r from-purple-600 to-blue-600">
             <div>
               <h2 className="text-2xl font-bold text-white">
-                Demo de Chat Web
+                Configuración de Widget - Chat Web
               </h2>
               <p className="text-purple-100 mt-1">
                 Configura y obtén el código para integrar el chat en tu sitio web
@@ -107,6 +129,21 @@ export const WebChatDemoModal: React.FC<WebChatDemoModalProps> = ({ isOpen, onCl
               <X className="w-6 h-6 text-white" />
             </button>
           </div>
+
+          {/* Notificación local */}
+          {notification && (
+            <div className="px-6 py-3">
+              <div className={`rounded-lg p-3 text-sm ${
+                notification.type === 'success' 
+                  ? 'bg-green-900 border border-green-700 text-green-100' 
+                  : notification.type === 'error'
+                  ? 'bg-red-900 border border-red-700 text-red-100'
+                  : 'bg-blue-900 border border-blue-700 text-blue-100'
+              }`}>
+                {notification.message}
+              </div>
+            </div>
+          )}
 
           {/* Content */}
           <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
