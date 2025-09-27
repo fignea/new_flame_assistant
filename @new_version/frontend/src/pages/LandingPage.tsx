@@ -16,6 +16,7 @@ import {
   Bot 
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { WebChatWidget } from '../components/WebChatWidget';
 
 const LandingPage: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
@@ -268,6 +269,18 @@ const LandingPage: React.FC = () => {
           </p>
         </footer>
       </div>
+
+      {/* Widget de Chat Web */}
+      <WebChatWidget
+        userId={1}
+        apiUrl="http://localhost:3001/api/integrations/web"
+        title="¡Hola! ¿Tienes alguna pregunta?"
+        subtitle="Estamos aquí para ayudarte a descubrir Flame AI"
+        primaryColor="#8B5CF6"
+        position="bottom-right"
+        showAvatar={true}
+        enableSound={true}
+      />
     </div>
   );
 };
