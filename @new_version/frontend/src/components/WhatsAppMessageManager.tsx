@@ -31,7 +31,8 @@ interface WhatsAppMessage {
   messageTimestamp: number;
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
   fromMe: boolean;
-  chatId: string;
+  chatId: string; // chat_hash
+  whatsappId?: string; // whatsapp_id para referencia
   senderId: string;
   senderName?: string;
   body?: string;

@@ -325,15 +325,21 @@ export const ConfigPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Configuración</h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Gestiona la configuración de tu cuenta y la aplicación.
-        </p>
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card">
+      {/* Header */}
+      <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-dark-border/50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+            Configuración
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Gestiona la configuración de tu cuenta y la aplicación.
+          </p>
+        </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-8">
+      <div className="max-w-7xl mx-auto p-6 space-y-8">
+        <div className="flex flex-col lg:flex-row gap-8">
         {/* Sidebar */}
         <div className="lg:w-64">
           <nav className="space-y-1">
@@ -362,6 +368,7 @@ export const ConfigPage: React.FC = () => {
           <div className="bg-white dark:bg-zinc-800 shadow rounded-lg p-6">
             {renderTabContent()}
           </div>
+        </div>
         </div>
       </div>
     </div>

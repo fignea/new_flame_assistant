@@ -57,7 +57,8 @@ interface WhatsAppMessage {
   messageTimestamp: number;
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
   fromMe: boolean;
-  chatId: string;
+  chatId: string; // chat_hash
+  whatsappId?: string; // whatsapp_id para referencia
   senderId: string;
   senderName?: string;
   body?: string;
@@ -74,7 +75,8 @@ interface WhatsAppMessage {
 }
 
 interface WhatsAppChat {
-  id: string;
+  id: string; // chat_hash
+  whatsappId?: string; // whatsapp_id para referencia
   name: string;
   isGroup: boolean;
   isReadOnly: boolean;
@@ -374,9 +376,9 @@ export const InboxPage: React.FC = () => {
   useEffect(() => {
     if (selectedConversation) {
       if (selectedConversation.startsWith('whatsapp_') && whatsappStatus?.isConnected) {
-        // Si es un chat de WhatsApp, extraer el ID real del chat
-        const chatId = selectedConversation.replace('whatsapp_', '');
-        loadWhatsAppMessages(chatId);
+        // Si es un chat de WhatsApp, usar el chat_hash directamente
+        const chatHash = selectedConversation.replace('whatsapp_', '');
+        loadWhatsAppMessages(chatHash);
       } else if (selectedConversation) {
         // Verificar si es una conversación web
         const webConv = webConversations.find(conv => conv.public_id === selectedConversation);
@@ -592,13 +594,17 @@ export const InboxPage: React.FC = () => {
 
     setIsSendingMessage(true);
     try {
-      // Si es un chat de WhatsApp, extraer el ID real del chat
-      const chatId = selectedConversation.startsWith('whatsapp_') 
+      // Si es un chat de WhatsApp, extraer el chat_hash
+      const chatHash = selectedConversation.startsWith('whatsapp_') 
         ? selectedConversation.replace('whatsapp_', '') 
         : selectedConversation;
       
+      // Buscar el whatsappId correspondiente al chat_hash en la lista de chats
+      const currentChat = whatsappChats.find(chat => chat.id === chatHash);
+      const whatsappId = currentChat?.whatsappId || chatHash; // Fallback al chatHash si no se encuentra
+      
       const response = await apiService.sendMessage({
-        contactId: chatId,
+        contactId: whatsappId, // Usar whatsappId para el envío
         content: newMessage.trim(),
         messageType: 'text'
       });
@@ -606,12 +612,13 @@ export const InboxPage: React.FC = () => {
         // Agregar mensaje a la lista local con el estado correcto del backend
         const sentMessage: WhatsAppMessage = {
           id: response.data.message?.id || response.data.messageId,
-          key: { id: response.data.message?.id || response.data.messageId, remoteJid: chatId, fromMe: true },
+          key: { id: response.data.message?.id || response.data.messageId, remoteJid: whatsappId, fromMe: true },
           message: { conversation: newMessage },
           messageTimestamp: response.data.message?.timestamp || response.data.timestamp || Date.now() / 1000,
           status: response.data.message?.status || 'delivered', // Usar el estado del backend
           fromMe: true,
-          chatId: chatId,
+          chatId: chatHash, // Usar chatHash como ID del chat
+          whatsappId: whatsappId, // Incluir whatsappId para referencia
           senderId: user?.id || '',
           senderName: 'Tú',
           body: newMessage.trim(),
@@ -1076,12 +1083,51 @@ export const InboxPage: React.FC = () => {
       priority: 'medium' as const,
       assignedAssistant: 'WhatsApp Assistant',
       lastMessage: chat.lastMessage?.body || 'Sin mensajes',
-      lastMessageTime: new Date(chat.lastMessage?.messageTimestamp * 1000 || chat.updatedAt).toISOString(),
+      lastMessageTime: (() => {
+        try {
+          // Intentar usar messageTimestamp primero
+          if (chat.lastMessage?.messageTimestamp) {
+            const timestamp = chat.lastMessage.messageTimestamp;
+            const date = new Date(timestamp > 1000000000000 ? timestamp : timestamp * 1000);
+            if (!isNaN(date.getTime())) {
+              return date.toISOString();
+            }
+          }
+          // Fallback a updatedAt si está disponible y es válido
+          if (chat.updatedAt) {
+            const date = new Date(chat.updatedAt);
+            if (!isNaN(date.getTime())) {
+              return date.toISOString();
+            }
+          }
+          // Fallback a fecha actual si todo falla
+          return new Date().toISOString();
+        } catch (error) {
+          console.error('Error creating lastMessageTime:', error);
+          return new Date().toISOString();
+        }
+      })(),
       unreadCount: chat.unreadCount,
       tags: chat.isGroup ? ['grupo'] : ['individual'],
       messages: [],
-      createdAt: new Date(chat.createdAt).toISOString(),
-      updatedAt: new Date(chat.updatedAt).toISOString(),
+      createdAt: (() => {
+        try {
+          const date = new Date(chat.createdAt);
+          return isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+        } catch (error) {
+          console.error('Error creating createdAt:', error);
+          return new Date().toISOString();
+        }
+      })(),
+      updatedAt: (() => {
+        try {
+          const date = new Date(chat.updatedAt);
+          return isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+        } catch (error) {
+          console.error('Error creating updatedAt:', error);
+          return new Date().toISOString();
+        }
+      })(),
       isWhatsApp: true,
       isWeb: false,
       whatsappChat: chat,
@@ -1157,32 +1203,62 @@ export const InboxPage: React.FC = () => {
   };
 
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-    } else if (diffInHours < 48) {
-      return 'Ayer';
-    } else {
-      return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+    try {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) {
+        return '--:--';
+      }
+      
+      const now = new Date();
+      const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+      
+      if (diffInHours < 24) {
+        return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      } else if (diffInHours < 48) {
+        return 'Ayer';
+      } else {
+        return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+      }
+    } catch (error) {
+      console.error('Error formatting time:', timestamp, error);
+      return '--:--';
     }
   };
 
   const formatTimeForBubble = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    try {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) {
+        return '--:--';
+      }
+      return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    } catch (error) {
+      console.error('Error formatting time for bubble:', timestamp, error);
+      return '--:--';
+    }
   };
 
   const formatWhatsAppTimestamp = (timestamp: number) => {
     try {
+      // Validar que el timestamp sea un número válido
+      if (!timestamp || isNaN(timestamp) || !isFinite(timestamp)) {
+        return '--:--';
+      }
+      
       // Si el timestamp es muy grande, probablemente ya está en milisegundos
       if (timestamp > 1000000000000) {
-        return new Date(timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) {
+          return '--:--';
+        }
+        return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
       }
       // Si es menor, está en segundos, convertir a milisegundos
-      return new Date(timestamp * 1000).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      const date = new Date(timestamp * 1000);
+      if (isNaN(date.getTime())) {
+        return '--:--';
+      }
+      return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     } catch (error) {
       console.error('Error formatting timestamp:', timestamp, error);
       return '--:--';
@@ -1190,26 +1266,35 @@ export const InboxPage: React.FC = () => {
   };
 
   const formatDateForList = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    
-    // Resetear las horas para comparar solo fechas
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    
-    const diffInDays = Math.floor((today.getTime() - messageDate.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffInDays === 0) {
-      return 'Hoy';
-    } else if (diffInDays === 1) {
-      return 'Ayer';
-    } else if (diffInDays < 7) {
-      const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-      return days[date.getDay()];
-    } else if (diffInDays < 14) {
-      return 'Semana pasada';
-    } else {
-      return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+    try {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) {
+        return '--';
+      }
+      
+      const now = new Date();
+      
+      // Resetear las horas para comparar solo fechas
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      
+      const diffInDays = Math.floor((today.getTime() - messageDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffInDays === 0) {
+        return 'Hoy';
+      } else if (diffInDays === 1) {
+        return 'Ayer';
+      } else if (diffInDays < 7) {
+        const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        return days[date.getDay()];
+      } else if (diffInDays < 14) {
+        return 'Semana pasada';
+      } else {
+        return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+      }
+    } catch (error) {
+      console.error('Error formatting date for list:', timestamp, error);
+      return '--';
     }
   };
 
@@ -1258,12 +1343,12 @@ export const InboxPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card">
-      <div className="flex h-screen">
+      <div className="flex h-screen flex-col lg:flex-row">
         {/* Sidebar - Lista de conversaciones */}
-        <div className="w-1/3 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-dark-border/50 flex flex-col">
+        <div className="w-full sm:w-1/2 lg:w-1/3 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-dark-border/50 flex flex-col min-w-0">
           {/* Header */}
-          <div className="p-6 border-b border-gray-200/50 dark:border-dark-border/50">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent mb-4">
+          <div className="p-4 sm:p-6 border-b border-gray-200/50 dark:border-dark-border/50">
+            <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent mb-4">
               Inbox
             </h1>
             
@@ -1280,37 +1365,37 @@ export const InboxPage: React.FC = () => {
             </div>
 
             {/* Filters */}
-            <div className="flex space-x-2 mb-4">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
-                <option value="all">Todos los estados</option>
-                <option value="active">Activo</option>
-                <option value="pending">Pendiente</option>
-                <option value="resolved">Resuelto</option>
-                <option value="archived">Archivado</option>
-              </select>
+            <div className="space-y-2 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="all">Todos los estados</option>
+                  <option value="active">Activo</option>
+                  <option value="pending">Pendiente</option>
+                  <option value="resolved">Resuelto</option>
+                  <option value="archived">Archivado</option>
+                </select>
+                
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="all">Todas las prioridades</option>
+                  <option value="urgent">Urgente</option>
+                  <option value="high">Alta</option>
+                  <option value="medium">Media</option>
+                  <option value="low">Baja</option>
+                </select>
+              </div>
               
-              <select
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-                className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
-                <option value="all">Todas las prioridades</option>
-                <option value="urgent">Urgente</option>
-                <option value="high">Alta</option>
-                <option value="medium">Media</option>
-                <option value="low">Baja</option>
-              </select>
-            </div>
-
-            <div className="flex space-x-2">
               <select
                 value={platformFilter}
                 onChange={(e) => setPlatformFilter(e.target.value)}
-                className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               >
                 <option value="all">Todas las plataformas</option>
                 <option value="whatsapp">WhatsApp</option>
@@ -1435,7 +1520,7 @@ export const InboxPage: React.FC = () => {
         </div>
 
         {/* Main Content - Chat */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           {selectedConv ? (
             <>
               {/* Chat Header */}

@@ -4,6 +4,7 @@ import { whatsappService } from '../services/WhatsAppService';
 import { database } from '../config/database';
 import { redisConfig } from '../config/redis';
 import { logger } from '../utils/logger';
+import { generateChatHashForWhatsApp, generateDeterministicHash } from '../utils/hash';
 
 export class WhatsAppController {
   public async createSession(req: AuthenticatedRequest, res: Response<ApiResponse>) {
@@ -49,7 +50,13 @@ export class WhatsAppController {
       }
 
       // Intentar obtener QR de Redis primero (más rápido)
-      let qrData = await redisConfig.getQRCode(userId);
+      let qrData = null;
+      try {
+        qrData = await redisConfig.getQRCode(userId);
+      } catch (error) {
+        console.warn(`⚠️ Error obteniendo QR de Redis para usuario ${userId}:`, error);
+        // Continuar sin Redis si falla
+      }
       
       // Si no está en Redis, obtener de base de datos
       if (!qrData) {
@@ -461,10 +468,11 @@ export class WhatsAppController {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
 
-      // Obtener chats únicos basados en los mensajes
+      // Obtener chats únicos basados en los mensajes usando chat_hash
       const chats = await database.query(
         `SELECT 
-           m.chat_id as id,
+           COALESCE(c.chat_hash, m.chat_hash) as chat_hash,
+           m.chat_id as whatsapp_id,
            c.name,
            c.phone_number,
            c.is_group,
@@ -473,26 +481,45 @@ export class WhatsAppController {
          FROM messages m
          LEFT JOIN contacts c ON c.whatsapp_id = m.chat_id AND c.user_id = m.user_id
          WHERE m.user_id = $1
-         GROUP BY m.chat_id, c.name, c.phone_number, c.is_group
+         GROUP BY COALESCE(c.chat_hash, m.chat_hash), m.chat_id, c.name, c.phone_number, c.is_group
          ORDER BY last_message_time DESC NULLS LAST
          LIMIT $2 OFFSET $3`,
         [userId, limit, offset]
       );
 
-      // Formatear los chats para el frontend
-      const formattedChats = chats.rows.map((chat: any) => ({
-        id: chat.id,
-        name: chat.name || chat.phone_number || chat.id.split('@')[0],
-        isGroup: chat.is_group,
-        isReadOnly: false,
-        unreadCount: 0, // TODO: Implementar conteo de mensajes no leídos
-        lastMessage: undefined, // Se cargará por separado si es necesario
-        participants: chat.is_group ? [] : [chat.id],
-        createdAt: Date.now(),
-        updatedAt: chat.last_message_time ? new Date(chat.last_message_time).getTime() : Date.now(),
-        archived: false,
-        pinned: false
-      }));
+      // Formatear los chats para el frontend usando chat_hash como ID
+      const formattedChats = chats.rows.map((chat: any) => {
+        // Si no hay chat_hash, generar uno determinístico
+        const chatHash = chat.chat_hash || generateDeterministicHash(`${chat.whatsapp_id}_${userId}`, 44);
+        
+        return {
+          id: chatHash, // Usar chat_hash como ID principal
+          whatsappId: chat.whatsapp_id, // Mantener whatsapp_id para referencia
+          name: chat.name || chat.phone_number || chat.whatsapp_id.split('@')[0],
+          isGroup: chat.is_group,
+          isReadOnly: false,
+          unreadCount: 0, // TODO: Implementar conteo de mensajes no leídos
+          lastMessage: undefined, // Se cargará por separado si es necesario
+          participants: chat.is_group ? [] : [chat.whatsapp_id],
+          createdAt: Date.now(),
+          updatedAt: (() => {
+            try {
+              if (chat.last_message_time) {
+                const date = new Date(chat.last_message_time);
+                if (!isNaN(date.getTime())) {
+                  return date.getTime();
+                }
+              }
+              return Date.now();
+            } catch (error) {
+              console.error('Error processing updatedAt timestamp:', chat.last_message_time, error);
+              return Date.now();
+            }
+          })(),
+          archived: false,
+          pinned: false
+        };
+      });
 
       return res.json({
         success: true,
@@ -532,7 +559,43 @@ export class WhatsAppController {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
 
-      // Obtener mensajes del chat
+      // Determinar si chatId es un hash o un whatsapp_id
+      let whatsappId = chatId;
+      let chatHash = chatId;
+      
+      // Si el chatId no parece ser un hash (no contiene @), asumir que es un whatsapp_id
+      if (chatId.includes('@')) {
+        // Es un whatsapp_id, buscar el chat_hash correspondiente
+        const contactResult = await database.query(
+          'SELECT chat_hash FROM contacts WHERE whatsapp_id = $1 AND user_id = $2',
+          [chatId, userId]
+        );
+        
+        if (contactResult.rows.length > 0) {
+          chatHash = contactResult.rows[0].chat_hash;
+        } else {
+          // Generar hash determinístico si no existe
+          chatHash = generateDeterministicHash(`${chatId}_${userId}`, 44);
+        }
+        whatsappId = chatId;
+      } else {
+        // Es un chat_hash, buscar el whatsapp_id correspondiente
+        const contactResult = await database.query(
+          'SELECT whatsapp_id FROM contacts WHERE chat_hash = $1 AND user_id = $2',
+          [chatId, userId]
+        );
+        
+        if (contactResult.rows.length > 0) {
+          whatsappId = contactResult.rows[0].whatsapp_id;
+        } else {
+          return res.status(404).json({
+            success: false,
+            message: 'Chat no encontrado'
+          });
+        }
+      }
+
+      // Obtener mensajes del chat usando chat_hash
       const messages = await database.query(
         `SELECT 
            m.id,
@@ -543,13 +606,14 @@ export class WhatsAppController {
            m.timestamp,
            m.created_at,
            c.name as contact_name,
-           c.whatsapp_id
+           c.whatsapp_id,
+           m.chat_hash
          FROM messages m
          LEFT JOIN contacts c ON c.whatsapp_id = m.chat_id AND c.user_id = m.user_id
-         WHERE m.user_id = $1 AND m.chat_id = $2
+         WHERE m.user_id = $1 AND (m.chat_hash = $2 OR m.chat_id = $3)
          ORDER BY m.timestamp ASC
-         LIMIT $3 OFFSET $4`,
-        [userId, chatId, limit, offset]
+         LIMIT $4 OFFSET $5`,
+        [userId, chatHash, whatsappId, limit, offset]
       );
 
       // Formatear los mensajes para el frontend
@@ -557,18 +621,31 @@ export class WhatsAppController {
         id: msg.whatsapp_message_id,
         key: {
           id: msg.whatsapp_message_id,
-          remoteJid: chatId,
+          remoteJid: whatsappId, // Usar whatsapp_id para la comunicación con WhatsApp
           fromMe: msg.is_from_me
         },
         message: {
           conversation: msg.content
         },
-        messageTimestamp: Math.floor(new Date(msg.timestamp).getTime() / 1000),
+        messageTimestamp: (() => {
+          try {
+            const date = new Date(msg.timestamp);
+            if (isNaN(date.getTime())) {
+              console.warn('Invalid timestamp in message:', msg.timestamp);
+              return Math.floor(Date.now() / 1000);
+            }
+            return Math.floor(date.getTime() / 1000);
+          } catch (error) {
+            console.error('Error processing message timestamp:', msg.timestamp, error);
+            return Math.floor(Date.now() / 1000);
+          }
+        })(),
         status: 'delivered', // Estado por defecto
         fromMe: msg.is_from_me,
-        chatId: chatId,
-        senderId: msg.is_from_me ? userId : chatId,
-        senderName: msg.is_from_me ? 'Tú' : (msg.contact_name || chatId.split('@')[0]),
+        chatId: chatHash, // Usar chat_hash como ID del chat
+        whatsappId: whatsappId, // Mantener whatsapp_id para referencia
+        senderId: msg.is_from_me ? userId : whatsappId,
+        senderName: msg.is_from_me ? 'Tú' : (msg.contact_name || whatsappId.split('@')[0]),
         body: msg.content,
         type: msg.message_type,
         hasMedia: false, // Por ahora sin media
@@ -579,7 +656,8 @@ export class WhatsAppController {
         success: true,
         data: {
           messages: formattedMessages,
-          chatId: chatId,
+          chatId: chatHash, // Devolver chat_hash como ID del chat
+          whatsappId: whatsappId, // Incluir whatsapp_id para referencia
           total: formattedMessages.length
         },
         message: 'Mensajes obtenidos exitosamente'

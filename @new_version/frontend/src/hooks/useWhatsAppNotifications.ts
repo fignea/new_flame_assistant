@@ -10,6 +10,8 @@ export interface WhatsAppMessage {
     remoteJid: string;
     fromMe: boolean;
   };
+  chatId?: string; // chat_hash
+  whatsappId?: string; // whatsapp_id para referencia
   senderId: string;
   senderName?: string;
   content: string;

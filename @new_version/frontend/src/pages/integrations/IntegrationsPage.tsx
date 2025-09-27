@@ -18,6 +18,7 @@ import { useApp } from '../../contexts/AppContext';
 import { apiService } from '../../services/api.service';
 import { useNavigate } from 'react-router-dom';
 import { WebChatDemoModal } from '../../components/WebChatDemoModal';
+import { useSocketIO } from '../../hooks/useSocketIO';
 // Importación dinámica de QRCode para evitar problemas con Vite
 
 interface Integration {
@@ -31,9 +32,76 @@ interface Integration {
   bgColor: string;
 }
 
+interface WhatsAppSessionResponse {
+  qrCode?: string;
+  sessionId?: string;
+}
+
+interface WebChatStatsResponse {
+  total_conversations: number;
+  active_conversations: number;
+  online_visitors: number;
+}
+
+interface WebChatScriptResponse {
+  script: string;
+  filename: string;
+}
+
 export const IntegrationsPage: React.FC = () => {
   const { isAuthenticated, user } = useApp();
   const navigate = useNavigate();
+  
+  // Configurar Socket.IO para escuchar eventos de WhatsApp
+  const { joinUserRoom, leaveUserRoom } = useSocketIO({
+    onMessage: (message) => {
+      console.log('Socket.IO message received in IntegrationsPage:', message);
+      
+      if (message.type === 'whatsapp:disconnected') {
+        console.log('WhatsApp disconnected event received');
+        // Actualizar el estado para reflejar la desconexión
+        setWhatsappStatus(prev => prev ? {
+          ...prev,
+          isConnected: false,
+          isAuthenticated: false
+        } : null);
+        
+        // Mostrar notificación de desconexión
+        setNotification({
+          type: 'error',
+          message: 'WhatsApp se ha desconectado. Por favor, reconecta tu cuenta.'
+        });
+        
+        // Limpiar notificación después de 5 segundos
+        setTimeout(() => setNotification(null), 5000);
+      } else if (message.type === 'whatsapp:connected') {
+        console.log('WhatsApp connected event received');
+        // Actualizar el estado con la información de conexión
+        setWhatsappStatus(message.data);
+        
+        // Mostrar notificación de conexión
+        setNotification({
+          type: 'success',
+          message: `¡WhatsApp conectado exitosamente! Conectado como ${message.data?.userName || 'Usuario WhatsApp'}`
+        });
+        
+        // Limpiar notificación después de 5 segundos
+        setTimeout(() => setNotification(null), 5000);
+      }
+    },
+    onConnect: () => {
+      console.log('Socket.IO connected in IntegrationsPage');
+      if (user?.id) {
+        joinUserRoom(user.id.toString());
+      }
+    },
+    onDisconnect: () => {
+      console.log('Socket.IO disconnected in IntegrationsPage');
+    },
+    onError: (error) => {
+      console.error('Socket.IO error in IntegrationsPage:', error);
+    }
+  });
   const [whatsappQR, setWhatsappQR] = useState<string | null>(null);
   const [qrImageData, setQrImageData] = useState<string | null>(null);
   const [isGeneratingQR, setIsGeneratingQR] = useState(false);
@@ -169,12 +237,13 @@ export const IntegrationsPage: React.FC = () => {
       console.log('WhatsApp session response:', response);
       
       if (response.success && response.data) {
-        if (response.data?.qrCode) {
+        const sessionData = response.data as WhatsAppSessionResponse;
+        if (sessionData?.qrCode) {
           // QR disponible inmediatamente
-          setWhatsappQR(response.data.qrCode);
+          setWhatsappQR(sessionData.qrCode);
           console.log('QR Code received immediately from backend');
           setIsGeneratingQR(false);
-        } else if (response.data?.sessionId) {
+        } else if (sessionData?.sessionId) {
           // QR pendiente, hacer polling
           console.log('Session created, polling for QR...');
           // NO cambiar isGeneratingQR aquí, mantener el modal abierto
@@ -201,9 +270,15 @@ export const IntegrationsPage: React.FC = () => {
         
         // Primero verificar el estado de conexión
         const statusResponse = await apiService.getWhatsAppStatus();
-        if (statusResponse.success && statusResponse.data && 'isConnected' in statusResponse.data && statusResponse.data.isConnected) {
+        if (statusResponse.success && statusResponse.data && typeof statusResponse.data === 'object' && statusResponse.data !== null && 'isConnected' in statusResponse.data && statusResponse.data.isConnected) {
           console.log('WhatsApp connected! Closing modal and updating status');
-          setWhatsappStatus(statusResponse.data as any);
+          setWhatsappStatus(statusResponse.data as {
+            isConnected: boolean;
+            isAuthenticated: boolean;
+            phoneNumber?: string;
+            userName?: string;
+            lastSeen?: string;
+          });
           setWhatsappQR(null);
           setIsGeneratingQR(false);
           return;
@@ -211,8 +286,8 @@ export const IntegrationsPage: React.FC = () => {
         
         // Si no está conectado, verificar si hay QR disponible
         const qrResponse = await apiService.getWhatsAppQR();
-        if (qrResponse.success && qrResponse.data && 'qrCode' in qrResponse.data && qrResponse.data.qrCode) {
-          setWhatsappQR(qrResponse.data.qrCode);
+        if (qrResponse.success && qrResponse.data && typeof qrResponse.data === 'object' && qrResponse.data !== null && 'qrCode' in qrResponse.data && qrResponse.data.qrCode) {
+          setWhatsappQR(qrResponse.data.qrCode as string);
           console.log('QR Code received from polling');
           setIsGeneratingQR(false); // Detener el estado de carga
           return;
@@ -269,7 +344,13 @@ export const IntegrationsPage: React.FC = () => {
     try {
       const response = await apiService.getWhatsAppStatus();
       if (response.success && response.data) {
-        setWhatsappStatus(response.data as any);
+        setWhatsappStatus(response.data as {
+          isConnected: boolean;
+          isAuthenticated: boolean;
+          phoneNumber?: string;
+          userName?: string;
+          lastSeen?: string;
+        });
       }
     } catch (error) {
       console.error('Error checking WhatsApp status:', error);
@@ -285,7 +366,7 @@ export const IntegrationsPage: React.FC = () => {
     try {
       const response = await apiService.getWebChatStats();
       if (response.success && response.data) {
-        setWebChatStats(response.data);
+        setWebChatStats(response.data as WebChatStatsResponse);
       }
     } catch (error) {
       console.error('Error checking web chat stats:', error);
@@ -298,12 +379,13 @@ export const IntegrationsPage: React.FC = () => {
     try {
       const response = await apiService.getWebChatWidgetScript();
       if (response.success && response.data) {
+        const scriptData = response.data as WebChatScriptResponse;
         // Crear un blob con el script y descargarlo
-        const blob = new Blob([response.data.script], { type: 'application/javascript' });
+        const blob = new Blob([scriptData.script], { type: 'application/javascript' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = response.data.filename || 'flame-chat-widget.js';
+        a.download = scriptData.filename || 'flame-chat-widget.js';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -334,6 +416,19 @@ export const IntegrationsPage: React.FC = () => {
     }
   }, [isAuthenticated]);
 
+  // Unirse a la sala del usuario para recibir eventos de Socket.IO
+  React.useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      joinUserRoom(user.id.toString());
+    }
+    
+    return () => {
+      if (user?.id) {
+        leaveUserRoom(user.id.toString());
+      }
+    };
+  }, [isAuthenticated, user?.id, joinUserRoom, leaveUserRoom]);
+
   // Polling continuo para detectar cambios de estado cuando el modal está abierto
   React.useEffect(() => {
     // Solo hacer polling si el modal está abierto (hay QR o se está generando)
@@ -342,17 +437,30 @@ export const IntegrationsPage: React.FC = () => {
     const interval = setInterval(async () => {
       try {
         const response = await apiService.getWhatsAppStatus();
-        if (response.success && response.data?.isConnected) {
+        if (response.success && response.data && typeof response.data === 'object' && response.data !== null && 'isConnected' in response.data && response.data.isConnected) {
           console.log('WhatsApp connected! Closing modal and updating status');
-          setWhatsappStatus(response.data);
+          setWhatsappStatus(response.data as {
+            isConnected: boolean;
+            isAuthenticated: boolean;
+            phoneNumber?: string;
+            userName?: string;
+            lastSeen?: string;
+          });
           setWhatsappQR(null);
           setIsGeneratingQR(false);
           
           // Mostrar notificación de conexión exitosa
           setError(null);
+          const statusData = response.data as {
+            isConnected: boolean;
+            isAuthenticated: boolean;
+            phoneNumber?: string;
+            userName?: string;
+            lastSeen?: string;
+          };
           setNotification({
             type: 'success',
-            message: `¡WhatsApp conectado exitosamente! Conectado como ${response.data.userName || 'Usuario WhatsApp'}`
+            message: `¡WhatsApp conectado exitosamente! Conectado como ${statusData.userName || 'Usuario WhatsApp'}`
           });
           
           // Limpiar notificación después de 5 segundos
@@ -369,14 +477,14 @@ export const IntegrationsPage: React.FC = () => {
   }, [whatsappQR, isGeneratingQR]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent mb-2">
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card">
+      {/* Header */}
+      <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-dark-border/50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
             Integraciones
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
             Conecta tu asistente con diferentes plataformas y servicios
           </p>
           {!isAuthenticated && (
@@ -416,7 +524,9 @@ export const IntegrationsPage: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto p-6 space-y-8">
         {/* Integrations Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {integrations.map((integration) => {

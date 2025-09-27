@@ -19,6 +19,7 @@ import { WhatsAppMessage, WhatsAppContact, WhatsAppConnectionStatus } from '../t
 import { database } from '../config/database';
 import { redisConfig } from '../config/redis';
 import { logger, logWhatsApp } from '../utils/logger';
+import { generateChatHashForWhatsApp, generateDeterministicHash } from '../utils/hash';
 
 export class WhatsAppService extends EventEmitter {
   private sessions: Map<number, {
@@ -208,7 +209,7 @@ export class WhatsAppService extends EventEmitter {
       const socket = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        browser: ['WhatsApp Manager', 'Chrome', '1.0.0'],
+        browser: ['Flame AI', 'Chrome', '1.0.0'],
         connectTimeoutMs: parseInt(process.env.WHATSAPP_CONNECT_TIMEOUT || '60000'),
         defaultQueryTimeoutMs: 60000,
         keepAliveIntervalMs: 10000,
@@ -288,8 +289,13 @@ export class WhatsAppService extends EventEmitter {
           [qrDataURL, userId]
         );
 
-        // Guardar en Redis para acceso rápido
-        await redisConfig.setQRCode(userId, { qr, dataURL: qrDataURL });
+        // Guardar en Redis para acceso rápido (opcional)
+        try {
+          await redisConfig.setQRCode(userId, { qr, dataURL: qrDataURL });
+        } catch (error) {
+          console.warn(`⚠️ Error guardando QR en Redis para usuario ${userId}:`, error);
+          // Continuar sin Redis si falla
+        }
 
         this.emit('qr', userId, qrDataURL);
       }
@@ -305,7 +311,8 @@ export class WhatsAppService extends EventEmitter {
         // Obtener información del usuario
         if (session.socket?.user) {
           session.phoneNumber = session.socket.user.id.split('@')[0];
-          session.userName = session.socket.user.name || 'Unknown User';
+          // Obtener el nombre del usuario de WhatsApp
+          session.userName = session.socket.user.name || 'Usuario WhatsApp';
         }
 
         // Actualizar base de datos
@@ -321,8 +328,13 @@ export class WhatsAppService extends EventEmitter {
           [userId, session.sessionId, session.phoneNumber || null, session.userName || null, true]
         );
 
-        // Limpiar QR de Redis
-        await redisConfig.deleteQRCode(userId);
+        // Limpiar QR de Redis (opcional)
+        try {
+          await redisConfig.deleteQRCode(userId);
+        } catch (error) {
+          console.warn(`⚠️ Error limpiando QR de Redis para usuario ${userId}:`, error);
+          // Continuar sin Redis si falla
+        }
 
         this.emit('connected', userId, {
           isConnected: true,
@@ -371,6 +383,15 @@ export class WhatsAppService extends EventEmitter {
   private async handleMessagesUpsert(messages: WAMessage[], type: MessageUpsertType, userId: number): Promise<void> {
     for (const message of messages) {
       try {
+        // Filtrar mensajes de tipo status y broadcast
+        if (message.key.remoteJid?.includes('status@broadcast') || 
+            message.key.remoteJid?.includes('broadcast') ||
+            message.message?.protocolMessage ||
+            message.message?.senderKeyDistributionMessage) {
+          console.log(`🚫 Filtering out status/broadcast message: ${message.key.remoteJid}`);
+          continue;
+        }
+
         const whatsappMessage = this.convertBaileysMessage(message);
         if (whatsappMessage) {
           // Verificar si el contacto está bloqueado (solo para mensajes entrantes)
@@ -422,16 +443,27 @@ export class WhatsAppService extends EventEmitter {
   private normalizeTimestamp(timestamp: number): number {
     // Los timestamps de WhatsApp pueden estar en diferentes formatos
     // Normalizar a segundos desde 1970
-    if (timestamp > 1000000000000) {
-      // Timestamp en milisegundos, convertir a segundos
-      return Math.floor(timestamp / 1000);
-    } else if (timestamp > 1000000000) {
-      // Timestamp en segundos pero muy grande (probablemente incorrecto)
-      // Dividir por 1000 para normalizar
-      return Math.floor(timestamp / 1000);
-    } else {
-      // Timestamp en segundos normal
-      return Math.floor(timestamp);
+    try {
+      // Validar que el timestamp sea un número válido
+      if (!timestamp || isNaN(timestamp) || !isFinite(timestamp)) {
+        console.warn('Invalid timestamp received:', timestamp);
+        return Math.floor(Date.now() / 1000); // Usar timestamp actual como fallback
+      }
+
+      if (timestamp > 1000000000000) {
+        // Timestamp en milisegundos, convertir a segundos
+        return Math.floor(timestamp / 1000);
+      } else if (timestamp > 1000000000) {
+        // Timestamp en segundos pero muy grande (probablemente incorrecto)
+        // Dividir por 1000 para normalizar
+        return Math.floor(timestamp / 1000);
+      } else {
+        // Timestamp en segundos normal
+        return Math.floor(timestamp);
+      }
+    } catch (error) {
+      console.error('Error normalizing timestamp:', timestamp, error);
+      return Math.floor(Date.now() / 1000); // Usar timestamp actual como fallback
     }
   }
 
@@ -597,33 +629,37 @@ export class WhatsAppService extends EventEmitter {
 
   private async saveMessage(message: WhatsAppMessage, userId: number): Promise<void> {
     try {
+      // Generar chat_hash para el mensaje
+      const chatHash = generateDeterministicHash(`${message.chatId}_${userId}`, 44);
+      
       // Buscar o crear contacto
       let contact = await database.get(
-        `SELECT id FROM contacts WHERE user_id = $1 AND whatsapp_id = $2`,
+        `SELECT id, chat_hash FROM contacts WHERE user_id = $1 AND whatsapp_id = $2`,
         [userId, message.chatId]
       );
 
       if (!contact) {
         const result = await database.run(
-          `INSERT INTO contacts (user_id, whatsapp_id, name, phone_number, is_group) 
-           VALUES ($1, $2, $3, $4, $5)`,
+          `INSERT INTO contacts (user_id, whatsapp_id, name, phone_number, is_group, chat_hash) 
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             userId,
             message.chatId,
             message.senderName || message.chatId.split('@')[0],
             message.chatId.includes('@s.whatsapp.net') ? message.chatId.split('@')[0] : null,
-            message.chatId.includes('@g.us')
+            message.chatId.includes('@g.us'),
+            chatHash
           ]
         );
-        contact = { id: result.id };
+        contact = { id: result.id, chat_hash: chatHash };
       }
 
-      // Guardar mensaje
+      // Guardar mensaje con chat_hash
       await database.run(
         `INSERT INTO messages 
          (user_id, whatsapp_message_id, chat_id, content, message_type, 
-          is_from_me, timestamp) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          is_from_me, timestamp, chat_hash) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           userId,
           message.id,
@@ -631,7 +667,8 @@ export class WhatsAppService extends EventEmitter {
           message.content,
           message.messageType,
           message.isFromMe,
-          new Date(message.timestamp * 1000).toISOString()
+          new Date(message.timestamp * 1000).toISOString(),
+          contact.chat_hash || chatHash
         ]
       );
     } catch (error) {
@@ -641,16 +678,20 @@ export class WhatsAppService extends EventEmitter {
 
   private async saveContact(contact: WhatsAppContact, userId: number): Promise<void> {
     try {
+      // Generar chat_hash determinístico para el contacto
+      const chatHash = generateDeterministicHash(`${contact.id}_${userId}`, 44);
+      
       await database.run(
         `INSERT INTO contacts 
-         (user_id, whatsapp_id, name, phone_number, is_group, avatar_url, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+         (user_id, whatsapp_id, name, phone_number, is_group, avatar_url, chat_hash, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
          ON CONFLICT (user_id, whatsapp_id) 
          DO UPDATE SET 
            name = EXCLUDED.name,
            phone_number = EXCLUDED.phone_number,
            is_group = EXCLUDED.is_group,
            avatar_url = EXCLUDED.avatar_url,
+           chat_hash = COALESCE(contacts.chat_hash, EXCLUDED.chat_hash),
            updated_at = CURRENT_TIMESTAMP`,
         [
           userId,
@@ -658,7 +699,8 @@ export class WhatsAppService extends EventEmitter {
           contact.name,
           contact.phoneNumber,
           contact.isGroup,
-          contact.avatarUrl
+          contact.avatarUrl,
+          chatHash
         ]
       );
     } catch (error) {
@@ -688,7 +730,7 @@ export class WhatsAppService extends EventEmitter {
         session.isConnected = true;
         session.isAuthenticated = true;
         session.phoneNumber = session.socket.user.id.split('@')[0];
-        session.userName = session.socket.user.name || 'Unknown User';
+        session.userName = session.socket.user.name || 'Usuario WhatsApp';
 
         this.emit('connected', userId, {
           isConnected: true,
@@ -810,6 +852,9 @@ export class WhatsAppService extends EventEmitter {
        WHERE user_id = $1`,
       [userId]
     );
+
+    // Emitir evento de desconexión
+    this.emit('disconnected', userId);
 
     console.log(`🧹 Session cleaned up for user ${userId}`);
   }

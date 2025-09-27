@@ -381,15 +381,15 @@ export const ContactsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
+      {/* Header */}
+      <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-dark-border/50 p-6">
+        <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent">
-                Gestión de Contactos
+                Contactos
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-2">
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
                 Administra tu base de contactos de WhatsApp
               </p>
             </div>
@@ -403,9 +403,11 @@ export const ContactsPage: React.FC = () => {
             </button>
           </div>
         </div>
-        
+      </div>
+
+      <div className="max-w-7xl mx-auto p-6 space-y-8">
         {/* Filtros y búsqueda */}
-        <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-sm border border-gray-200 dark:border-dark-border p-6 mb-6">
+        <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
           <div className="flex flex-col sm:flex-row gap-4">
             {/* Búsqueda */}
             <div className="flex-1">
