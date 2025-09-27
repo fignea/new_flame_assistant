@@ -76,9 +76,10 @@ export const WebChatWidget: React.FC<WebChatWidgetProps> = ({
       setIsConnected(false);
     });
 
-    // Escuchar mensajes del agente
+    // Escuchar mensajes del agente y visitante
     newSocket.on('web:message:new', (message: any) => {
-      if (message.conversation_id === conversationId && message.sender_type === 'agent') {
+      console.log('Widget: WebSocket message received:', message);
+      if (message.conversation_id === conversationId) {
         setMessages(prev => {
           // Verificar si el mensaje ya existe para evitar duplicados
           const exists = prev.find(m => m.id === message.id.toString());
@@ -86,7 +87,7 @@ export const WebChatWidget: React.FC<WebChatWidgetProps> = ({
             return [...prev, {
               id: message.id.toString(),
               content: message.content,
-              sender: 'agent' as const,
+              sender: message.sender_type as 'visitor' | 'agent',
               timestamp: new Date(message.created_at)
             }];
           }
@@ -192,12 +193,14 @@ export const WebChatWidget: React.FC<WebChatWidgetProps> = ({
       timestamp: new Date()
     };
 
-    setMessages(prev => [...prev, message]);
+    const messageContent = newMessage.trim();
     setNewMessage('');
 
     try {
       // Si no hay conversación, crear una
       if (!conversationId) {
+        // Solo agregar mensaje localmente para el primer mensaje
+        setMessages(prev => [...prev, message]);
         const response = await fetch(`${apiUrl}/conversations`, {
           method: 'POST',
           headers: {
@@ -210,7 +213,7 @@ export const WebChatWidget: React.FC<WebChatWidgetProps> = ({
               user_agent: navigator.userAgent,
               location: window.location.href
             },
-            initial_message: message.content
+            initial_message: messageContent
           })
         });
 
@@ -229,7 +232,7 @@ export const WebChatWidget: React.FC<WebChatWidgetProps> = ({
           },
           body: JSON.stringify({
             conversation_id: conversationId,
-            content: message.content,
+            content: messageContent,
             message_type: 'text'
           })
         });

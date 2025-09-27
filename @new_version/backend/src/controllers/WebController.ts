@@ -12,6 +12,16 @@ export function setSocketIO(socketIO: any) {
 }
 
 export class WebController {
+  // Generar ID único alfanumérico para conversaciones
+  private generateConversationId(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 12; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
   // Crear o obtener conversación web (público para widget)
   public async createConversation(req: any, res: Response<ApiResponse<WebConversation>>) {
     try {
@@ -71,13 +81,32 @@ export class WebController {
       );
 
       if (!conversation) {
+        // Generar ID público único
+        let publicId = this.generateConversationId();
+        let isUnique = false;
+        let attempts = 0;
+        
+        // Verificar que el ID sea único
+        while (!isUnique && attempts < 10) {
+          const checkResult = await database.query(
+            'SELECT id FROM web_conversations WHERE public_id = $1',
+            [publicId]
+          );
+          if (checkResult.rows.length === 0) {
+            isUnique = true;
+          } else {
+            publicId = this.generateConversationId();
+            attempts++;
+          }
+        }
+
         // Crear nueva conversación
         const title = visitor.name || visitor.email || `Visitante ${visitor.session_id.slice(0, 8)}`;
         const conversationResult = await database.query(
-          `INSERT INTO web_conversations (user_id, visitor_id, title, status, priority, tags, metadata)
-           VALUES ($1, $2, $3, 'active', 'normal', ARRAY[]::text[], '{}')
+          `INSERT INTO web_conversations (public_id, user_id, visitor_id, title, status, priority, tags, metadata)
+           VALUES ($1, $2, $3, $4, 'active', 'normal', ARRAY[]::text[], '{}')
            RETURNING *`,
-          [userId, visitorRecord.id, title]
+          [publicId, userId, visitorRecord.id, title]
         );
         conversation = conversationResult.rows[0];
       }
@@ -164,6 +193,7 @@ export class WebController {
 
       const conversations = result.rows.map((row: any) => ({
         id: row.id,
+        public_id: row.public_id,
         user_id: row.user_id,
         visitor_id: row.visitor_id,
         title: row.title,
@@ -213,6 +243,74 @@ export class WebController {
   }
 
   // Obtener conversación por ID
+  // Buscar conversación por public_id
+  public async getConversationByPublicId(publicId: string, userId: number): Promise<WebConversation | null> {
+    try {
+      const result = await database.query(
+        `SELECT 
+          wc.*,
+          wv.name as visitor_name,
+          wv.email as visitor_email,
+          wv.phone as visitor_phone,
+          wv.is_online,
+          wv.last_seen,
+          u.name as assigned_user_name,
+          u.email as assigned_user_email
+        FROM web_conversations wc
+        JOIN web_visitors wv ON wc.visitor_id = wv.id
+        LEFT JOIN users u ON wc.assigned_to = u.id
+        WHERE wc.public_id = $1 AND wc.user_id = $2`,
+        [publicId, userId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        public_id: row.public_id,
+        user_id: row.user_id,
+        visitor_id: row.visitor_id,
+        title: row.title,
+        status: row.status,
+        assigned_to: row.assigned_to,
+        priority: row.priority,
+        tags: typeof row.tags === 'string' ? JSON.parse(row.tags || '[]') : (row.tags || []),
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {}),
+        last_message_at: row.last_message_at,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        visitor: {
+          id: row.visitor_id,
+          user_id: row.user_id,
+          session_id: row.session_id,
+          name: row.visitor_name,
+          email: row.visitor_email,
+          phone: row.visitor_phone,
+          ip_address: row.ip_address,
+          user_agent: row.user_agent,
+          location: row.location,
+          is_online: row.is_online,
+          last_seen: row.last_seen,
+          created_at: row.created_at
+        },
+        assigned_user: row.assigned_user_name ? {
+          id: row.assigned_to,
+          name: row.assigned_user_name,
+          email: row.assigned_user_email,
+          password: '',
+          created_at: '',
+          updated_at: ''
+        } : undefined
+      };
+    } catch (error) {
+      logger.error('Error getting conversation by public ID:', error);
+      return null;
+    }
+  }
+
   public async getConversationById(conversationId: number, userId: number): Promise<WebConversation | null> {
     try {
       const result = await database.query(
@@ -239,6 +337,7 @@ export class WebController {
       const row = result.rows[0];
       return {
         id: row.id,
+        public_id: row.public_id,
         user_id: row.user_id,
         visitor_id: row.visitor_id,
         title: row.title,
@@ -461,6 +560,67 @@ export class WebController {
   }
 
   // Obtener mensajes de una conversación (público para el widget)
+  // Obtener mensajes por public_id (público para widget)
+  public async getMessagesByPublicId(req: any, res: Response<ApiResponse<WebMessage[]>>) {
+    try {
+      const { publicId } = req.params;
+      const { limit = 50, offset = 0 } = req.query;
+
+      // Buscar conversación por public_id
+      const conversation = await database.get(
+        'SELECT id FROM web_conversations WHERE public_id = $1',
+        [publicId]
+      );
+
+      if (!conversation) {
+        return res.status(404).json({
+          success: false,
+          message: 'Conversación no encontrada'
+        });
+      }
+
+      const result = await database.query(
+        `SELECT 
+          wm.*,
+          wv.name as visitor_name,
+          u.name as agent_name
+        FROM web_messages wm
+        LEFT JOIN web_visitors wv ON wm.sender_type = 'visitor' AND wm.sender_id = wv.id
+        LEFT JOIN users u ON wm.sender_type = 'agent' AND wm.sender_id = u.id
+        WHERE wm.conversation_id = $1
+        ORDER BY wm.created_at ASC
+        LIMIT $2 OFFSET $3`,
+        [conversation.id, limit, offset]
+      );
+
+      const messages = result.rows.map((row: any) => ({
+        id: row.id,
+        conversation_id: row.conversation_id,
+        sender_type: row.sender_type,
+        sender_id: row.sender_id,
+        content: row.content,
+        message_type: row.message_type,
+        is_read: row.is_read,
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {}),
+        created_at: row.created_at,
+        sender_name: row.sender_type === 'visitor' ? row.visitor_name : row.agent_name
+      }));
+
+      return res.json({
+        success: true,
+        data: messages,
+        message: 'Mensajes obtenidos exitosamente'
+      });
+
+    } catch (error) {
+      logger.error('Error getting web messages by public ID:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
   public async getMessagesPublic(req: any, res: Response<ApiResponse<WebMessage[]>>) {
     try {
       const { conversationId } = req.params;

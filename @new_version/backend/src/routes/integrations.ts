@@ -9,6 +9,7 @@ const router = Router();
 router.post('/web/conversations', webController.createConversation.bind(webController));
 router.post('/web/messages', webController.sendMessage.bind(webController));
 router.get('/web/conversations/:conversationId/messages', webController.getMessagesPublic.bind(webController));
+router.get('/web/conversations/public/:publicId/messages', webController.getMessagesByPublicId.bind(webController));
 router.get('/web/widget-script', webController.getWidgetScript.bind(webController));
 
 // Aplicar autenticación a las rutas restantes

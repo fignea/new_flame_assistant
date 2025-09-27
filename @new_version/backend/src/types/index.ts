@@ -202,6 +202,7 @@ export interface WebVisitor {
 
 export interface WebConversation {
   id: number;
+  public_id: string;
   user_id: number;
   visitor_id: number;
   title: string;

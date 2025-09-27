@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS web_visitors (
 -- Crear tabla de conversaciones web
 CREATE TABLE IF NOT EXISTS web_conversations (
     id SERIAL PRIMARY KEY,
+    public_id VARCHAR(20) UNIQUE NOT NULL,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     visitor_id INTEGER REFERENCES web_visitors(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
@@ -148,6 +149,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_messages_status ON scheduled_messages(s
 -- Índices para web chat
 CREATE INDEX IF NOT EXISTS idx_web_visitors_user_id ON web_visitors(user_id);
 CREATE INDEX IF NOT EXISTS idx_web_visitors_session_id ON web_visitors(session_id);
+CREATE INDEX IF NOT EXISTS idx_web_conversations_public_id ON web_conversations(public_id);
 CREATE INDEX IF NOT EXISTS idx_web_conversations_user_id ON web_conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_web_conversations_visitor_id ON web_conversations(visitor_id);
 CREATE INDEX IF NOT EXISTS idx_web_conversations_status ON web_conversations(status);

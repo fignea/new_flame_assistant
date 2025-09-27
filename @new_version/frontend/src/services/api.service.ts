@@ -532,7 +532,7 @@ export class ApiService {
     limit?: number;
     offset?: number;
   }) {
-    return this.get(`/api/integrations/web/conversations/${conversationId}/messages`, params);
+    return this.get(`/api/integrations/web/conversations/public/${conversationId}/messages`, params);
   }
 
   async sendWebChatMessage(data: {

@@ -91,6 +91,7 @@ interface WhatsAppChat {
 
 interface WebConversation {
   id: number;
+  public_id: string;
   user_id: number;
   visitor_id: number;
   title: string;
@@ -245,32 +246,36 @@ export const InboxPage: React.FC = () => {
         console.log('Conversación seleccionada:', selectedConversation);
         
         // Agregar mensaje a la lista si es la conversación actual
-        if (selectedConversation && selectedConversation.startsWith('web_')) {
-          const conversationId = parseInt(selectedConversation.replace('web_', ''));
-          console.log('ID de conversación seleccionada:', conversationId);
-          console.log('ID de mensaje recibido:', newMessage.conversation_id);
-          console.log('¿Coinciden?', newMessage.conversation_id === conversationId);
-          
-          if (newMessage.conversation_id === conversationId) {
-            console.log('Agregando mensaje a la lista');
-            setWebMessages(prev => {
-              console.log('Mensajes actuales:', prev.length);
-              // Verificar si el mensaje ya existe para evitar duplicados
-              const exists = prev.find(m => m.id === newMessage.id);
-              if (exists) {
-                console.log('Mensaje ya existe, no se agrega');
-                return prev;
-              }
-              const newList = [...prev, newMessage];
-              console.log('Nueva lista de mensajes:', newList.length);
-              return newList;
-            });
+        if (selectedConversation) {
+          // Verificar si es una conversación web buscando en webConversations
+          const webConv = webConversations.find(conv => conv.public_id === selectedConversation);
+          if (webConv) {
+            const conversationId = selectedConversation;
+            console.log('ID de conversación seleccionada:', conversationId);
+            console.log('ID de mensaje recibido:', newMessage.conversation_id);
+            console.log('¿Coinciden?', newMessage.conversation_id === conversationId);
+            
+            if (newMessage.conversation_id === conversationId) {
+              console.log('Agregando mensaje a la lista');
+              setWebMessages(prev => {
+                console.log('Mensajes actuales:', prev.length);
+                // Verificar si el mensaje ya existe para evitar duplicados
+                const exists = prev.find(m => m.id === newMessage.id);
+                if (exists) {
+                  console.log('Mensaje ya existe, no se agrega');
+                  return prev;
+                }
+                const newList = [...prev, newMessage];
+                console.log('Nueva lista de mensajes:', newList.length);
+                return newList;
+              });
+            } else {
+              console.log('Mensaje no coincide con conversación seleccionada');
+            }
           } else {
-            console.log('Mensaje no coincide con conversación seleccionada');
+            console.log('No hay conversación web seleccionada, selectedConversation:', selectedConversation);
+            console.log('Mensaje recibido para conversación no seleccionada, se actualizará la lista de conversaciones');
           }
-        } else {
-          console.log('No hay conversación web seleccionada, selectedConversation:', selectedConversation);
-          console.log('Mensaje recibido para conversación no seleccionada, se actualizará la lista de conversaciones');
         }
         
         // Actualizar la lista de conversaciones web
@@ -372,13 +377,17 @@ export const InboxPage: React.FC = () => {
         // Si es un chat de WhatsApp, extraer el ID real del chat
         const chatId = selectedConversation.replace('whatsapp_', '');
         loadWhatsAppMessages(chatId);
-      } else if (selectedConversation.startsWith('web_')) {
-        // Si es una conversación web
-        const conversationId = parseInt(selectedConversation.replace('web_', ''));
-        loadWebMessages(conversationId);
+      } else if (selectedConversation) {
+        // Verificar si es una conversación web
+        const webConv = webConversations.find(conv => conv.public_id === selectedConversation);
+        if (webConv) {
+          // Si es una conversación web
+          const conversationId = selectedConversation;
+          loadWebMessages(conversationId);
+        }
       }
     }
-  }, [selectedConversation, whatsappStatus?.isConnected]);
+  }, [selectedConversation, whatsappStatus?.isConnected, webConversations]);
 
   // Verificar estado de WhatsApp
   const checkWhatsAppStatus = async () => {
@@ -419,7 +428,6 @@ export const InboxPage: React.FC = () => {
       });
       
       if (response.success && response.data) {
-        console.log('Conversaciones web cargadas:', response.data);
         setWebConversations(response.data);
       }
     } catch (error) {
@@ -430,10 +438,10 @@ export const InboxPage: React.FC = () => {
   };
 
   // Cargar mensajes web
-  const loadWebMessages = async (conversationId: number) => {
+  const loadWebMessages = async (conversationId: string) => {
     try {
       setIsLoadingWeb(true);
-      const response = await apiService.getWebChatMessages(conversationId.toString(), {
+      const response = await apiService.getWebChatMessages(conversationId, {
         limit: 100
       });
       
@@ -442,7 +450,7 @@ export const InboxPage: React.FC = () => {
         console.log('Últimos 3 mensajes:', response.data.slice(-3));
         setWebMessages(response.data);
         // Marcar mensajes como leídos
-        await apiService.markWebChatMessagesAsRead(conversationId.toString());
+        await apiService.markWebChatMessagesAsRead(conversationId);
       }
     } catch (error) {
       console.error('Error loading web messages:', error);
@@ -1080,7 +1088,7 @@ export const InboxPage: React.FC = () => {
       webConversation: null
     })),
     ...webConversations.map(conv => ({
-      id: `web_${conv.id}`,
+      id: conv.public_id,
       contactName: conv.visitor?.name || conv.title || 'Visitante Web',
       contactPhone: conv.visitor?.phone || 'N/A',
       contactEmail: conv.visitor?.email,
