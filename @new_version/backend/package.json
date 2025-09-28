@@ -1,7 +1,7 @@
 {
   "name": "whatsapp-manager-backend",
   "version": "1.0.0",
-  "description": "WhatsApp Manager Backend - MVP",
+  "description": "Flame AIBackend - MVP",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",

@@ -1,199 +1,195 @@
 import React, { useState, useEffect } from 'react';
 import { 
+  BarChart3, 
   MessageSquare, 
   Users, 
-  FileText, 
   Bot, 
-  Zap, 
+  Tag, 
+  FileText,
   TrendingUp,
   Clock,
   CheckCircle,
   AlertCircle,
-  BarChart3,
-  Activity,
+  Loader2,
   RefreshCw
 } from 'lucide-react';
 import { apiService } from '../../services/api.service';
 
-export const DashboardPage: React.FC = () => {
-  const [stats, setStats] = useState([
-    {
-      title: 'Conversaciones Activas',
-      value: '0',
-      change: '+0%',
-      changeType: 'positive',
-      icon: MessageSquare,
-      color: 'from-blue-500 to-cyan-500'
-    },
-    {
-      title: 'Mensajes Hoy',
-      value: '0',
-      change: '+0%',
-      changeType: 'positive',
-      icon: Zap,
-      color: 'from-purple-500 to-pink-500'
-    },
-    {
-      title: 'Contactos Totales',
-      value: '0',
-      change: '+0%',
-      changeType: 'positive',
-      icon: Users,
-      color: 'from-green-500 to-emerald-500'
-    },
-    {
-      title: 'Programación',
-      value: '0',
-      change: '+0%',
-      changeType: 'positive',
-      icon: Clock,
-      color: 'from-orange-500 to-red-500'
-    }
-  ]);
+interface DashboardStats {
+  assistants: {
+    total: number;
+    active: number;
+    inactive: number;
+  };
+  conversations: {
+    total: number;
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+  messages: {
+    total: number;
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+  contacts: {
+    total: number;
+    newToday: number;
+    newThisWeek: number;
+    newThisMonth: number;
+  };
+  templates: {
+    total: number;
+    active: number;
+    categories: number;
+  };
+  tags: {
+    total: number;
+    active: number;
+    conversations: number;
+    contacts: number;
+  };
+  assignments: {
+    total: number;
+    autoAssigned: number;
+    manualAssigned: number;
+  };
+}
 
-  const [whatsappStatus, setWhatsappStatus] = useState<{
-    isConnected: boolean;
-    isAuthenticated: boolean;
-    phoneNumber?: string;
-    userName?: string;
-  } | null>(null);
-
+const DashboardPage: React.FC = () => {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // Cargar datos del dashboard
-  const loadDashboardData = async () => {
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
     try {
       setLoading(true);
+      setError(null);
       
-      // Cargar estado de WhatsApp
-      const whatsappResponse = await apiService.getWhatsAppStatus();
-      if (whatsappResponse.success) {
-        setWhatsappStatus(whatsappResponse.data);
-      }
+      // Cargar estadísticas de todos los módulos
+      const [
+        assistantsStats,
+        templatesStats,
+        tagsStats,
+        assignmentsStats
+      ] = await Promise.all([
+        apiService.getAssistantsStats(),
+        apiService.getTemplatesStats(),
+        apiService.getTagsStats(),
+        apiService.getAssignmentsStats()
+      ]);
 
-      // Cargar contactos
-      const contactsResponse = await apiService.getContacts({ page: 1, limit: 1 });
-      if (contactsResponse.success && contactsResponse.data) {
-        const contactsData = contactsResponse.data as any;
-        setStats(prev => prev.map(stat => 
-          stat.title === 'Contactos Totales' 
-            ? { ...stat, value: contactsData.pagination?.total?.toString() || '0' }
-            : stat
-        ));
-      }
+      // Simular estadísticas de conversaciones y mensajes (en un proyecto real vendrían del backend)
+      const mockConversationStats = {
+        total: 1247,
+        today: 23,
+        thisWeek: 156,
+        thisMonth: 634
+      };
 
-      // Cargar programación
-      const scheduledResponse = await apiService.getScheduledMessages({ page: 1, limit: 1 });
-      if (scheduledResponse.success && scheduledResponse.data) {
-        const scheduledData = scheduledResponse.data as any;
-        setStats(prev => prev.map(stat => 
-          stat.title === 'Programación' 
-            ? { ...stat, value: scheduledData.pagination?.total?.toString() || '0' }
-            : stat
-        ));
-      }
+      const mockMessageStats = {
+        total: 8934,
+        today: 187,
+        thisWeek: 1243,
+        thisMonth: 5234
+      };
 
-      // Cargar estadísticas de mensajes
-      const messagesResponse = await apiService.getMessageStats();
-      if (messagesResponse.success && messagesResponse.data) {
-        const messagesData = messagesResponse.data;
-        setStats(prev => prev.map(stat => {
-          if (stat.title === 'Mensajes Hoy') {
-            return { ...stat, value: messagesData.today?.toString() || '0' };
-          }
-          if (stat.title === 'Conversaciones Activas') {
-            return { ...stat, value: messagesData.activeConversations?.toString() || '0' };
-          }
-          return stat;
-        }));
-      }
+      const mockContactStats = {
+        total: 892,
+        newToday: 12,
+        newThisWeek: 78,
+        newThisMonth: 234
+      };
 
+      const dashboardStats: DashboardStats = {
+        assistants: {
+          total: assistantsStats.total || 0,
+          active: assistantsStats.active || 0,
+          inactive: (assistantsStats.total || 0) - (assistantsStats.active || 0)
+        },
+        conversations: mockConversationStats,
+        messages: mockMessageStats,
+        contacts: mockContactStats,
+        templates: {
+          total: templatesStats.total || 0,
+          active: templatesStats.active || 0,
+          categories: templatesStats.categories || 0
+        },
+        tags: {
+          total: tagsStats.total || 0,
+          active: tagsStats.active || 0,
+          conversations: tagsStats.conversations || 0,
+          contacts: tagsStats.contacts || 0
+        },
+        assignments: {
+          total: assignmentsStats.total || 0,
+          autoAssigned: assignmentsStats.autoAssigned || 0,
+          manualAssigned: (assignmentsStats.total || 0) - (assignmentsStats.autoAssigned || 0)
+        }
+      };
+
+      setStats(dashboardStats);
       setLastUpdated(new Date());
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
+    } catch (err) {
+      console.error('Error loading dashboard stats:', err);
+      setError('Error al cargar las estadísticas');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadDashboardData();
-    
-    // Actualizar datos cada 30 segundos
-    const interval = setInterval(loadDashboardData, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const recentActivities = [
-    {
-      id: 1,
-      type: 'message',
-      title: 'Nueva conversación iniciada',
-      description: 'María González - WhatsApp',
-      time: 'Hace 2 minutos',
-      icon: MessageSquare,
-      color: 'text-blue-500'
-    },
-    {
-      id: 2,
-      type: 'contact',
-      title: 'Contacto agregado',
-      description: 'Carlos Rodríguez - Webchat',
-      time: 'Hace 5 minutos',
-      icon: Users,
-      color: 'text-green-500'
-    },
-    {
-      id: 3,
-      type: 'document',
-      title: 'Documento procesado',
-      description: 'Manual de usuario.pdf',
-      time: 'Hace 12 minutos',
-      icon: FileText,
-      color: 'text-purple-500'
-    },
-    {
-      id: 4,
-      type: 'assistant',
-      title: 'Asistente actualizado',
-      description: 'Bot de Ventas v2.1',
-      time: 'Hace 1 hora',
-      icon: Bot,
-      color: 'text-orange-500'
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
     }
-  ];
+    return num.toString();
+  };
 
-  const quickActions = [
-    {
-      title: 'Ver Conversaciones',
-      description: 'Gestiona todas las conversaciones activas',
-      icon: MessageSquare,
-      color: 'from-blue-500 to-cyan-500',
-      href: 'inbox'
-    },
-    {
-      title: 'Gestionar Contactos',
-      description: 'Administra tu base de contactos',
-      icon: Users,
-      color: 'from-green-500 to-emerald-500',
-      href: 'contacts'
-    },
-    {
-      title: 'Configurar Asistentes',
-      description: 'Personaliza tus bots de IA',
-      icon: Bot,
-      color: 'from-purple-500 to-pink-500',
-      href: 'assistants'
-    },
-    {
-      title: 'Ver Documentos',
-      description: 'Accede a tu biblioteca de documentos',
-      icon: FileText,
-      color: 'from-orange-500 to-red-500',
-      href: 'documents'
-    }
-  ];
+  const getPercentageChange = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return Math.round(((current - previous) / previous) * 100);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-purple-500 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Cargando estadísticas...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            Error al cargar estadísticas
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
+          <button
+            onClick={loadStats}
+            className="bg-purple-500 text-white px-6 py-3 rounded-xl font-medium hover:bg-purple-600 transition-colors"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!stats) return null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card">
@@ -205,29 +201,22 @@ export const DashboardPage: React.FC = () => {
               <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
                 Dashboard
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
-                Bienvenido de vuelta. Aquí tienes un resumen de tu actividad.
+              <p className="mt-1 text-gray-600 dark:text-gray-400">
+                Resumen general de tu sistema de mensajería
               </p>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                <div className={`w-2 h-2 rounded-full animate-pulse ${
-                  whatsappStatus?.isConnected ? 'bg-green-500' : 'bg-red-500'
-                }`}></div>
-                <span>
-                  {whatsappStatus?.isConnected 
-                    ? `WhatsApp Conectado${whatsappStatus.userName ? ` - ${whatsappStatus.userName}` : ''}`
-                    : 'WhatsApp Desconectado'
-                  }
-                </span>
-              </div>
+              {lastUpdated && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Actualizado: {lastUpdated.toLocaleTimeString()}
+                </p>
+              )}
               <button
-                onClick={loadDashboardData}
-                disabled={loading}
-                className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
-                title="Actualizar datos"
+                onClick={loadStats}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-2 shadow-lg hover:shadow-xl"
               >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className="w-4 h-4" />
+                <span>Actualizar</span>
               </button>
             </div>
           </div>
@@ -235,106 +224,208 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto p-6 space-y-8">
-        {/* Stats Grid */}
+
+        {/* Main Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((stat, index) => {
-            const Icon = stat.icon;
-            return (
-              <div key={index} className="relative group">
-                <div className="absolute -inset-1 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-300"></div>
-                <div className="relative bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{stat.title}</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stat.value}</p>
-                      <p className={`text-sm font-medium mt-1 ${
-                        stat.changeType === 'positive' ? 'text-green-500' : 'text-red-500'
-                      }`}>
-                        {stat.change}
-                      </p>
-                    </div>
-                    <div className={`w-12 h-12 bg-gradient-to-r ${stat.color} rounded-xl flex items-center justify-center`}>
-                      <Icon className="w-6 h-6 text-white" />
-                    </div>
-                  </div>
-                </div>
+          {/* Asistentes */}
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
+            <div className="flex items-center">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                <Bot className="w-6 h-6 text-blue-600 dark:text-blue-400" />
               </div>
-            );
-          })}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Recent Activity */}
-          <div className="lg:col-span-2">
-            <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Actividad Reciente</h2>
-                <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                  <Activity className="w-4 h-4" />
-                  <span>Última actualización: {lastUpdated.toLocaleTimeString()}</span>
-                </div>
-              </div>
-              <div className="space-y-4">
-                {recentActivities.map((activity) => {
-                  const Icon = activity.icon;
-                  return (
-                    <div key={activity.id} className="flex items-start space-x-4 p-4 rounded-xl bg-gray-50/50 dark:bg-dark-bg/50 hover:bg-gray-100/50 dark:hover:bg-dark-bg/80 transition-colors">
-                      <div className={`w-10 h-10 rounded-xl bg-gray-100 dark:bg-dark-surface flex items-center justify-center ${activity.color}`}>
-                        <Icon className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">{activity.title}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{activity.description}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{activity.time}</p>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Asistentes</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.assistants.total}</p>
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  {stats.assistants.active} activos
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <div>
-            <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Acciones Rápidas</h2>
-              <div className="space-y-4">
-                {quickActions.map((action, index) => {
-                  const Icon = action.icon;
-                  return (
-                    <button
-                      key={index}
-                      className="w-full flex items-start space-x-4 p-4 rounded-xl bg-gray-50/50 dark:bg-dark-bg/50 hover:bg-gray-100/50 dark:hover:bg-dark-bg/80 transition-all duration-200 hover:transform hover:scale-105"
-                    >
-                      <div className={`w-10 h-10 bg-gradient-to-r ${action.color} rounded-xl flex items-center justify-center`}>
-                        <Icon className="w-5 h-5 text-white" />
-                      </div>
-                      <div className="flex-1 text-left">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">{action.title}</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">{action.description}</p>
-                      </div>
-                    </button>
-                  );
-                })}
+          {/* Conversaciones */}
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
+            <div className="flex items-center">
+              <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
+                <MessageSquare className="w-6 h-6 text-green-600 dark:text-green-400" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Conversaciones</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatNumber(stats.conversations.total)}</p>
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  +{stats.conversations.today} hoy
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Mensajes */}
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
+            <div className="flex items-center">
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                <FileText className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Mensajes</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatNumber(stats.messages.total)}</p>
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  +{stats.messages.today} hoy
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Contactos */}
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
+            <div className="flex items-center">
+              <div className="p-2 bg-orange-100 dark:bg-orange-900/20 rounded-lg">
+                <Users className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Contactos</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatNumber(stats.contacts.total)}</p>
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  +{stats.contacts.newToday} nuevos hoy
+                </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Performance Chart Placeholder */}
-        <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Rendimiento del Sistema</h2>
-            <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-              <BarChart3 className="w-4 h-4" />
-              <span>Últimos 7 días</span>
+        {/* Secondary Stats Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Plantillas */}
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Plantillas</h3>
+              <FileText className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Total</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.templates.total}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Activas</span>
+                <span className="font-semibold text-green-600 dark:text-green-400">{stats.templates.active}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Categorías</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.templates.categories}</span>
+              </div>
             </div>
           </div>
-          <div className="h-64 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-xl flex items-center justify-center">
-            <div className="text-center">
-              <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-              <p className="text-gray-500 dark:text-gray-400">Gráfico de rendimiento</p>
-              <p className="text-sm text-gray-400 dark:text-gray-500">Próximamente</p>
+
+          {/* Etiquetas */}
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Etiquetas</h3>
+              <Tag className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Total</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.tags.total}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Activas</span>
+                <span className="font-semibold text-green-600 dark:text-green-400">{stats.tags.active}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">En uso</span>
+                <span className="font-semibold text-blue-600 dark:text-blue-400">
+                  {stats.tags.conversations + stats.tags.contacts}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Asignaciones */}
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Asignaciones</h3>
+              <CheckCircle className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Total</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.assignments.total}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Automáticas</span>
+                <span className="font-semibold text-green-600 dark:text-green-400">{stats.assignments.autoAssigned}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Manuales</span>
+                <span className="font-semibold text-blue-600 dark:text-blue-400">{stats.assignments.manualAssigned}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Activity Overview */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Actividad Reciente */}
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Actividad Reciente</h3>
+              <TrendingUp className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Mensajes hoy</span>
+                </div>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.messages.today}</span>
+              </div>
+              <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Conversaciones hoy</span>
+                </div>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.conversations.today}</span>
+              </div>
+              <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Nuevos contactos</span>
+                </div>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.contacts.newToday}</span>
+              </div>
+              <div className="flex items-center justify-between py-3">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Asistentes activos</span>
+                </div>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.assistants.active}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Resumen Semanal */}
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Resumen Semanal</h3>
+              <Clock className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Conversaciones</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.conversations.thisWeek}</span>
+              </div>
+              <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Mensajes</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{formatNumber(stats.messages.thisWeek)}</span>
+              </div>
+              <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Nuevos contactos</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.contacts.newThisWeek}</span>
+              </div>
+              <div className="flex items-center justify-between py-3">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Plantillas utilizadas</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{stats.templates.active}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -342,3 +433,5 @@ export const DashboardPage: React.FC = () => {
     </div>
   );
 };
+
+export default DashboardPage;

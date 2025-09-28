@@ -13,7 +13,9 @@ import {
   Moon,
   Flame,
   LogOut,
-  Clock
+  Clock,
+  Tag,
+  Layout
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useApp } from '../contexts/AppContext';
@@ -30,12 +32,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: Zap },
+    { name: 'Dashboard', href: '/dashboard', icon: Layout },
     { name: 'Inbox', href: '/inbox', icon: MessageSquare },
     { name: 'Contactos', href: '/contacts', icon: Users },
     { name: 'Programación', href: '/scheduled', icon: Clock },
     { name: 'Documentos', href: '/documents', icon: FileText },
     { name: 'Asistentes', href: '/assistants', icon: Bot },
+    { name: 'Plantillas', href: '/templates', icon: FileText },
+    { name: 'Etiquetas', href: '/tags', icon: Tag },
     { name: 'Integraciones', href: '/integrations', icon: Zap },
     { name: 'Configuración', href: '/config', icon: Settings },
   ];

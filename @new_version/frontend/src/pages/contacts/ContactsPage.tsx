@@ -21,7 +21,11 @@ import {
   AlertTriangle,
   Edit,
   Download,
-  Loader2
+  Loader2,
+  Plus,
+  Upload,
+  FileText,
+  CheckCircle
 } from 'lucide-react';
 import { apiService, Contact, PaginatedResponse } from '../../services/api.service';
 import { useNotificationHelpers } from '../../components/NotificationSystem';
@@ -48,6 +52,19 @@ export const ContactsPage: React.FC = () => {
   const [deletingContact, setDeletingContact] = useState(false);
   const [blockingContact, setBlockingContact] = useState(false);
   const [unblockingContact, setUnblockingContact] = useState(false);
+  
+  // Estados para creación de contactos
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showBulkCreateModal, setShowBulkCreateModal] = useState(false);
+  const [newContact, setNewContact] = useState({
+    name: '',
+    phone_number: '',
+    whatsapp_id: '',
+    is_group: false
+  });
+  const [bulkContacts, setBulkContacts] = useState('');
+  const [creatingContact, setCreatingContact] = useState(false);
+  const [creatingBulkContacts, setCreatingBulkContacts] = useState(false);
   const [fetchingData, setFetchingData] = useState(false);
 
   const itemsPerPage = 20;
@@ -228,6 +245,91 @@ export const ContactsPage: React.FC = () => {
     }
   };
 
+  // Crear contacto individual
+  const createContact = async () => {
+    if (!newContact.name || (!newContact.phone_number && !newContact.whatsapp_id)) {
+      showError('Campos requeridos', 'El nombre y al menos un identificador (teléfono o WhatsApp ID) son requeridos');
+      return;
+    }
+
+    try {
+      setCreatingContact(true);
+      const response = await apiService.createContact(newContact);
+      if (response.success) {
+        setShowCreateModal(false);
+        setNewContact({ name: '', phone_number: '', whatsapp_id: '', is_group: false });
+        loadContacts(); // Recargar la lista
+        showSuccess('Contacto creado', 'El contacto ha sido creado exitosamente');
+      } else {
+        showError('Error al crear contacto', response.message || 'Error desconocido');
+      }
+    } catch (error) {
+      console.error('Error creating contact:', error);
+      showError('Error al crear contacto', 'No se pudo crear el contacto');
+    } finally {
+      setCreatingContact(false);
+    }
+  };
+
+  // Crear contactos masivos
+  const createBulkContacts = async () => {
+    if (!bulkContacts.trim()) {
+      showError('Datos requeridos', 'Por favor ingresa los datos de los contactos');
+      return;
+    }
+
+    try {
+      setCreatingBulkContacts(true);
+      
+      // Parsear los contactos del texto
+      const lines = bulkContacts.split('\n').filter(line => line.trim());
+      const contactsData = lines.map(line => {
+        const parts = line.split(',').map(part => part.trim());
+        return {
+          name: parts[0] || '',
+          phone_number: parts[1] || '',
+          whatsapp_id: parts[2] || parts[1] || '', // Si no hay WhatsApp ID, usar el teléfono
+          is_group: parts[3]?.toLowerCase() === 'true' || false
+        };
+      });
+
+      // Crear contactos uno por uno
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (const contactData of contactsData) {
+        try {
+          const response = await apiService.createContact(contactData);
+          if (response.success) {
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      setShowBulkCreateModal(false);
+      setBulkContacts('');
+      loadContacts(); // Recargar la lista
+      
+      if (successCount > 0) {
+        showSuccess(
+          'Contactos creados', 
+          `Se crearon ${successCount} contactos exitosamente${errorCount > 0 ? `, ${errorCount} fallaron` : ''}`
+        );
+      } else {
+        showError('Error al crear contactos', 'No se pudo crear ningún contacto');
+      }
+    } catch (error) {
+      console.error('Error creating bulk contacts:', error);
+      showError('Error al crear contactos', 'No se pudo procesar la creación masiva');
+    } finally {
+      setCreatingBulkContacts(false);
+    }
+  };
+
   // Obtener datos del contacto/grupo
   const fetchContactData = async (contact: Contact) => {
     try {
@@ -393,14 +495,30 @@ export const ContactsPage: React.FC = () => {
                 Administra tu base de contactos de WhatsApp
               </p>
             </div>
-            <button
-              onClick={syncContactsWithWhatsApp}
-              disabled={loading}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>Sincronizar</span>
-            </button>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nuevo Contacto</span>
+              </button>
+              <button
+                onClick={() => setShowBulkCreateModal(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl hover:from-blue-600 hover:to-cyan-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Importar Masivo</span>
+              </button>
+              <button
+                onClick={syncContactsWithWhatsApp}
+                disabled={loading}
+                className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded-xl hover:bg-gray-600 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Sincronizar</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1078,6 +1196,189 @@ export const ContactsPage: React.FC = () => {
                       <>
                         <Ban className="w-4 h-4" />
                         <span>Desbloquear</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de creación de contacto individual */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-xl max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Nuevo Contacto
+                  </h2>
+                  <button
+                    onClick={() => setShowCreateModal(false)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Nombre *
+                    </label>
+                    <input
+                      type="text"
+                      value={newContact.name}
+                      onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
+                      placeholder="Nombre del contacto"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Número de Teléfono
+                    </label>
+                    <input
+                      type="tel"
+                      value={newContact.phone_number}
+                      onChange={(e) => setNewContact({ ...newContact, phone_number: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
+                      placeholder="+1234567890"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      WhatsApp ID
+                    </label>
+                    <input
+                      type="text"
+                      value={newContact.whatsapp_id}
+                      onChange={(e) => setNewContact({ ...newContact, whatsapp_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
+                      placeholder="1234567890@c.us"
+                    />
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="is_group"
+                      checked={newContact.is_group}
+                      onChange={(e) => setNewContact({ ...newContact, is_group: e.target.checked })}
+                      className="h-4 w-4 text-green-600 rounded border-gray-300 focus:ring-green-500"
+                    />
+                    <label htmlFor="is_group" className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                      Es un grupo
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 mt-6">
+                  <button
+                    onClick={() => setShowCreateModal(false)}
+                    className="flex-1 px-4 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-card rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={createContact}
+                    disabled={creatingContact}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 disabled:opacity-50 flex items-center justify-center space-x-2"
+                  >
+                    {creatingContact ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Creando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        <span>Crear Contacto</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de creación masiva de contactos */}
+        {showBulkCreateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Importar Contactos Masivamente
+                  </h2>
+                  <button
+                    onClick={() => setShowBulkCreateModal(false)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                    <h3 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Formato de datos:</h3>
+                    <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+                      Ingresa un contacto por línea con el siguiente formato:
+                    </p>
+                    <code className="text-xs bg-blue-100 dark:bg-blue-800 p-2 rounded block">
+                      Nombre, Teléfono, WhatsApp ID, Es Grupo
+                    </code>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                      Ejemplo: Juan Pérez, +1234567890, 1234567890@c.us, false
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Datos de Contactos
+                    </label>
+                    <textarea
+                      value={bulkContacts}
+                      onChange={(e) => setBulkContacts(e.target.value)}
+                      rows={10}
+                      className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white font-mono text-sm"
+                      placeholder="Juan Pérez, +1234567890, 1234567890@c.us, false&#10;María García, +0987654321, 0987654321@c.us, false&#10;Grupo Familia, , 1234567890@g.us, true"
+                    />
+                  </div>
+
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <p>• El nombre es obligatorio</p>
+                    <p>• Al menos uno de los identificadores (teléfono o WhatsApp ID) es requerido</p>
+                    <p>• Si no especificas WhatsApp ID, se usará el teléfono</p>
+                    <p>• "Es Grupo" debe ser "true" o "false"</p>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 mt-6">
+                  <button
+                    onClick={() => setShowBulkCreateModal(false)}
+                    className="flex-1 px-4 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-card rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={createBulkContacts}
+                    disabled={creatingBulkContacts}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all duration-200 disabled:opacity-50 flex items-center justify-center space-x-2"
+                  >
+                    {creatingBulkContacts ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Procesando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        <span>Importar Contactos</span>
                       </>
                     )}
                   </button>

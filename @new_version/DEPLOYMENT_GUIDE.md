@@ -1,4 +1,4 @@
-# 🚀 Guía de Despliegue - WhatsApp Manager MVP
+# 🚀 Guía de Despliegue - Flame AIMVP
 
 ## ✅ Estado del Proyecto: 100% COMPLETADO
 
@@ -135,7 +135,7 @@ docker-compose down --rmi all --volumes
 
 ## 🎉 ¡Proyecto 100% Funcional!
 
-Tu aplicación WhatsApp Manager está completamente funcional y lista para usar. Incluye:
+Tu aplicación Flame AIestá completamente funcional y lista para usar. Incluye:
 
 - ✅ Conexión WhatsApp Web robusta
 - ✅ Interfaz de usuario profesional  

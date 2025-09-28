@@ -12,10 +12,22 @@ import {
   MoreVertical,
   Play,
   Pause,
-  RefreshCw
+  RefreshCw,
+  Settings,
+  BarChart3,
+  Key,
+  Zap,
+  MessageSquare,
+  Tag,
+  Search,
+  CheckCircle,
+  Users,
+  Activity
 } from 'lucide-react';
-import { apiService } from '../../services/api.service';
+import { apiService, Assistant as AssistantType } from '../../services/api.service';
 import { useNotificationHelpers } from '../../components/NotificationSystem';
+import { useTemplates } from '../../hooks/useTemplates';
+import { useTags } from '../../hooks/useTags';
 
 interface Schedule {
   id: string;
@@ -25,22 +37,8 @@ interface Schedule {
   enabled: boolean;
 }
 
-interface Assistant {
-  id: string;
-  name: string;
-  description: string;
-  status: 'active' | 'inactive' | 'training';
-  type: 'auto' | 'ai';
-  integrations: string[];
-  createdAt: string;
-  lastUsed: string;
-  responses: {
-    autoResponse?: string;
-    aiPrompt?: string;
-    documents?: string[];
-    schedule?: Schedule[];
-  };
-}
+// Usar la interfaz del servicio API
+type Assistant = AssistantType;
 
 export const AssistantsPage: React.FC = () => {
   const { showSuccess, showError } = useNotificationHelpers();
@@ -50,6 +48,9 @@ export const AssistantsPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [assistantStats, setAssistantStats] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   // Cargar asistentes desde el backend
   const loadAssistants = async () => {
@@ -67,19 +68,39 @@ export const AssistantsPage: React.FC = () => {
     }
   };
 
+  // Cargar estadísticas de asistentes
+  const loadAssistantStats = async () => {
+    try {
+      setStatsLoading(true);
+      const response = await apiService.getAssistantsStats();
+      if (response.success && response.data) {
+        setAssistantStats(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading assistant stats:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadAssistants();
+    loadAssistantStats();
   }, []);
 
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    type: 'auto' as 'auto' | 'ai',
-    integrations: [] as string[],
-    autoResponse: '',
-    aiPrompt: '',
-    documents: [] as File[],
-    schedule: [] as Schedule[]
+    prompt: '',
+    is_active: true,
+    openai_api_key: '',
+    model: 'gpt-3.5-turbo',
+    max_tokens: 150,
+    temperature: 0.7,
+    auto_assign: true,
+    response_delay: 0,
+    type: 'ai' as 'ai' | 'auto',
+    integrations: [] as string[]
   });
 
   const availableIntegrations = [
@@ -106,14 +127,14 @@ export const AssistantsPage: React.FC = () => {
       const assistantData = {
         name: formData.name,
         description: formData.description,
-        type: formData.type,
-        integrations: formData.integrations,
-        responses: {
-          autoResponse: formData.type === 'auto' ? formData.autoResponse : undefined,
-          aiPrompt: formData.type === 'ai' ? formData.aiPrompt : undefined,
-          documents: formData.documents.map(file => file.name),
-          schedule: formData.type === 'auto' ? formData.schedule : undefined
-        }
+        prompt: formData.prompt,
+        is_active: formData.is_active,
+        openai_api_key: formData.openai_api_key,
+        model: formData.model,
+        max_tokens: formData.max_tokens,
+        temperature: formData.temperature,
+        auto_assign: formData.auto_assign,
+        response_delay: formData.response_delay
       };
 
       const response = await apiService.createAssistant(assistantData);
@@ -121,9 +142,10 @@ export const AssistantsPage: React.FC = () => {
         setShowCreateModal(false);
         resetForm();
         loadAssistants(); // Recargar la lista
+        loadAssistantStats(); // Recargar estadísticas
         showSuccess('Asistente creado', 'El asistente se ha creado exitosamente');
       } else {
-        showError('Error al crear asistente', 'No se pudo crear el asistente');
+        showError('Error al crear asistente', response.message || 'No se pudo crear el asistente');
       }
     } catch (error) {
       console.error('Error creating assistant:', error);
@@ -131,19 +153,26 @@ export const AssistantsPage: React.FC = () => {
     }
   };
 
-  const handleEditAssistant = (assistant: Assistant) => {
-    setEditingAssistant(assistant);
-    setFormData({
-      name: assistant.name,
-      description: assistant.description,
-      type: assistant.type,
-      integrations: assistant.integrations,
-      autoResponse: assistant.responses.autoResponse || '',
-      aiPrompt: assistant.responses.aiPrompt || '',
-      documents: [],
-      schedule: assistant.responses.schedule || []
-    });
-    setShowCreateModal(true);
+  const handleEditAssistant = (id: string) => {
+    const assistant = assistants.find(a => a.id.toString() === id);
+    if (assistant) {
+      setEditingAssistant(assistant);
+      setFormData({
+        name: assistant.name,
+        description: assistant.description || '',
+        prompt: assistant.prompt || '',
+        is_active: assistant.is_active,
+        openai_api_key: assistant.openai_api_key || '',
+        model: assistant.model,
+        max_tokens: assistant.max_tokens,
+        temperature: assistant.temperature,
+        auto_assign: assistant.auto_assign,
+        response_delay: assistant.response_delay,
+        type: 'ai' as 'ai' | 'auto',
+        integrations: []
+      });
+      setShowCreateModal(true);
+    }
   };
 
   const handleUpdateAssistant = async () => {
@@ -153,27 +182,26 @@ export const AssistantsPage: React.FC = () => {
       const updateData = {
         name: formData.name,
         description: formData.description,
-        type: formData.type,
-        integrations: formData.integrations,
-        responses: {
-          autoResponse: formData.type === 'auto' ? formData.autoResponse : undefined,
-          aiPrompt: formData.type === 'ai' ? formData.aiPrompt : undefined,
-          documents: formData.documents.length > 0 
-            ? formData.documents.map(file => file.name)
-            : editingAssistant.responses.documents || [],
-          schedule: formData.type === 'auto' ? formData.schedule : undefined
-        }
+        prompt: formData.prompt,
+        is_active: formData.is_active,
+        openai_api_key: formData.openai_api_key,
+        model: formData.model,
+        max_tokens: formData.max_tokens,
+        temperature: formData.temperature,
+        auto_assign: formData.auto_assign,
+        response_delay: formData.response_delay
       };
 
-      const response = await apiService.updateAssistant(editingAssistant.id, updateData);
+      const response = await apiService.updateAssistant(editingAssistant.id.toString(), updateData);
       if (response.success) {
         setShowCreateModal(false);
         setEditingAssistant(null);
         resetForm();
         loadAssistants(); // Recargar la lista
+        loadAssistantStats(); // Recargar estadísticas
         showSuccess('Asistente actualizado', 'El asistente se ha actualizado exitosamente');
       } else {
-        showError('Error al actualizar asistente', 'No se pudo actualizar el asistente');
+        showError('Error al actualizar asistente', response.message || 'No se pudo actualizar el asistente');
       }
     } catch (error) {
       console.error('Error updating assistant:', error);
@@ -187,6 +215,7 @@ export const AssistantsPage: React.FC = () => {
       if (response.success) {
         setShowDeleteConfirm(null);
         loadAssistants(); // Recargar la lista
+        loadAssistantStats(); // Recargar estadísticas
         showSuccess('Asistente eliminado', 'El asistente se ha eliminado exitosamente');
       } else {
         showError('Error al eliminar asistente', 'No se pudo eliminar el asistente');
@@ -200,10 +229,11 @@ export const AssistantsPage: React.FC = () => {
   const toggleAssistantStatus = async (id: string) => {
     try {
       const response = await apiService.updateAssistant(id, { 
-        status: assistants.find(a => a.id === id)?.status === 'active' ? 'inactive' : 'active' 
+        is_active: !assistants.find(a => a.id.toString() === id)?.is_active
       });
       if (response.success) {
         loadAssistants(); // Recargar la lista
+        loadAssistantStats(); // Recargar estadísticas
         showSuccess('Estado actualizado', 'El estado del asistente se ha actualizado exitosamente');
       } else {
         showError('Error al cambiar estado', 'No se pudo cambiar el estado del asistente');
@@ -218,110 +248,140 @@ export const AssistantsPage: React.FC = () => {
     setFormData({
       name: '',
       description: '',
-      type: 'auto',
-      integrations: [],
-      autoResponse: '',
-      aiPrompt: '',
-      documents: [],
-      schedule: []
+      prompt: '',
+      is_active: true,
+      openai_api_key: '',
+      model: 'gpt-3.5-turbo',
+      max_tokens: 150,
+      temperature: 0.7,
+      auto_assign: true,
+      response_delay: 0,
+      type: 'ai' as 'ai' | 'auto',
+      integrations: []
     });
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    setFormData({ ...formData, documents: [...formData.documents, ...files] });
+  const getStatusColor = (isActive: boolean) => {
+    return isActive ? 'text-green-500 bg-green-500/10' : 'text-gray-500 bg-gray-500/10';
   };
 
-  const addScheduleEntry = () => {
-    const newSchedule: Schedule = {
-      id: Date.now().toString(),
-      dayOfWeek: 1, // Lunes por defecto
-      startTime: '09:00',
-      endTime: '18:00',
-      enabled: true
-    };
-    setFormData({ ...formData, schedule: [...formData.schedule, newSchedule] });
+  const getStatusText = (isActive: boolean) => {
+    return isActive ? 'Activo' : 'Inactivo';
   };
 
-  const updateScheduleEntry = (id: string, field: keyof Schedule, value: any) => {
-    setFormData({
-      ...formData,
-      schedule: formData.schedule.map(schedule => 
-        schedule.id === id ? { ...schedule, [field]: value } : schedule
-      )
-    });
-  };
-
-  const removeScheduleEntry = (id: string) => {
-    setFormData({
-      ...formData,
-      schedule: formData.schedule.filter(schedule => schedule.id !== id)
-    });
-  };
-
-  const getScheduleSummary = (schedule: Schedule[]) => {
-    if (!schedule || schedule.length === 0) return 'Sin horario configurado';
-    
-    const enabledDays = schedule.filter(s => s.enabled);
-    if (enabledDays.length === 0) return 'Horario deshabilitado';
-    
-    const dayNames = enabledDays.map(s => daysOfWeek.find(d => d.value === s.dayOfWeek)?.short).join(', ');
-    const times = enabledDays[0] ? `${enabledDays[0].startTime} - ${enabledDays[0].endTime}` : '';
-    
-    return `${dayNames} ${times}`;
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'text-green-500 bg-green-500/10';
-      case 'inactive': return 'text-gray-500 bg-gray-500/10';
-      case 'training': return 'text-yellow-500 bg-yellow-500/10';
-      default: return 'text-gray-500 bg-gray-500/10';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'active': return 'Activo';
-      case 'inactive': return 'Inactivo';
-      case 'training': return 'Entrenando';
-      default: return 'Desconocido';
-    }
-  };
+  // Filtrar asistentes por búsqueda
+  const filteredAssistants = assistants.filter(assistant =>
+    assistant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    assistant.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    assistant.model.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-              Asistentes
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Crea y gestiona tus asistentes de IA personalizados
-            </p>
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card">
+      {/* Header */}
+      <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-dark-border/50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                Asistentes
+              </h1>
+              <p className="mt-1 text-gray-600 dark:text-gray-400">
+                Crea y gestiona tus asistentes de IA personalizados
+              </p>
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={loadAssistants}
+                disabled={loading}
+                className="bg-gray-500 text-white px-4 py-3 rounded-xl font-medium hover:bg-gray-600 transition-all duration-200 flex items-center space-x-2 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                <span>Actualizar</span>
+              </button>
+              <button
+                onClick={() => {
+                  resetForm();
+                  setEditingAssistant(null);
+                  setShowCreateModal(true);
+                }}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-2 shadow-lg hover:shadow-xl"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Nuevo Asistente</span>
+              </button>
+            </div>
           </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={loadAssistants}
-              disabled={loading}
-              className="mt-4 sm:mt-0 bg-gray-500 text-white px-4 py-3 rounded-xl font-medium hover:bg-gray-600 transition-all duration-200 flex items-center space-x-2 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-              <span>Actualizar</span>
-            </button>
-            <button
-              onClick={() => {
-                resetForm();
-                setEditingAssistant(null);
-                setShowCreateModal(true);
-              }}
-              className="mt-4 sm:mt-0 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-2"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Nuevo Asistente</span>
-            </button>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto p-6 space-y-8">
+        {/* Stats Cards */}
+        {assistantStats && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-xl">
+                  <Bot className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Asistentes</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{assistantStats.total_assistants || 0}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-xl">
+                  <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Activos</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{assistantStats.active_assistants || 0}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-xl">
+                  <Activity className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Con Auto-asignación</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{assistantStats.auto_assign_assistants || 0}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-orange-100 dark:bg-orange-900/20 rounded-xl">
+                  <BarChart3 className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Modelos Únicos</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{assistantStats.unique_models || 0}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Search and Filters */}
+        <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Search */}
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Buscar asistentes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-dark-border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -331,16 +391,16 @@ export const AssistantsPage: React.FC = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
             <p className="text-gray-600 dark:text-gray-400 mt-4">Cargando asistentes...</p>
           </div>
-        ) : assistants.length === 0 ? (
+        ) : filteredAssistants.length === 0 ? (
           <div className="text-center py-12">
             <div className="w-24 h-24 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-3xl flex items-center justify-center mx-auto mb-6">
               <Bot className="w-12 h-12 text-purple-500" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              No tienes asistentes creados
+              {searchQuery ? 'No se encontraron asistentes' : 'No tienes asistentes creados'}
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Crea tu primer asistente para comenzar a automatizar tus conversaciones
+              {searchQuery ? 'No hay asistentes que coincidan con tu búsqueda' : 'Crea tu primer asistente para comenzar a automatizar tus conversaciones'}
             </p>
             <button
               onClick={() => setShowCreateModal(true)}
@@ -351,7 +411,7 @@ export const AssistantsPage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {assistants.map((assistant) => (
+            {filteredAssistants.map((assistant) => (
               <div
                 key={assistant.id}
                 className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 hover:border-purple-300/50 dark:hover:border-purple-400/50 hover:shadow-lg transition-all duration-300"
@@ -366,8 +426,8 @@ export const AssistantsPage: React.FC = () => {
                       <h3 className="font-semibold text-gray-900 dark:text-white">
                         {assistant.name}
                       </h3>
-                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(assistant.status)}`}>
-                        {getStatusText(assistant.status)}
+                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(assistant.is_active)}`}>
+                        {getStatusText(assistant.is_active)}
                       </div>
                     </div>
                   </div>
@@ -383,61 +443,49 @@ export const AssistantsPage: React.FC = () => {
                   {assistant.description}
                 </p>
 
-                {/* Type Badge */}
+                {/* Model and Configuration */}
                 <div className="flex items-center space-x-2 mb-4">
-                  {assistant.type === 'ai' ? (
-                    <div className="flex items-center space-x-1 text-blue-500 bg-blue-500/10 px-2 py-1 rounded-full text-xs font-medium">
-                      <Brain className="w-3 h-3" />
-                      <span>IA</span>
-                    </div>
-                  ) : (
+                  <div className="flex items-center space-x-1 text-blue-500 bg-blue-500/10 px-2 py-1 rounded-full text-xs font-medium">
+                    <Brain className="w-3 h-3" />
+                    <span>{assistant.model}</span>
+                  </div>
+                  {assistant.auto_assign && (
                     <div className="flex items-center space-x-1 text-green-500 bg-green-500/10 px-2 py-1 rounded-full text-xs font-medium">
-                      <Clock className="w-3 h-3" />
-                      <span>Automático</span>
+                      <Zap className="w-3 h-3" />
+                      <span>Auto-asignar</span>
                     </div>
                   )}
                 </div>
 
-                {/* Integrations */}
-                <div className="mb-4">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Integraciones:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {assistant.integrations.map((integration) => {
-                      const integrationInfo = availableIntegrations.find(i => i.id === integration);
-                      return (
-                        <span
-                          key={integration}
-                          className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-1 rounded-full"
-                        >
-                          {integrationInfo?.name || integration}
-                        </span>
-                      );
-                    })}
+                {/* Configuration Details */}
+                <div className="mb-4 space-y-2">
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                    <span>Max Tokens:</span>
+                    <span>{assistant.max_tokens}</span>
                   </div>
-                </div>
-
-                {/* Schedule Info for Auto Assistants */}
-                {assistant.type === 'auto' && assistant.responses.schedule && (
-                  <div className="mb-4">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Horario:</p>
-                    <div className="flex items-center space-x-2 text-xs text-gray-600 dark:text-gray-400">
-                      <Clock className="w-3 h-3" />
-                      <span>{getScheduleSummary(assistant.responses.schedule)}</span>
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                    <span>Temperatura:</span>
+                    <span>{assistant.temperature}</span>
+                  </div>
+                  {assistant.response_delay > 0 && (
+                    <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                      <span>Delay:</span>
+                      <span>{assistant.response_delay}s</span>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* Actions */}
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => toggleAssistantStatus(assistant.id)}
+                    onClick={() => toggleAssistantStatus(assistant.id.toString())}
                     className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-                      assistant.status === 'active'
+                      assistant.is_active
                         ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
                         : 'bg-green-500 text-white hover:bg-green-600'
                     }`}
                   >
-                    {assistant.status === 'active' ? (
+                    {assistant.is_active ? (
                       <>
                         <Pause className="w-4 h-4 inline mr-1" />
                         Pausar
@@ -450,13 +498,13 @@ export const AssistantsPage: React.FC = () => {
                     )}
                   </button>
                   <button
-                    onClick={() => handleEditAssistant(assistant)}
+                    onClick={() => handleEditAssistant(assistant.id.toString())}
                     className="px-3 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
                   >
                     <Edit className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => setShowDeleteConfirm(assistant.id)}
+                    onClick={() => setShowDeleteConfirm(assistant.id.toString())}
                     className="px-3 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -569,189 +617,123 @@ export const AssistantsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Response Configuration */}
-                {formData.type === 'auto' ? (
-                  <div className="space-y-6">
+                {/* AI Configuration */}
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Prompt del Sistema
+                    </label>
+                    <textarea
+                      value={formData.prompt}
+                      onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
+                      rows={4}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="Define cómo debe comportarse el asistente de IA. Incluye información sobre tu empresa, productos, servicios, etc."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Respuesta Automática
+                        Modelo de OpenAI
                       </label>
-                      <textarea
-                        value={formData.autoResponse}
-                        onChange={(e) => setFormData({ ...formData, autoResponse: e.target.value })}
-                        rows={4}
+                      <select
+                        value={formData.model}
+                        onChange={(e) => setFormData({ ...formData, model: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        placeholder="Escribe la respuesta que enviará el asistente automáticamente..."
+                      >
+                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                        <option value="gpt-4">GPT-4</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Max Tokens
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.max_tokens}
+                        onChange={(e) => setFormData({ ...formData, max_tokens: parseInt(e.target.value) })}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        min="1"
+                        max="4096"
                       />
                     </div>
-
-                    {/* Schedule Configuration */}
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                          Horario de Respuestas Automáticas
-                        </label>
-                        <button
-                          type="button"
-                          onClick={addScheduleEntry}
-                          className="bg-purple-500 text-white px-3 py-2 rounded-xl text-sm font-medium hover:bg-purple-600 transition-colors flex items-center space-x-2"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>Agregar Día</span>
-                        </button>
-                      </div>
-
-                      {formData.schedule.length === 0 ? (
-                        <div className="text-center py-8 bg-gray-50 dark:bg-dark-card rounded-xl border-2 border-dashed border-gray-300 dark:border-dark-border">
-                          <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                            No hay horarios configurados
-                          </p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500">
-                            Agrega días y horarios para configurar cuándo enviar respuestas automáticas
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {formData.schedule.map((schedule) => (
-                            <div key={schedule.id} className="bg-gray-50 dark:bg-dark-card rounded-xl p-4 border border-gray-200 dark:border-dark-border">
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                    Día
-                                  </label>
-                                  <select
-                                    value={schedule.dayOfWeek}
-                                    onChange={(e) => updateScheduleEntry(schedule.id, 'dayOfWeek', parseInt(e.target.value))}
-                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                  >
-                                    {daysOfWeek.map((day) => (
-                                      <option key={day.value} value={day.value}>
-                                        {day.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                    Hora Inicio
-                                  </label>
-                                  <input
-                                    type="time"
-                                    value={schedule.startTime}
-                                    onChange={(e) => updateScheduleEntry(schedule.id, 'startTime', e.target.value)}
-                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                    Hora Fin
-                                  </label>
-                                  <input
-                                    type="time"
-                                    value={schedule.endTime}
-                                    onChange={(e) => updateScheduleEntry(schedule.id, 'endTime', e.target.value)}
-                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                  />
-                                </div>
-
-                                <div className="flex items-center space-x-2">
-                                  <label className="flex items-center space-x-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={schedule.enabled}
-                                      onChange={(e) => updateScheduleEntry(schedule.id, 'enabled', e.target.checked)}
-                                      className="rounded border-gray-300 text-purple-500 focus:ring-purple-500"
-                                    />
-                                    <span className="text-xs text-gray-600 dark:text-gray-400">Activo</span>
-                                  </label>
-                                  <button
-                                    type="button"
-                                    onClick={() => removeScheduleEntry(schedule.id)}
-                                    className="p-1 text-red-500 hover:text-red-700 transition-colors"
-                                  >
-                                    <XCircle className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-                        <p className="text-xs text-blue-600 dark:text-blue-400">
-                          💡 <strong>Tip:</strong> Las respuestas automáticas solo se enviarán durante los horarios configurados. 
-                          Fuera de estos horarios, el asistente no responderá automáticamente.
-                        </p>
-                      </div>
-                    </div>
                   </div>
-                ) : (
-                  <div className="space-y-4">
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Prompt de IA
+                        Temperatura
                       </label>
-                      <textarea
-                        value={formData.aiPrompt}
-                        onChange={(e) => setFormData({ ...formData, aiPrompt: e.target.value })}
-                        rows={4}
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="2"
+                        value={formData.temperature}
+                        onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
                         className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        placeholder="Define cómo debe comportarse el asistente de IA. Incluye información sobre tu empresa, productos, servicios, etc."
                       />
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Documentos de Entrenamiento
+                        Delay de Respuesta (segundos)
                       </label>
-                      <div className="border-2 border-dashed border-gray-300 dark:border-dark-border rounded-xl p-6 text-center">
-                        <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                          Arrastra archivos aquí o haz clic para seleccionar
-                        </p>
-                        <input
-                          type="file"
-                          multiple
-                          accept=".pdf,.doc,.docx,.txt"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                          id="file-upload"
-                        />
-                        <label
-                          htmlFor="file-upload"
-                          className="inline-block bg-purple-500 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-purple-600 transition-colors cursor-pointer"
-                        >
-                          Seleccionar Archivos
-                        </label>
-                      </div>
-                      {formData.documents.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {formData.documents.map((file, index) => (
-                            <div key={index} className="flex items-center justify-between bg-gray-50 dark:bg-dark-card p-2 rounded-lg">
-                              <div className="flex items-center space-x-2">
-                                <FileText className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm text-gray-700 dark:text-gray-300">{file.name}</span>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  const newDocuments = formData.documents.filter((_, i) => i !== index);
-                                  setFormData({ ...formData, documents: newDocuments });
-                                }}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <XCircle className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <input
+                        type="number"
+                        value={formData.response_delay}
+                        onChange={(e) => setFormData({ ...formData, response_delay: parseInt(e.target.value) })}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        min="0"
+                      />
                     </div>
                   </div>
-                )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      API Key de OpenAI
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.openai_api_key}
+                      onChange={(e) => setFormData({ ...formData, openai_api_key: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="sk-..."
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="is_active"
+                        checked={formData.is_active}
+                        onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                        className="mr-3 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                      />
+                      <label htmlFor="is_active" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Asistente Activo
+                      </label>
+                    </div>
+
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="auto_assign"
+                        checked={formData.auto_assign}
+                        onChange={(e) => setFormData({ ...formData, auto_assign: e.target.checked })}
+                        className="mr-3 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                      />
+                      <label htmlFor="auto_assign" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Auto-asignar a conversaciones
+                      </label>
+                    </div>
+                  </div>
+                </div>
 
                 {/* Actions */}
                 <div className="flex space-x-3 pt-4">
@@ -799,7 +781,7 @@ export const AssistantsPage: React.FC = () => {
                     Cancelar
                   </button>
                   <button
-                    onClick={() => handleDeleteAssistant(showDeleteConfirm)}
+                    onClick={() => handleDeleteAssistant(showDeleteConfirm!)}
                     className="flex-1 bg-red-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-red-600 transition-colors"
                   >
                     Eliminar

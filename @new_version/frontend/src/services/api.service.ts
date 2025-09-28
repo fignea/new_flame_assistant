@@ -19,6 +19,13 @@ export interface Contact {
   is_group: boolean;
   is_blocked: boolean;
   avatar_url?: string;
+  last_message_at?: string;
+  unread_count?: number;
+  assigned_assistant_id?: number;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  status?: 'active' | 'closed' | 'pending' | 'resolved';
+  tags?: string[];
+  notes?: string;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +43,156 @@ export interface ScheduledMessage {
   error_message?: string;
   created_at: string;
   updated_at: string;
+}
+
+// Nuevas interfaces para funcionalidades avanzadas
+
+// Interfaz para Assistant
+export interface Assistant {
+  id: number;
+  user_id: number;
+  name: string;
+  description?: string;
+  prompt?: string;
+  is_active: boolean;
+  openai_api_key?: string;
+  model: string;
+  max_tokens: number;
+  temperature: number;
+  auto_assign: boolean;
+  response_delay: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interfaz para Assignment
+export interface Assignment {
+  id: number;
+  assistant_id: number;
+  conversation_id: string;
+  platform: string;
+  assigned_at: string;
+  is_active: boolean;
+  assistant?: Assistant;
+}
+
+// Interfaz para ResponseTemplate
+export interface ResponseTemplate {
+  id: number;
+  assistant_id: number;
+  user_id: number;
+  name: string;
+  content: string;
+  category: 'greeting' | 'farewell' | 'question' | 'information' | 'escalation' | 'general';
+  trigger_keywords: string[];
+  conditions?: Record<string, any>;
+  is_active: boolean;
+  priority: number;
+  response_delay: number;
+  created_at: string;
+  updated_at: string;
+  assistant?: Assistant;
+}
+
+// Interfaz para Tag
+export interface Tag {
+  id: number;
+  user_id: number;
+  name: string;
+  color: string;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interfaz para ConversationTag
+export interface ConversationTag {
+  id: number;
+  conversation_id: string;
+  platform: string;
+  tag_id: number;
+  created_at: string;
+  tag?: Tag;
+}
+
+// Interfaz para ContactTag
+export interface ContactTag {
+  id: number;
+  contact_id: number;
+  tag_id: number;
+  created_at: string;
+  tag?: Tag;
+}
+
+// Interfaz para InteractionHistory
+export interface InteractionHistory {
+  id: number;
+  contact_id: number;
+  interaction_type: 'message' | 'call' | 'email' | 'meeting' | 'note';
+  content: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+// Interfaz para ContactNote
+export interface ContactNote {
+  id: number;
+  contact_id: number;
+  user_id: number;
+  content: string;
+  is_important: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interfaz para AssistantConfig
+export interface AssistantConfig {
+  id: number;
+  assistant_id: number;
+  config_key: string;
+  config_value: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interfaz para AutoResponseResult
+export interface AutoResponseResult {
+  should_respond: boolean;
+  response?: string;
+  template_id?: number;
+  confidence?: number;
+  reason?: string;
+}
+
+// Interfaz para estadísticas
+export interface AssignmentStats {
+  total_assignments: number;
+  active_assignments: number;
+  assignments_by_assistant: Record<string, number>;
+  assignments_by_platform: Record<string, number>;
+}
+
+export interface TemplateStats {
+  total_templates: number;
+  active_templates: number;
+  templates_by_category: Record<string, number>;
+  templates_by_assistant: Record<string, number>;
+}
+
+export interface TagStats {
+  total_tags: number;
+  active_tags: number;
+  tags_by_contact: Record<string, number>;
+  tags_by_conversation: Record<string, number>;
+}
+
+export interface AutoResponseStats {
+  total_processed: number;
+  successful_responses: number;
+  failed_responses: number;
+  average_response_time: number;
+  responses_by_assistant: Record<string, number>;
 }
 
 export interface PaginationInfo {
@@ -276,6 +433,14 @@ export class ApiService {
     return this.get(apiConfig.endpoints.assistants.stats(id));
   }
 
+  async getAssistantsStats() {
+    return this.get('/api/assistants/stats');
+  }
+
+  async getAssignmentsStats() {
+    return this.get('/api/assignments/stats');
+  }
+
   async getSchedules(assistantId: string) {
     return this.get(apiConfig.endpoints.assistants.schedules(assistantId));
   }
@@ -450,6 +615,15 @@ export class ApiService {
     return this.get<Contact>(`/api/whatsapp/contacts/data/${encodeURIComponent(whatsappId)}`);
   }
 
+  async createContact(data: {
+    name: string;
+    phone_number?: string;
+    whatsapp_id?: string;
+    is_group?: boolean;
+  }) {
+    return this.post<Contact>('/api/whatsapp/contacts', data);
+  }
+
   // Métodos para programación
   async getScheduledMessages(params?: {
     page?: number;
@@ -554,6 +728,281 @@ export class ApiService {
 
   async getWebChatWidgetScript(domain?: string) {
     return this.get('/api/integrations/web/widget-script', { domain });
+  }
+
+  // ===== NUEVOS MÉTODOS PARA FUNCIONALIDADES AVANZADAS =====
+
+  // Métodos para Asignaciones
+  async assignAssistant(data: {
+    assistant_id: number;
+    conversation_id: string;
+    platform: string;
+  }) {
+    return this.post<Assignment>('/api/assignments', data);
+  }
+
+  async getUserAssignments() {
+    return this.get<Assignment[]>('/api/assignments');
+  }
+
+  async getAssignedAssistant(conversationId: string, platform: string) {
+    return this.get<Assignment>(`/api/assignments/conversation/${conversationId}/${platform}`);
+  }
+
+  async unassignAssistant(conversationId: string, platform: string) {
+    return this.delete(`/api/assignments/conversation/${conversationId}/${platform}`);
+  }
+
+  async autoAssignAssistant(data: {
+    conversation_id: string;
+    platform: string;
+    contact_id?: number;
+  }) {
+    return this.post<Assignment>('/api/assignments/auto-assign', data);
+  }
+
+  async getAssignmentStats() {
+    return this.get<AssignmentStats>('/api/assignments/stats');
+  }
+
+  async getConversationsByAssistant(assistantId: string, params?: {
+    limit?: number;
+    offset?: number;
+  }) {
+    return this.get<Assignment[]>(`/api/assignments/assistant/${assistantId}`, params);
+  }
+
+  async hasAssignedAssistant(conversationId: string, platform: string) {
+    return this.get<{ has_assignment: boolean }>(`/api/assignments/check/${conversationId}/${platform}`);
+  }
+
+  // Métodos para Plantillas de Respuestas
+  async createTemplate(data: {
+    name: string;
+    content: string;
+    assistant_id: number;
+    category?: 'greeting' | 'farewell' | 'question' | 'information' | 'escalation' | 'general';
+    trigger_keywords?: string[];
+    priority?: number;
+    response_delay?: number;
+    is_active?: boolean;
+  }) {
+    return this.post<ResponseTemplate>('/api/templates', data);
+  }
+
+  async getUserTemplates(params?: {
+    assistant_id?: number;
+    category?: string;
+  }) {
+    return this.get<ResponseTemplate[]>('/api/templates', params);
+  }
+
+  async getTemplateById(id: string) {
+    return this.get<ResponseTemplate>(`/api/templates/${id}`);
+  }
+
+  async updateTemplate(id: string, data: Partial<ResponseTemplate>) {
+    return this.put<ResponseTemplate>(`/api/templates/${id}`, data);
+  }
+
+  async deleteTemplate(id: string) {
+    return this.delete(`/api/templates/${id}`);
+  }
+
+  async searchTemplatesByKeywords(data: {
+    keywords: string[];
+    assistant_id?: number;
+  }) {
+    return this.post<ResponseTemplate[]>('/api/templates/search', data);
+  }
+
+  async getTemplatesByCategory(category: string, params?: {
+    assistant_id?: number;
+  }) {
+    return this.get<ResponseTemplate[]>(`/api/templates/category/${category}`, params);
+  }
+
+  async duplicateTemplate(id: string, newName: string) {
+    return this.post<ResponseTemplate>(`/api/templates/${id}/duplicate`, { new_name: newName });
+  }
+
+  async getTemplateStats() {
+    return this.get<TemplateStats>('/api/templates/stats');
+  }
+
+  async getTemplatesStats() {
+    return this.get<TemplateStats>('/api/templates/stats');
+  }
+
+  // Métodos para Etiquetas
+  async createTag(data: {
+    name: string;
+    color: string;
+    description?: string;
+    is_active?: boolean;
+  }) {
+    return this.post<Tag>('/api/tags', data);
+  }
+
+  async getUserTags(params?: {
+    active_only?: boolean;
+  }) {
+    return this.get<Tag[]>('/api/tags', params);
+  }
+
+  async getTagById(id: string) {
+    return this.get<Tag>(`/api/tags/${id}`);
+  }
+
+  async updateTag(id: string, data: Partial<Tag>) {
+    return this.put<Tag>(`/api/tags/${id}`, data);
+  }
+
+  async deleteTag(id: string) {
+    return this.delete(`/api/tags/${id}`);
+  }
+
+  async tagConversation(tagId: string, data: {
+    conversation_id: string;
+    platform: string;
+  }) {
+    return this.post<ConversationTag>(`/api/tags/${tagId}/conversation`, data);
+  }
+
+  async tagContact(tagId: string, data: {
+    contact_id: number;
+  }) {
+    return this.post<ContactTag>(`/api/tags/${tagId}/contact`, data);
+  }
+
+  async getConversationTags(conversationId: string, platform: string) {
+    return this.get<Tag[]>(`/api/tags/conversation/${conversationId}/${platform}`);
+  }
+
+  async getContactTags(contactId: string) {
+    return this.get<Tag[]>(`/api/tags/contact/${contactId}`);
+  }
+
+  async untagConversation(tagId: string, conversationId: string, platform: string) {
+    return this.delete(`/api/tags/${tagId}/conversation/${conversationId}/${platform}`);
+  }
+
+  async untagContact(tagId: string, contactId: string) {
+    return this.delete(`/api/tags/${tagId}/contact/${contactId}`);
+  }
+
+  async getConversationsByTag(tagId: string, params?: {
+    platform?: string;
+  }) {
+    return this.get<any[]>(`/api/tags/${tagId}/conversations`, params);
+  }
+
+  async getContactsByTag(tagId: string) {
+    return this.get<Contact[]>(`/api/tags/${tagId}/contacts`);
+  }
+
+  async getTagStats() {
+    return this.get<TagStats>('/api/tags/stats');
+  }
+
+  async getTagsStats() {
+    return this.get<TagStats>('/api/tags/stats');
+  }
+
+  // Métodos para Respuestas Automáticas
+  async processIncomingMessage(data: {
+    message: {
+      id: string;
+      chat_id: string;
+      content: string;
+      sender: string;
+      timestamp: string;
+    };
+  }) {
+    return this.post<AutoResponseResult>('/api/auto-response/process', data);
+  }
+
+  async sendAutoResponse(data: {
+    chat_id: string;
+    response: string;
+    assistant_id?: number;
+    template_id?: number;
+  }) {
+    return this.post('/api/auto-response/send', data);
+  }
+
+  async processWebMessage(data: {
+    conversation_id: string;
+    message_content: string;
+  }) {
+    return this.post<AutoResponseResult>('/api/auto-response/process-web', data);
+  }
+
+  async shouldAutoRespond(conversationId: string, platform: string) {
+    return this.get<{ should_respond: boolean }>(`/api/auto-response/should-respond/${conversationId}/${platform}`);
+  }
+
+  async getAutoResponseStats() {
+    return this.get<AutoResponseStats>('/api/auto-response/stats');
+  }
+
+  // Métodos adicionales para Asistentes
+  async getAvailableModels(apiKey: string) {
+    return this.get<string[]>(`/api/assistants/models?api_key=${encodeURIComponent(apiKey)}`);
+  }
+
+  async validateApiKey(data: {
+    api_key: string;
+  }) {
+    return this.post<{ valid: boolean }>('/api/assistants/validate-key', data);
+  }
+
+  async getUsageInfo(assistantId: string) {
+    return this.get<{
+      total_usage: number;
+      total_granted: number;
+      total_available: number;
+    }>(`/api/assistants/${assistantId}/usage`);
+  }
+
+  // Métodos para Notas de Contacto
+  async getContactNotes(contactId: string) {
+    return this.get<ContactNote[]>(`/api/contacts/${contactId}/notes`);
+  }
+
+  async createContactNote(contactId: string, data: {
+    content: string;
+    is_important?: boolean;
+  }) {
+    return this.post<ContactNote>(`/api/contacts/${contactId}/notes`, data);
+  }
+
+  async updateContactNote(contactId: string, noteId: string, data: {
+    content?: string;
+    is_important?: boolean;
+  }) {
+    return this.put<ContactNote>(`/api/contacts/${contactId}/notes/${noteId}`, data);
+  }
+
+  async deleteContactNote(contactId: string, noteId: string) {
+    return this.delete(`/api/contacts/${contactId}/notes/${noteId}`);
+  }
+
+  // Métodos para Historial de Interacciones
+  async getContactInteractionHistory(contactId: string, params?: {
+    limit?: number;
+    offset?: number;
+    type?: string;
+  }) {
+    return this.get<InteractionHistory[]>(`/api/contacts/${contactId}/interactions`, params);
+  }
+
+  async createInteractionHistory(contactId: string, data: {
+    interaction_type: 'message' | 'call' | 'email' | 'meeting' | 'note';
+    content: string;
+    metadata?: Record<string, any>;
+  }) {
+    return this.post<InteractionHistory>(`/api/contacts/${contactId}/interactions`, data);
   }
 }
 

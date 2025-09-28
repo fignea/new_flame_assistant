@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🧪 Probando WhatsApp Manager con Docker..."
+echo "🧪 Probando Flame AIcon Docker..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Función para esperar que un servicio esté listo

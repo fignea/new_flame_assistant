@@ -24,6 +24,10 @@ import integrationsRoutes from './routes/integrations';
 import assistantsRoutes from './routes/assistants';
 import configRoutes from './routes/config';
 import messagesRoutes from './routes/messages';
+import assignmentsRoutes from './routes/assignments';
+import templatesRoutes from './routes/templates';
+import tagsRoutes from './routes/tags';
+import autoResponseRoutes from './routes/auto-response';
 
 // Importar servicios
 import { whatsappService } from './services/WhatsAppService';
@@ -41,7 +45,7 @@ class WhatsAppManagerServer {
   private userSockets: Map<number, string> = new Map(); // userId -> socketId
 
   constructor() {
-    console.log('🔧 Initializing WhatsApp Manager Server...');
+    console.log('🔧 Initializing Flame AIServer...');
     this.app = express();
     this.server = createServer(this.app);
     this.io = new SocketIOServer(this.server, {
@@ -200,11 +204,15 @@ class WhatsAppManagerServer {
     this.app.use('/api/assistants', assistantsRoutes);
     this.app.use('/api/config', configRoutes);
     this.app.use('/api/messages', messagesRoutes);
+    this.app.use('/api/assignments', assignmentsRoutes);
+    this.app.use('/api/templates', templatesRoutes);
+    this.app.use('/api/tags', tagsRoutes);
+    this.app.use('/api/auto-response', autoResponseRoutes);
 
     // Root endpoint
     this.app.get('/', (req, res) => {
       res.json({
-        message: '🔥 WhatsApp Manager API',
+        message: '🔥 Flame AIAPI',
         version: '1.0.0',
         status: 'running',
         timestamp: new Date().toISOString(),
@@ -411,7 +419,7 @@ class WhatsAppManagerServer {
 
       this.server.listen(port, host, () => {
         console.log(`
-🚀 WhatsApp Manager Server Started
+🚀 Flame AIServer Started
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📍 Server: http://${host}:${port}
 🏥 Health: http://${host}:${port}/health  
