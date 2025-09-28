@@ -278,19 +278,18 @@ const TemplatesPage: React.FC = () => {
         </div>
 
         {/* Templates List */}
-        <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-sm border border-gray-200 dark:border-dark-border overflow-hidden">
-          {filteredTemplates.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                No se encontraron plantillas
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                {searchQuery ? 'No hay plantillas que coincidan con tu búsqueda' : 'No hay plantillas disponibles'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+        {filteredTemplates.length === 0 ? (
+          <div className="text-center py-12">
+            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              No se encontraron plantillas
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              {searchQuery ? 'No hay plantillas que coincidan con tu búsqueda' : 'No hay plantillas disponibles'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredTemplates.map((template) => (
                 <div key={template.id} className="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border hover:shadow-lg transition-shadow">
                   <div className="p-6">
@@ -371,9 +370,8 @@ const TemplatesPage: React.FC = () => {
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Modal de creación/edición */}
