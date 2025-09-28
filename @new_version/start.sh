@@ -104,16 +104,30 @@ for i in {1..20}; do
     echo "   ⏳ Esperando frontend... ($i/20)"
 done
 
-# Crear usuario por defecto
-echo "👤 Creando usuario por defecto..."
+# Ejecutar migraciones de base de datos
+echo "🗄️ Ejecutando migraciones de base de datos..."
 docker exec whatsapp-manager-backend node -e "
 const { database } = require('./dist/config/database.js');
-const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 
 setTimeout(async () => {
   try {
+    console.log('🔄 Iniciando migraciones...');
+    
+    // Leer y ejecutar migrate-assistant-system.sql
+    const migrationPath = path.join(__dirname, 'scripts', 'migrate-assistant-system.sql');
+    if (fs.existsSync(migrationPath)) {
+      const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
+      await database.run(migrationSQL);
+      console.log('✅ Migración de sistema de asistentes ejecutada');
+    } else {
+      console.log('⚠️ Archivo de migración no encontrado, continuando...');
+    }
+    
+    // Crear usuario por defecto
     const email = 'admin@flame.com';
-    const password = bcrypt.hashSync('flame123', 10);
+    const password = require('bcryptjs').hashSync('flame123', 10);
     const name = 'Administrator';
 
     await database.run(
@@ -122,13 +136,14 @@ setTimeout(async () => {
     );
     
     console.log('✅ Usuario por defecto creado');
+    console.log('✅ Migraciones completadas');
   } catch (error) {
-    console.error('❌ Error creando usuario:', error.message);
+    console.error('❌ Error en migraciones:', error.message);
   }
-}, 3000);
+}, 5000);
 " > /dev/null 2>&1
 
-echo "✅ Usuario por defecto configurado"
+echo "✅ Migraciones de base de datos ejecutadas"
 
 # Verificar estado final de los servicios
 echo "🔍 Verificando estado final de los servicios..."

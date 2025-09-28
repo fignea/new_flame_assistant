@@ -8,7 +8,7 @@ import { useWhatsAppNotifications } from './hooks/useWhatsAppNotifications';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import LandingPage from './pages/LandingPage';
 import { LoginPage } from './pages/auth/LoginPage';
-import { DashboardPage } from './pages/dashboard/DashboardPage';
+import DashboardPage from './pages/dashboard/DashboardPage';
 import { InboxPage } from './pages/inbox/InboxPage';
 import { ContactsPage } from './pages/contacts/ContactsPage';
 import { DocumentsPage } from './pages/documents/DocumentsPage';
@@ -17,6 +17,8 @@ import { IntegrationsPage } from './pages/integrations/IntegrationsPage';
 import { ConfigPage } from './pages/config/ConfigPage';
 import { ScheduledMessagesPage } from './pages/scheduled/ScheduledMessagesPage';
 import { WidgetDemoPage } from './pages/web-chat/WidgetDemoPage';
+import TemplatesPage from './pages/templates/TemplatesPage';
+import TagsPage from './pages/tags/TagsPage';
 
 // Componente para manejar notificaciones de WhatsApp
 const WhatsAppNotificationHandler: React.FC = () => {
@@ -148,6 +150,26 @@ const AppContent: React.FC = () => {
               <ProtectedRoute>
                 <DashboardLayout>
                   <AssistantsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/templates" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <TemplatesPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/tags" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <TagsPage />
                 </DashboardLayout>
               </ProtectedRoute>
             } 

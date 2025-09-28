@@ -24,6 +24,10 @@ import integrationsRoutes from './routes/integrations';
 import assistantsRoutes from './routes/assistants';
 import configRoutes from './routes/config';
 import messagesRoutes from './routes/messages';
+import assignmentsRoutes from './routes/assignments';
+import templatesRoutes from './routes/templates';
+import tagsRoutes from './routes/tags';
+import autoResponseRoutes from './routes/auto-response';
 
 // Importar servicios
 import { whatsappService } from './services/WhatsAppService';
@@ -200,6 +204,10 @@ class WhatsAppManagerServer {
     this.app.use('/api/assistants', assistantsRoutes);
     this.app.use('/api/config', configRoutes);
     this.app.use('/api/messages', messagesRoutes);
+    this.app.use('/api/assignments', assignmentsRoutes);
+    this.app.use('/api/templates', templatesRoutes);
+    this.app.use('/api/tags', tagsRoutes);
+    this.app.use('/api/auto-response', autoResponseRoutes);
 
     // Root endpoint
     this.app.get('/', (req, res) => {

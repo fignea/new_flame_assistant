@@ -16,4 +16,9 @@ router.delete('/:id', assistantsController.delete);
 router.patch('/:id/toggle-status', assistantsController.toggleStatus);
 router.get('/:id/stats', assistantsController.getStats);
 
+// Nuevas rutas para funcionalidades avanzadas
+router.get('/models', assistantsController.getAvailableModels);
+router.post('/validate-key', assistantsController.validateApiKey);
+router.get('/:id/usage', assistantsController.getUsageInfo);
+
 export default router;

@@ -39,6 +39,9 @@ export interface Contact {
   phone_number?: string;
   is_group: boolean;
   avatar_url?: string;
+  is_blocked: boolean;
+  last_interaction?: string;
+  interaction_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -55,6 +58,9 @@ export interface Message {
   timestamp: string;
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
   media_url?: string;
+  assistant_id?: number;
+  is_auto_response: boolean;
+  template_id?: number;
   created_at: string;
 }
 
@@ -297,4 +303,314 @@ export interface UpdateWebConversationRequest {
 export interface WebChatWidgetScriptRequest {
   user_id: number;
   domain?: string;
+}
+
+// ========================================
+// SISTEMA DE ASISTENTES - NUEVOS TIPOS
+// ========================================
+
+// Asistente mejorado
+export interface Assistant {
+  id: number;
+  user_id: number;
+  name: string;
+  description?: string;
+  prompt?: string;
+  is_active: boolean;
+  openai_api_key?: string;
+  model: string;
+  max_tokens: number;
+  temperature: number;
+  auto_assign: boolean;
+  response_delay: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Asignaciones de asistentes
+export interface AssistantAssignment {
+  id: number;
+  assistant_id: number;
+  conversation_id: string;
+  platform: 'whatsapp' | 'web' | 'facebook' | 'instagram' | 'telegram';
+  assigned_at: string;
+  is_active: boolean;
+  assignment_type: 'automatic' | 'manual';
+  created_at: string;
+  updated_at: string;
+  assistant?: Assistant;
+}
+
+// Plantillas de respuestas
+export interface ResponseTemplate {
+  id: number;
+  assistant_id: number;
+  user_id: number;
+  name: string;
+  content: string;
+  category: TemplateCategory;
+  trigger_keywords: string[];
+  conditions?: Record<string, any>;
+  is_active: boolean;
+  priority: number;
+  response_delay: number;
+  created_at: string;
+  updated_at: string;
+  assistant?: Assistant;
+}
+
+// Sistema de etiquetas
+export interface Tag {
+  id: number;
+  user_id: number;
+  name: string;
+  color: string;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Etiquetas de conversaciones
+export interface ConversationTag {
+  conversation_id: string;
+  tag_id: number;
+  created_at: string;
+  tag?: Tag;
+}
+
+// Historial de interacciones
+export interface InteractionHistory {
+  id: number;
+  contact_id: number;
+  conversation_id: string;
+  interaction_type: 'message' | 'call' | 'meeting' | 'email' | 'note';
+  content?: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+  contact?: Contact;
+}
+
+// Notas de contactos
+export interface ContactNote {
+  id: number;
+  contact_id: number;
+  user_id: number;
+  content: string;
+  is_private: boolean;
+  created_at: string;
+  updated_at: string;
+  contact?: Contact;
+  user?: User;
+}
+
+// Configuración de asistentes
+export interface AssistantConfig {
+  id: number;
+  assistant_id: number;
+  config_key: string;
+  config_value: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+  assistant?: Assistant;
+}
+
+// ========================================
+// REQUEST/RESPONSE DTOs PARA ASISTENTES
+// ========================================
+
+export interface CreateAssistantRequest {
+  name: string;
+  description?: string;
+  prompt?: string;
+  is_active?: boolean;
+  openai_api_key?: string;
+  model?: string;
+  max_tokens?: number;
+  temperature?: number;
+  auto_assign?: boolean;
+  response_delay?: number;
+}
+
+export interface UpdateAssistantRequest extends Partial<CreateAssistantRequest> {
+  id: number;
+}
+
+export interface CreateResponseTemplateRequest {
+  assistant_id: number;
+  name: string;
+  content: string;
+  trigger_keywords?: string[];
+  conditions?: Record<string, any>;
+  is_active?: boolean;
+}
+
+export interface UpdateResponseTemplateRequest extends Partial<CreateResponseTemplateRequest> {
+  id: number;
+}
+
+export interface CreateTagRequest {
+  name: string;
+  color?: string;
+}
+
+export interface UpdateTagRequest extends Partial<CreateTagRequest> {
+  id: number;
+}
+
+export interface AssignAssistantRequest {
+  assistant_id: number;
+  conversation_id: string;
+  platform: 'whatsapp' | 'web' | 'facebook' | 'instagram' | 'telegram';
+  assignment_type?: 'automatic' | 'manual';
+}
+
+export interface CreateContactNoteRequest {
+  contact_id: number;
+  content: string;
+  is_private?: boolean;
+}
+
+export interface UpdateContactNoteRequest extends Partial<CreateContactNoteRequest> {
+  id: number;
+}
+
+export interface CreateInteractionRequest {
+  contact_id: number;
+  conversation_id: string;
+  interaction_type: 'message' | 'call' | 'meeting' | 'email' | 'note';
+  content?: string;
+  metadata?: Record<string, any>;
+}
+
+// ========================================
+// CONFIGURACIÓN DE ASISTENTES
+// ========================================
+
+export interface AssistantConfigKey {
+  response_delay_seconds: number;
+  max_conversation_length: number;
+  auto_assign_keywords: string[];
+  working_hours: {
+    start: string;
+    end: string;
+    timezone: string;
+  };
+  business_hours: {
+    enabled: boolean;
+    timezone: string;
+    schedule: Array<{
+      day: string;
+      start: string;
+      end: string;
+    }>;
+  };
+  fallback_message: string;
+  max_retries: number;
+  retry_delay: number;
+}
+
+// ========================================
+// ESTADÍSTICAS DE ASISTENTES
+// ========================================
+
+export interface AssistantStats {
+  assistant_id: number;
+  total_conversations: number;
+  active_conversations: number;
+  total_messages: number;
+  auto_responses: number;
+  manual_responses: number;
+  average_response_time: number;
+  satisfaction_score?: number;
+  most_used_templates: Array<{
+    template_id: number;
+    template_name: string;
+    usage_count: number;
+  }>;
+  performance_by_hour: Array<{
+    hour: number;
+    conversations: number;
+    response_time: number;
+  }>;
+}
+
+// ========================================
+// EVENTOS DE SOCKET PARA ASISTENTES
+// ========================================
+
+export interface AssistantSocketEvents {
+  'assistant:assigned': (assignment: AssistantAssignment) => void;
+  'assistant:unassigned': (conversationId: string, assistantId: number) => void;
+  'assistant:response:generated': (conversationId: string, response: string, assistantId: number) => void;
+  'assistant:response:sent': (conversationId: string, messageId: string, assistantId: number) => void;
+  'assistant:error': (conversationId: string, error: string, assistantId: number) => void;
+  'assistant:status:changed': (assistantId: number, isActive: boolean) => void;
+}
+
+// ========================================
+// INTERFACES ADICIONALES PARA SERVICIOS
+// ========================================
+
+// Estadísticas de asignaciones
+export interface AssignmentStats {
+  total_assignments: number;
+  active_assignments: number;
+  whatsapp_assignments: number;
+  web_assignments: number;
+  today_assignments: number;
+}
+
+// Categorías de plantillas
+export type TemplateCategory = 
+  | 'greeting' 
+  | 'farewell' 
+  | 'information' 
+  | 'support' 
+  | 'sales' 
+  | 'general';
+
+// Etiquetas de contactos
+export interface ContactTag {
+  contact_id: number;
+  tag_id: number;
+  created_at: string;
+  tag?: Tag;
+  contact?: Contact;
+}
+
+// Configuración de OpenAI
+export interface OpenAIConfig {
+  apiKey: string;
+  baseURL?: string;
+}
+
+// Respuesta de procesamiento automático
+export interface AutoResponseResult {
+  shouldRespond: boolean;
+  response?: string;
+  templateUsed?: ResponseTemplate;
+  assistantUsed?: Assistant;
+}
+
+// Estadísticas de respuestas automáticas
+export interface AutoResponseStats {
+  total_responses: number;
+  responses_today: number;
+  responses_by_assistant: Array<{ assistant_id: number; assistant_name: string; count: number }>;
+  responses_by_template: Array<{ template_id: number; template_name: string; count: number }>;
+}
+
+// Estadísticas de etiquetas
+export interface TagStats {
+  total_tags: number;
+  active_tags: number;
+  most_used_tags: Array<{ tag_id: number; tag_name: string; count: number }>;
+}
+
+// Estadísticas de plantillas
+export interface TemplateStats {
+  total_templates: number;
+  active_templates: number;
+  templates_by_category: Record<string, number>;
 }

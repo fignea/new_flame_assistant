@@ -171,6 +171,9 @@ export const InboxPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [platformFilter, setPlatformFilter] = useState<string>('all');
+  const [tagFilter, setTagFilter] = useState<string>('all');
+  const [assistantFilter, setAssistantFilter] = useState<string>('all');
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [whatsappChats, setWhatsappChats] = useState<WhatsAppChat[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
@@ -187,6 +190,8 @@ export const InboxPage: React.FC = () => {
   const [webMessages, setWebMessages] = useState<WebMessage[]>([]);
   const [isLoadingWeb, setIsLoadingWeb] = useState(false);
   const [webChatEnabled, setWebChatEnabled] = useState(true);
+  const [availableTags, setAvailableTags] = useState<any[]>([]);
+  const [availableAssistants, setAvailableAssistants] = useState<any[]>([]);
 
   // Configurar Socket.IO para recibir mensajes en tiempo real
   const { isConnected: wsConnected, joinUserRoom, leaveUserRoom, reconnectWithNewToken } = useSocketIO({
@@ -371,6 +376,30 @@ export const InboxPage: React.FC = () => {
       loadWebConversations();
     }
   }, [webChatEnabled, statusFilter]);
+
+  // Cargar etiquetas y asistentes disponibles
+  useEffect(() => {
+    const loadFiltersData = async () => {
+      try {
+        const [tagsResponse, assistantsResponse] = await Promise.all([
+          apiService.getTags(),
+          apiService.getAssistants()
+        ]);
+        
+        if (tagsResponse.success) {
+          setAvailableTags(tagsResponse.data || []);
+        }
+        
+        if (assistantsResponse.success) {
+          setAvailableAssistants(assistantsResponse.data || []);
+        }
+      } catch (error) {
+        console.error('Error loading filters data:', error);
+      }
+    };
+
+    loadFiltersData();
+  }, []);
 
   // Cargar mensajes cuando se selecciona una conversación
   useEffect(() => {
@@ -1169,8 +1198,12 @@ export const InboxPage: React.FC = () => {
     const matchesPlatform = platformFilter === 'all' || conversation.platform === platformFilter;
     const matchesWhatsApp = !showWhatsAppOnly || conversation.isWhatsApp;
     const matchesWeb = webChatEnabled ? (conversation.isWeb || conversation.isWhatsApp) : !conversation.isWeb;
+    const matchesTag = tagFilter === 'all' || conversation.tags.includes(tagFilter);
+    const matchesAssistant = assistantFilter === 'all' || conversation.assignedAssistant === assistantFilter;
+    const matchesUnread = !unreadOnly || conversation.unreadCount > 0;
     
-    return matchesSearch && matchesStatus && matchesPriority && matchesPlatform && matchesWhatsApp && matchesWeb;
+    return matchesSearch && matchesStatus && matchesPriority && matchesPlatform && 
+           matchesWhatsApp && matchesWeb && matchesTag && matchesAssistant && matchesUnread;
   });
 
   const selectedConv = allConversations.find(c => c.id === selectedConversation);
@@ -1370,7 +1403,8 @@ export const InboxPage: React.FC = () => {
             </div>
 
             {/* Filters */}
-            <div className="space-y-2 mb-4">
+            <div className="space-y-3 mb-4">
+              {/* Primera fila de filtros */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <select
                   value={statusFilter}
@@ -1397,18 +1431,64 @@ export const InboxPage: React.FC = () => {
                 </select>
               </div>
               
-              <select
-                value={platformFilter}
-                onChange={(e) => setPlatformFilter(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
-                <option value="all">Todas las plataformas</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="web">Web Chat</option>
-                <option value="facebook">Facebook</option>
-                <option value="instagram">Instagram</option>
-                <option value="telegram">Telegram</option>
-              </select>
+              {/* Segunda fila de filtros */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <select
+                  value={platformFilter}
+                  onChange={(e) => setPlatformFilter(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="all">Todas las plataformas</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="web">Web Chat</option>
+                  <option value="facebook">Facebook</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="telegram">Telegram</option>
+                </select>
+
+                <select
+                  value={tagFilter}
+                  onChange={(e) => setTagFilter(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="all">Todas las etiquetas</option>
+                  {availableTags.map(tag => (
+                    <option key={tag.id} value={tag.name}>
+                      {tag.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tercera fila de filtros */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <select
+                  value={assistantFilter}
+                  onChange={(e) => setAssistantFilter(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="all">Todos los asistentes</option>
+                  <option value="unassigned">Sin asignar</option>
+                  {availableAssistants.map(assistant => (
+                    <option key={assistant.id} value={assistant.name}>
+                      {assistant.name}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="unreadOnly"
+                    checked={unreadOnly}
+                    onChange={(e) => setUnreadOnly(e.target.checked)}
+                    className="rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                  />
+                  <label htmlFor="unreadOnly" className="text-sm text-gray-700 dark:text-gray-300">
+                    Solo no leídos
+                  </label>
+                </div>
+              </div>
             </div>
 
             {/* WhatsApp Status and Toggle */}
@@ -1500,17 +1580,38 @@ export const InboxPage: React.FC = () => {
                             {conversation.lastMessage}
                           </p>
                           
-                          <div className="flex items-center space-x-2">
-                            <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(conversation.status)}`}>
-                              {conversation.status}
+                          <div className="flex flex-col space-y-2">
+                            <div className="flex items-center space-x-2">
+                              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(conversation.status)}`}>
+                                {conversation.status}
+                              </div>
+                              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(conversation.priority)}`}>
+                                {conversation.priority}
+                              </div>
+                              {conversation.assignedAssistant && (
+                                <div className="flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-400">
+                                  <Bot className="w-3 h-3" />
+                                  <span>{conversation.assignedAssistant}</span>
+                                </div>
+                              )}
                             </div>
-                            <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(conversation.priority)}`}>
-                              {conversation.priority}
-                            </div>
-                            {conversation.assignedAssistant && (
-                              <div className="flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-400">
-                                <Bot className="w-3 h-3" />
-                                <span>{conversation.assignedAssistant}</span>
+                            
+                            {/* Etiquetas */}
+                            {conversation.tags && conversation.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {conversation.tags.slice(0, 3).map((tag, index) => (
+                                  <span
+                                    key={index}
+                                    className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                                {conversation.tags.length > 3 && (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                                    +{conversation.tags.length - 3}
+                                  </span>
+                                )}
                               </div>
                             )}
                           </div>
