@@ -34,10 +34,12 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
       const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
       
       // Verificar que el usuario existe
-      const user = await database.get(
+      const users = await database.all(
         'SELECT id, email, name FROM users WHERE id = $1',
         [decoded.userId]
-      ) as User;
+      ) as User[];
+      
+      const user = users.length > 0 ? users[0] : null;
 
       if (!user) {
         return res.status(401).json({

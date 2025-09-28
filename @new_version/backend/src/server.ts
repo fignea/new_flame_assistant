@@ -28,6 +28,7 @@ import assignmentsRoutes from './routes/assignments';
 import templatesRoutes from './routes/templates';
 import tagsRoutes from './routes/tags';
 import autoResponseRoutes from './routes/auto-response';
+import mediaRoutes from './routes/media';
 
 // Importar servicios
 import { whatsappService } from './services/WhatsAppService';
@@ -208,6 +209,7 @@ class WhatsAppManagerServer {
     this.app.use('/api/templates', templatesRoutes);
     this.app.use('/api/tags', tagsRoutes);
     this.app.use('/api/auto-response', autoResponseRoutes);
+    this.app.use('/api/media', mediaRoutes);
 
     // Root endpoint
     this.app.get('/', (req, res) => {
@@ -412,6 +414,11 @@ class WhatsAppManagerServer {
         throw new Error('No se pudo conectar a PostgreSQL');
       }
       logger.info('✅ PostgreSQL conectado');
+
+      // Inicializar directorios de multimedia
+      const { MediaService } = await import('./services/MediaService');
+      await MediaService.initializeDirectories();
+      logger.info('✅ Directorios de multimedia inicializados');
 
       // Inicializar tablas
       await database.initializeTables();

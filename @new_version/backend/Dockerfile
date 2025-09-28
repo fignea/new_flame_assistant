@@ -31,8 +31,8 @@ COPY . .
 RUN npm run build
 
 # Crear directorios necesarios con permisos correctos
-RUN mkdir -p data sessions logs && \
-    chown -R node:node data sessions logs
+RUN mkdir -p data sessions logs uploads uploads/thumbnails && \
+    chown -R node:node data sessions logs uploads
 
 # Cambiar a usuario node por seguridad
 USER node

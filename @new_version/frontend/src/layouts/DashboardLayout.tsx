@@ -15,7 +15,8 @@ import {
   LogOut,
   Clock,
   Tag,
-  Layout
+  Layout,
+  Image
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useApp } from '../contexts/AppContext';
@@ -40,6 +41,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
     { name: 'Asistentes', href: '/assistants', icon: Bot },
     { name: 'Plantillas', href: '/templates', icon: FileText },
     { name: 'Etiquetas', href: '/tags', icon: Tag },
+    { name: 'Multimedia', href: '/media', icon: Image },
     { name: 'Integraciones', href: '/integrations', icon: Zap },
     { name: 'Configuración', href: '/config', icon: Settings },
   ];

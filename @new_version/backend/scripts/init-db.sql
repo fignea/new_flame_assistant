@@ -293,6 +293,31 @@ CREATE INDEX IF NOT EXISTS idx_messages_assistant_id ON messages(assistant_id);
 CREATE INDEX IF NOT EXISTS idx_messages_is_auto_response ON messages(is_auto_response);
 CREATE INDEX IF NOT EXISTS idx_messages_template_id ON messages(template_id);
 
+-- Crear tabla de archivos multimedia
+CREATE TABLE IF NOT EXISTS media_files (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    original_name VARCHAR(255) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_path TEXT NOT NULL,
+    file_type VARCHAR(100) NOT NULL,
+    file_size BIGINT NOT NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    duration INTEGER, -- Para videos/audio en segundos
+    thumbnail_path TEXT, -- Para videos/imágenes
+    is_compressed BOOLEAN DEFAULT FALSE,
+    compression_ratio DECIMAL(5,2), -- Ratio de compresión (0.0 - 1.0)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Crear índices para la tabla de archivos multimedia
+CREATE INDEX IF NOT EXISTS idx_media_files_user_id ON media_files(user_id);
+CREATE INDEX IF NOT EXISTS idx_media_files_file_type ON media_files(file_type);
+CREATE INDEX IF NOT EXISTS idx_media_files_created_at ON media_files(created_at);
+
 -- Triggers para actualizar updated_at automáticamente
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_whatsapp_sessions_updated_at BEFORE UPDATE ON whatsapp_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -305,6 +330,7 @@ CREATE TRIGGER update_response_templates_updated_at BEFORE UPDATE ON response_te
 CREATE TRIGGER update_tags_updated_at BEFORE UPDATE ON tags FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_contact_notes_updated_at BEFORE UPDATE ON contact_notes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_assistant_configs_updated_at BEFORE UPDATE ON assistant_configs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_media_files_updated_at BEFORE UPDATE ON media_files FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Insertar usuario de demostración por defecto
 -- Email: admin@flame.com
