@@ -615,6 +615,15 @@ export class ApiService {
     return this.get<Contact>(`/api/whatsapp/contacts/data/${encodeURIComponent(whatsappId)}`);
   }
 
+  async createContact(data: {
+    name: string;
+    phone_number?: string;
+    whatsapp_id?: string;
+    is_group?: boolean;
+  }) {
+    return this.post<Contact>('/api/whatsapp/contacts', data);
+  }
+
   // Métodos para programación
   async getScheduledMessages(params?: {
     page?: number;
