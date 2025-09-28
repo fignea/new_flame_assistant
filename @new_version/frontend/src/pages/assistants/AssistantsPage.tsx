@@ -284,32 +284,31 @@ export const AssistantsPage: React.FC = () => {
       <div className="max-w-7xl mx-auto p-6 space-y-8">
 
         {/* Assistants Grid */}
-        <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-sm border border-gray-200 dark:border-dark-border overflow-hidden">
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
-              <p className="text-gray-600 dark:text-gray-400 mt-4">Cargando asistentes...</p>
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
+            <p className="text-gray-600 dark:text-gray-400 mt-4">Cargando asistentes...</p>
+          </div>
+        ) : assistants.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="w-24 h-24 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-3xl flex items-center justify-center mx-auto mb-6">
+              <Bot className="w-12 h-12 text-purple-500" />
             </div>
-          ) : assistants.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-24 h-24 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                <Bot className="w-12 h-12 text-purple-500" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                No tienes asistentes creados
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Crea tu primer asistente para comenzar a automatizar tus conversaciones
-              </p>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200"
-              >
-                Crear Primer Asistente
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              No tienes asistentes creados
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Crea tu primer asistente para comenzar a automatizar tus conversaciones
+            </p>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-3 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200"
+            >
+              Crear Primer Asistente
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {assistants.map((assistant) => (
               <div
                 key={assistant.id}
@@ -411,9 +410,8 @@ export const AssistantsPage: React.FC = () => {
                 </div>
               </div>
             ))}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Create/Edit Modal */}
         {showCreateModal && (
