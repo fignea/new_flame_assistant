@@ -18,7 +18,11 @@ import {
   Key,
   Zap,
   MessageSquare,
-  Tag
+  Tag,
+  Search,
+  CheckCircle,
+  Users,
+  Activity
 } from 'lucide-react';
 import { apiService, Assistant as AssistantType } from '../../services/api.service';
 import { useNotificationHelpers } from '../../components/NotificationSystem';
@@ -44,6 +48,9 @@ export const AssistantsPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [assistantStats, setAssistantStats] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   // Cargar asistentes desde el backend
   const loadAssistants = async () => {
@@ -61,8 +68,24 @@ export const AssistantsPage: React.FC = () => {
     }
   };
 
+  // Cargar estadísticas de asistentes
+  const loadAssistantStats = async () => {
+    try {
+      setStatsLoading(true);
+      const response = await apiService.getAssistantsStats();
+      if (response.success && response.data) {
+        setAssistantStats(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading assistant stats:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadAssistants();
+    loadAssistantStats();
   }, []);
 
   const [formData, setFormData] = useState({
@@ -119,6 +142,7 @@ export const AssistantsPage: React.FC = () => {
         setShowCreateModal(false);
         resetForm();
         loadAssistants(); // Recargar la lista
+        loadAssistantStats(); // Recargar estadísticas
         showSuccess('Asistente creado', 'El asistente se ha creado exitosamente');
       } else {
         showError('Error al crear asistente', response.message || 'No se pudo crear el asistente');
@@ -174,6 +198,7 @@ export const AssistantsPage: React.FC = () => {
         setEditingAssistant(null);
         resetForm();
         loadAssistants(); // Recargar la lista
+        loadAssistantStats(); // Recargar estadísticas
         showSuccess('Asistente actualizado', 'El asistente se ha actualizado exitosamente');
       } else {
         showError('Error al actualizar asistente', response.message || 'No se pudo actualizar el asistente');
@@ -190,6 +215,7 @@ export const AssistantsPage: React.FC = () => {
       if (response.success) {
         setShowDeleteConfirm(null);
         loadAssistants(); // Recargar la lista
+        loadAssistantStats(); // Recargar estadísticas
         showSuccess('Asistente eliminado', 'El asistente se ha eliminado exitosamente');
       } else {
         showError('Error al eliminar asistente', 'No se pudo eliminar el asistente');
@@ -207,6 +233,7 @@ export const AssistantsPage: React.FC = () => {
       });
       if (response.success) {
         loadAssistants(); // Recargar la lista
+        loadAssistantStats(); // Recargar estadísticas
         showSuccess('Estado actualizado', 'El estado del asistente se ha actualizado exitosamente');
       } else {
         showError('Error al cambiar estado', 'No se pudo cambiar el estado del asistente');
@@ -241,6 +268,13 @@ export const AssistantsPage: React.FC = () => {
   const getStatusText = (isActive: boolean) => {
     return isActive ? 'Activo' : 'Inactivo';
   };
+
+  // Filtrar asistentes por búsqueda
+  const filteredAssistants = assistants.filter(assistant =>
+    assistant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    assistant.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    assistant.model.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card">
@@ -282,6 +316,74 @@ export const AssistantsPage: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto p-6 space-y-8">
+        {/* Stats Cards */}
+        {assistantStats && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-xl">
+                  <Bot className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Asistentes</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{assistantStats.total_assistants || 0}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-xl">
+                  <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Activos</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{assistantStats.active_assistants || 0}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-xl">
+                  <Activity className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Con Auto-asignación</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{assistantStats.auto_assign_assistants || 0}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
+              <div className="flex items-center">
+                <div className="p-3 bg-orange-100 dark:bg-orange-900/20 rounded-xl">
+                  <BarChart3 className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Modelos Únicos</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{assistantStats.unique_models || 0}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Search and Filters */}
+        <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Search */}
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Buscar asistentes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-dark-border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Assistants Grid */}
         {loading ? (
@@ -289,16 +391,16 @@ export const AssistantsPage: React.FC = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
             <p className="text-gray-600 dark:text-gray-400 mt-4">Cargando asistentes...</p>
           </div>
-        ) : assistants.length === 0 ? (
+        ) : filteredAssistants.length === 0 ? (
           <div className="text-center py-12">
             <div className="w-24 h-24 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-3xl flex items-center justify-center mx-auto mb-6">
               <Bot className="w-12 h-12 text-purple-500" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              No tienes asistentes creados
+              {searchQuery ? 'No se encontraron asistentes' : 'No tienes asistentes creados'}
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Crea tu primer asistente para comenzar a automatizar tus conversaciones
+              {searchQuery ? 'No hay asistentes que coincidan con tu búsqueda' : 'Crea tu primer asistente para comenzar a automatizar tus conversaciones'}
             </p>
             <button
               onClick={() => setShowCreateModal(true)}
@@ -309,7 +411,7 @@ export const AssistantsPage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {assistants.map((assistant) => (
+            {filteredAssistants.map((assistant) => (
               <div
                 key={assistant.id}
                 className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 hover:border-purple-300/50 dark:hover:border-purple-400/50 hover:shadow-lg transition-all duration-300"
