@@ -242,6 +242,78 @@ export class WhatsAppController {
     }
   }
 
+  public async createContact(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+    try {
+      const userId = req.user?.id;
+      const { name, phone_number, whatsapp_id, is_group = false } = req.body;
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!name) {
+        return res.status(400).json({
+          success: false,
+          message: 'El nombre es requerido'
+        });
+      }
+
+      if (!phone_number && !whatsapp_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Al menos uno de los identificadores (teléfono o WhatsApp ID) es requerido'
+        });
+      }
+
+      // Si no se proporciona whatsapp_id, usar phone_number
+      const finalWhatsappId = whatsapp_id || phone_number;
+      
+      // Verificar si el contacto ya existe
+      const existingContact = await database.get(
+        'SELECT id FROM contacts WHERE user_id = $1 AND whatsapp_id = $2',
+        [userId, finalWhatsappId]
+      );
+
+      if (existingContact) {
+        return res.status(409).json({
+          success: false,
+          message: 'Ya existe un contacto con este identificador'
+        });
+      }
+
+      // Crear el contacto
+      const result = await database.run(
+        `INSERT INTO contacts (user_id, whatsapp_id, name, phone_number, is_group, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id`,
+        [userId, finalWhatsappId, name, phone_number || null, is_group]
+      );
+
+      // Obtener el contacto creado
+      const newContactResult = await database.all(
+        'SELECT id, whatsapp_id, name, phone_number, is_group, avatar_url, created_at, updated_at FROM contacts WHERE id = $1',
+        [result.id]
+      );
+      const newContact = newContactResult[0] || null;
+
+      return res.status(201).json({
+        success: true,
+        data: newContact,
+        message: 'Contacto creado exitosamente'
+      });
+
+    } catch (error) {
+      console.error('Create contact error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al crear el contacto',
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    }
+  }
+
   public async getContactById(req: AuthenticatedRequest, res: Response<ApiResponse>) {
     try {
       const userId = req.user?.id;
