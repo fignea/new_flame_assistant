@@ -192,16 +192,16 @@ const DashboardPage: React.FC = () => {
   if (!stats) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card">
+      {/* Header */}
+      <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-dark-border/50 p-6">
+        <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
                 Dashboard
               </h1>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">
+              <p className="mt-1 text-gray-600 dark:text-gray-400">
                 Resumen general de tu sistema de mensajería
               </p>
             </div>
@@ -213,7 +213,7 @@ const DashboardPage: React.FC = () => {
               )}
               <button
                 onClick={loadStats}
-                className="bg-purple-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-purple-600 transition-colors flex items-center space-x-2"
+                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center space-x-2 shadow-lg hover:shadow-xl"
               >
                 <RefreshCw className="w-4 h-4" />
                 <span>Actualizar</span>
@@ -221,11 +221,14 @@ const DashboardPage: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto p-6 space-y-8">
 
         {/* Main Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Asistentes */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
             <div className="flex items-center">
               <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
                 <Bot className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -241,7 +244,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* Conversaciones */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
             <div className="flex items-center">
               <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
                 <MessageSquare className="w-6 h-6 text-green-600 dark:text-green-400" />
@@ -257,7 +260,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* Mensajes */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
             <div className="flex items-center">
               <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
                 <FileText className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -273,7 +276,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* Contactos */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
             <div className="flex items-center">
               <div className="p-2 bg-orange-100 dark:bg-orange-900/20 rounded-lg">
                 <Users className="w-6 h-6 text-orange-600 dark:text-orange-400" />
@@ -290,9 +293,9 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* Secondary Stats Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Plantillas */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Plantillas</h3>
               <FileText className="w-5 h-5 text-gray-400" />
@@ -314,7 +317,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* Etiquetas */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Etiquetas</h3>
               <Tag className="w-5 h-5 text-gray-400" />
@@ -338,7 +341,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* Asignaciones */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Asignaciones</h3>
               <CheckCircle className="w-5 h-5 text-gray-400" />
@@ -363,7 +366,7 @@ const DashboardPage: React.FC = () => {
         {/* Activity Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Actividad Reciente */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Actividad Reciente</h3>
               <TrendingUp className="w-5 h-5 text-gray-400" />
@@ -401,7 +404,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* Resumen Semanal */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-200/50 dark:border-dark-border/50 shadow-sm">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Resumen Semanal</h3>
               <Clock className="w-5 h-5 text-gray-400" />
