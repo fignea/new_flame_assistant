@@ -16,7 +16,7 @@ import {
   Copy,
   Clock
 } from 'lucide-react';
-import { useTemplates } from '../../hooks/useTemplates';
+import { useTemplates, useTemplateStats } from '../../hooks/useTemplates';
 import { ResponseTemplate, CreateTemplateRequest, UpdateTemplateRequest } from '../../services/api.service';
 
 const TemplatesPage: React.FC = () => {
@@ -26,15 +26,20 @@ const TemplatesPage: React.FC = () => {
     error,
     createTemplate,
     updateTemplate,
-    deleteTemplate,
-    getTemplateStats
+    deleteTemplate
   } = useTemplates();
+  
+  const {
+    stats: templateStats,
+    loading: statsLoading,
+    error: statsError,
+    refetch: refetchStats
+  } = useTemplateStats();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<ResponseTemplate | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
-  const [stats, setStats] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -55,20 +60,6 @@ const TemplatesPage: React.FC = () => {
     'General'
   ];
 
-  // Cargar estadísticas
-  useEffect(() => {
-    const loadStats = async () => {
-      try {
-        const statsData = await getTemplateStats();
-        if (statsData.success) {
-          setStats(statsData.data);
-        }
-      } catch (error) {
-        console.error('Error loading template stats:', error);
-      }
-    };
-    loadStats();
-  }, [getTemplateStats]);
 
   // Filtrar plantillas
   const filteredTemplates = templates.filter(template =>
@@ -104,6 +95,7 @@ const TemplatesPage: React.FC = () => {
       await createTemplate(templateData);
       setShowCreateModal(false);
       resetForm();
+      refetchStats();
     } catch (error) {
       console.error('Error creating template:', error);
     }
@@ -141,6 +133,7 @@ const TemplatesPage: React.FC = () => {
       setShowCreateModal(false);
       setEditingTemplate(null);
       resetForm();
+      refetchStats();
     } catch (error) {
       console.error('Error updating template:', error);
     }
@@ -150,6 +143,7 @@ const TemplatesPage: React.FC = () => {
     try {
       await deleteTemplate(templateId);
       setShowDeleteConfirm(null);
+      refetchStats();
     } catch (error) {
       console.error('Error deleting template:', error);
     }
@@ -226,7 +220,7 @@ const TemplatesPage: React.FC = () => {
 
       <div className="max-w-7xl mx-auto p-6 space-y-8">
         {/* Stats Cards */}
-        {stats && (
+        {templateStats && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
               <div className="flex items-center">
@@ -235,7 +229,7 @@ const TemplatesPage: React.FC = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Plantillas</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total_templates}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{templateStats.total_templates}</p>
                 </div>
               </div>
             </div>
@@ -246,7 +240,7 @@ const TemplatesPage: React.FC = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Activas</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.active_templates}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{templateStats.active_templates}</p>
                 </div>
               </div>
             </div>
@@ -257,7 +251,7 @@ const TemplatesPage: React.FC = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Categorías</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{Object.keys(stats.templates_by_category || {}).length}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{Object.keys(templateStats.templates_by_category || {}).length}</p>
                 </div>
               </div>
             </div>

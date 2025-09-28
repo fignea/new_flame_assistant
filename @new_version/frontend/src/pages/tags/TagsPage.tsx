@@ -15,7 +15,7 @@ import {
   AlertCircle,
   Filter
 } from 'lucide-react';
-import { useTags } from '../../hooks/useTags';
+import { useTags, useTagStats } from '../../hooks/useTags';
 import { Tag as TagType, CreateTagRequest, UpdateTagRequest } from '../../services/api.service';
 
 const TagsPage: React.FC = () => {
@@ -25,15 +25,20 @@ const TagsPage: React.FC = () => {
     error,
     createTag,
     updateTag,
-    deleteTag,
-    getTagStats
+    deleteTag
   } = useTags();
+  
+  const {
+    stats: tagStats,
+    loading: statsLoading,
+    error: statsError,
+    refetch: refetchStats
+  } = useTagStats();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTag, setEditingTag] = useState<TagType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
-  const [stats, setStats] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -55,20 +60,6 @@ const TagsPage: React.FC = () => {
     { value: '#6366F1', label: 'Índigo', class: 'bg-indigo-500' }
   ];
 
-  // Cargar estadísticas
-  useEffect(() => {
-    const loadStats = async () => {
-      try {
-        const statsData = await getTagStats();
-        if (statsData.success) {
-          setStats(statsData.data);
-        }
-      } catch (error) {
-        console.error('Error loading tag stats:', error);
-      }
-    };
-    loadStats();
-  }, [getTagStats]);
 
   // Filtrar etiquetas
   const filteredTags = tags.filter(tag =>
@@ -97,6 +88,7 @@ const TagsPage: React.FC = () => {
       await createTag(tagData);
       setShowCreateModal(false);
       resetForm();
+      refetchStats();
     } catch (error) {
       console.error('Error creating tag:', error);
     }
@@ -128,6 +120,7 @@ const TagsPage: React.FC = () => {
       setShowCreateModal(false);
       setEditingTag(null);
       resetForm();
+      refetchStats();
     } catch (error) {
       console.error('Error updating tag:', error);
     }
@@ -137,6 +130,7 @@ const TagsPage: React.FC = () => {
     try {
       await deleteTag(tagId);
       setShowDeleteConfirm(null);
+      refetchStats();
     } catch (error) {
       console.error('Error deleting tag:', error);
     }
@@ -195,7 +189,7 @@ const TagsPage: React.FC = () => {
 
       <div className="max-w-7xl mx-auto p-6 space-y-8">
         {/* Stats Cards */}
-        {stats && (
+        {tagStats && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/50 dark:border-dark-border/50 p-6">
               <div className="flex items-center">
@@ -204,7 +198,7 @@ const TagsPage: React.FC = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Etiquetas</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total_tags}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{tagStats.total_tags}</p>
                 </div>
               </div>
             </div>
@@ -215,7 +209,7 @@ const TagsPage: React.FC = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Activas</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.active_tags}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{tagStats.active_tags}</p>
                 </div>
               </div>
             </div>
@@ -226,7 +220,7 @@ const TagsPage: React.FC = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">En Contactos</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{Object.keys(stats.tags_by_contact || {}).length}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{Object.keys(tagStats.tags_by_contact || {}).length}</p>
                 </div>
               </div>
             </div>

@@ -33,7 +33,7 @@ export class TemplateService {
           template.name,
           template.content,
           template.category || 'general',
-          JSON.stringify(template.trigger_keywords || []),
+          `{${(template.trigger_keywords || []).map(k => `"${k}"`).join(',')}}`,
           template.is_active !== undefined ? template.is_active : true,
           template.priority || 0,
           template.response_delay || 0
@@ -49,7 +49,7 @@ export class TemplateService {
 
       return {
         ...result,
-        trigger_keywords: result.trigger_keywords ? JSON.parse(result.trigger_keywords) : []
+        trigger_keywords: result.trigger_keywords || []
       };
     } catch (error) {
       console.error('Error creando plantilla:', error);
@@ -90,7 +90,7 @@ export class TemplateService {
       // Parsear trigger_keywords de JSON
       return templates.map(template => ({
         ...template,
-        trigger_keywords: template.trigger_keywords ? JSON.parse(template.trigger_keywords) : []
+        trigger_keywords: template.trigger_keywords || []
       }));
     } catch (error) {
       console.error('Error obteniendo plantillas del usuario:', error);
@@ -114,7 +114,7 @@ export class TemplateService {
 
       return {
         ...template,
-        trigger_keywords: template.trigger_keywords ? JSON.parse(template.trigger_keywords) : []
+        trigger_keywords: template.trigger_keywords || []
       };
     } catch (error) {
       console.error('Error obteniendo plantilla por ID:', error);
@@ -163,7 +163,7 @@ export class TemplateService {
 
       if (updates.trigger_keywords !== undefined) {
         fields.push(`trigger_keywords = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.trigger_keywords));
+        values.push(`{${updates.trigger_keywords.map(k => `"${k}"`).join(',')}}`);
       }
 
       if (updates.is_active !== undefined) {
@@ -211,7 +211,7 @@ export class TemplateService {
 
       return {
         ...result,
-        trigger_keywords: result.trigger_keywords ? JSON.parse(result.trigger_keywords) : []
+        trigger_keywords: result.trigger_keywords || []
       };
     } catch (error) {
       console.error('Error actualizando plantilla:', error);
@@ -274,7 +274,7 @@ export class TemplateService {
 
       return templates.map(template => ({
         ...template,
-        trigger_keywords: template.trigger_keywords ? JSON.parse(template.trigger_keywords) : []
+        trigger_keywords: template.trigger_keywords || []
       }));
     } catch (error) {
       console.error('Error buscando plantillas por palabras clave:', error);
@@ -311,7 +311,7 @@ export class TemplateService {
 
       return templates.map(template => ({
         ...template,
-        trigger_keywords: template.trigger_keywords ? JSON.parse(template.trigger_keywords) : []
+        trigger_keywords: template.trigger_keywords || []
       }));
     } catch (error) {
       console.error('Error obteniendo plantillas por categoría:', error);

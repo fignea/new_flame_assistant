@@ -144,7 +144,7 @@ export const assignmentValidation = validateRequest([
 export const templateValidation = validateRequest([
   { field: 'name', required: true, type: 'string', minLength: 1, maxLength: 255 },
   { field: 'content', required: true, type: 'string', minLength: 1 },
-  { field: 'assistant_id', required: true, type: 'number', min: 1 },
+  { field: 'assistant_id', type: 'number', min: 1 },
   { field: 'category', type: 'string' },
   { field: 'priority', type: 'number', min: 0, max: 100 },
   { field: 'response_delay', type: 'number', min: 0 },

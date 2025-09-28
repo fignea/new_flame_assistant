@@ -12,11 +12,17 @@ export class TemplateController {
       const userId = req.user!.id;
       const templateData = req.body;
 
+
       if (!templateData.name || !templateData.content) {
         return res.status(400).json({
           success: false,
           error: 'Faltan campos requeridos: name, content'
         });
+      }
+
+      // Si no se proporciona assistant_id, usar null para templates generales
+      if (!templateData.assistant_id) {
+        templateData.assistant_id = null;
       }
 
       const template = await TemplateService.createTemplate(templateData, userId);
