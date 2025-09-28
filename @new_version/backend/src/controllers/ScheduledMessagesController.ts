@@ -111,7 +111,7 @@ export class ScheduledMessagesController {
       params.push(limit, offset);
 
       const [messages, totalResult] = await Promise.all([
-        database.query(query, params),
+        database.all(query, params),
         database.get(countQuery, status ? [userId, status] : [userId])
       ]);
 
