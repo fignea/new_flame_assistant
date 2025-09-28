@@ -45,7 +45,7 @@ class WhatsAppManagerServer {
   private userSockets: Map<number, string> = new Map(); // userId -> socketId
 
   constructor() {
-    console.log('🔧 Initializing WhatsApp Manager Server...');
+    console.log('🔧 Initializing Flame AIServer...');
     this.app = express();
     this.server = createServer(this.app);
     this.io = new SocketIOServer(this.server, {
@@ -212,7 +212,7 @@ class WhatsAppManagerServer {
     // Root endpoint
     this.app.get('/', (req, res) => {
       res.json({
-        message: '🔥 WhatsApp Manager API',
+        message: '🔥 Flame AIAPI',
         version: '1.0.0',
         status: 'running',
         timestamp: new Date().toISOString(),
@@ -419,7 +419,7 @@ class WhatsAppManagerServer {
 
       this.server.listen(port, host, () => {
         console.log(`
-🚀 WhatsApp Manager Server Started
+🚀 Flame AIServer Started
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📍 Server: http://${host}:${port}
 🏥 Health: http://${host}:${port}/health  

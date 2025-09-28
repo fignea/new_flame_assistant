@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 async function testWhatsAppManager() {
-  console.log('🧪 Probando WhatsApp Manager MVP...\n');
+  console.log('🧪 Probando Flame AIMVP...\n');
 
   try {
     // Test 1: Health check

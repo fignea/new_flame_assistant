@@ -461,10 +461,9 @@ export class TagService {
         `SELECT 
            t.id as tag_id,
            t.name as tag_name,
-           (COUNT(ct.id) + COUNT(contact_ct.id)) as count
+           COUNT(ct.tag_id) as count
          FROM tags t
          LEFT JOIN conversation_tags ct ON t.id = ct.tag_id
-         LEFT JOIN contact_tags contact_ct ON t.id = contact_ct.tag_id
          WHERE t.user_id = $1 AND t.is_active = true
          GROUP BY t.id, t.name
          ORDER BY count DESC

@@ -1,4 +1,4 @@
-# 🔥 WhatsApp Manager - MVP Completo
+# 🔥 Flame AI- MVP Completo
 
 Una plataforma completa para gestionar mensajes de WhatsApp Web, programar envíos automáticos y administrar contactos de forma profesional.
 

@@ -566,6 +566,42 @@ export class AssistantsController {
       });
     }
   }
+
+  public async getAllStats(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+    try {
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      // Obtener estadísticas generales de asistentes
+      const stats = await database.get(
+        `SELECT 
+           COUNT(*) as total,
+           COUNT(CASE WHEN is_active = true THEN 1 END) as active,
+           COUNT(CASE WHEN is_active = false THEN 1 END) as inactive,
+           COUNT(CASE WHEN auto_assign = true THEN 1 END) as auto_assign_enabled
+         FROM assistants 
+         WHERE user_id = $1`,
+        [userId]
+      );
+
+      return res.json({
+        success: true,
+        data: stats
+      });
+    } catch (error) {
+      console.error('Error getting assistants stats:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
 }
 
 export const assistantsController = new AssistantsController();

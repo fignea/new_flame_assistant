@@ -105,7 +105,9 @@ CREATE TABLE IF NOT EXISTS tags (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
+    description TEXT,
     color VARCHAR(7) DEFAULT '#3B82F6', -- Color en hex
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -246,6 +248,22 @@ INSERT INTO assistant_configs (assistant_id, config_key, config_value) VALUES
     ((SELECT id FROM assistants WHERE name = 'Asistente General'), 'auto_assign_keywords', '["consulta", "pregunta", "ayuda", "información"]'),
     ((SELECT id FROM assistants WHERE name = 'Asistente General'), 'working_hours', '{"start": "09:00", "end": "18:00", "timezone": "America/Mexico_City"}')
 ON CONFLICT (assistant_id, config_key) DO NOTHING;
+
+-- ========================================
+-- MIGRACIÓN DE CAMPOS FALTANTES
+-- ========================================
+
+-- Agregar campos faltantes a la tabla tags si no existen
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tags' AND column_name = 'description') THEN
+        ALTER TABLE tags ADD COLUMN description TEXT;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tags' AND column_name = 'is_active') THEN
+        ALTER TABLE tags ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
+    END IF;
+END $$;
 
 -- ========================================
 -- COMENTARIOS FINALES

@@ -163,7 +163,7 @@ else
 fi
 
 echo ""
-echo "🎉 WhatsApp Manager iniciado exitosamente!"
+echo "🎉 Flame AI iniciado exitosamente!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "📍 Accede a la aplicación:"

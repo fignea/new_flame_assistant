@@ -171,13 +171,14 @@ export class AssignmentService {
    */
   static async getAssignmentStats(userId: number): Promise<AssignmentStats> {
     try {
+      // Obtener estadísticas básicas de asignaciones
       const stats = await database.get(
         `SELECT 
            COUNT(*) as total_assignments,
-           COUNT(CASE WHEN is_active = true THEN 1 END) as active_assignments,
-           COUNT(CASE WHEN platform = 'whatsapp' THEN 1 END) as whatsapp_assignments,
-           COUNT(CASE WHEN platform = 'web' THEN 1 END) as web_assignments,
-           COUNT(CASE WHEN assigned_at >= CURRENT_DATE THEN 1 END) as today_assignments
+           COUNT(CASE WHEN aa.is_active = true THEN 1 END) as active_assignments,
+           COUNT(CASE WHEN aa.platform = 'whatsapp' THEN 1 END) as whatsapp_assignments,
+           COUNT(CASE WHEN aa.platform = 'web' THEN 1 END) as web_assignments,
+           COUNT(CASE WHEN aa.assigned_at >= CURRENT_DATE THEN 1 END) as today_assignments
          FROM assistant_assignments aa
          JOIN assistants a ON aa.assistant_id = a.id
          WHERE a.user_id = $1`,
@@ -185,15 +186,22 @@ export class AssignmentService {
       );
 
       return {
-        total_assignments: stats.total_assignments || 0,
-        active_assignments: stats.active_assignments || 0,
-        whatsapp_assignments: stats.whatsapp_assignments || 0,
-        web_assignments: stats.web_assignments || 0,
-        today_assignments: stats.today_assignments || 0
+        total_assignments: parseInt(stats?.total_assignments) || 0,
+        active_assignments: parseInt(stats?.active_assignments) || 0,
+        whatsapp_assignments: parseInt(stats?.whatsapp_assignments) || 0,
+        web_assignments: parseInt(stats?.web_assignments) || 0,
+        today_assignments: parseInt(stats?.today_assignments) || 0
       };
     } catch (error) {
       console.error('Error obteniendo estadísticas de asignaciones:', error);
-      throw error;
+      // Retornar estadísticas por defecto en caso de error
+      return {
+        total_assignments: 0,
+        active_assignments: 0,
+        whatsapp_assignments: 0,
+        web_assignments: 0,
+        today_assignments: 0
+      };
     }
   }
 

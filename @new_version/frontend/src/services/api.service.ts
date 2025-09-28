@@ -433,6 +433,14 @@ export class ApiService {
     return this.get(apiConfig.endpoints.assistants.stats(id));
   }
 
+  async getAssistantsStats() {
+    return this.get('/api/assistants/stats');
+  }
+
+  async getAssignmentsStats() {
+    return this.get('/api/assignments/stats');
+  }
+
   async getSchedules(assistantId: string) {
     return this.get(apiConfig.endpoints.assistants.schedules(assistantId));
   }
@@ -813,6 +821,10 @@ export class ApiService {
     return this.get<TemplateStats>('/api/templates/stats');
   }
 
+  async getTemplatesStats() {
+    return this.get<TemplateStats>('/api/templates/stats');
+  }
+
   // Métodos para Etiquetas
   async createTag(data: {
     name: string;
@@ -881,6 +893,10 @@ export class ApiService {
   }
 
   async getTagStats() {
+    return this.get<TagStats>('/api/tags/stats');
+  }
+
+  async getTagsStats() {
     return this.get<TagStats>('/api/tags/stats');
   }
 

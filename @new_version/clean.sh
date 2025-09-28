@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🗑️  Limpiando WhatsApp Manager completamente..."
+echo "🗑️  Limpiando Flame AIcompletamente..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Verificar que Docker esté instalado
