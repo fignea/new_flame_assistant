@@ -1101,14 +1101,14 @@ export const InboxPage: React.FC = () => {
   // Combinar conversaciones normales con chats de WhatsApp y conversaciones web
   console.log('Conversaciones web disponibles:', webConversations);
   const allConversations = [
-    ...conversations.map(conv => ({
+    ...(Array.isArray(conversations) ? conversations.map(conv => ({
       ...conv,
       isWhatsApp: false,
       isWeb: false,
       whatsappChat: null,
       webConversation: null
-    })),
-    ...whatsappChats.map(chat => ({
+    })) : []),
+    ...(Array.isArray(whatsappChats) ? whatsappChats.map(chat => ({
       id: `whatsapp_${chat.id}`,
       contactName: chat.name,
       contactPhone: chat.id.includes('@g.us') ? 'Grupo' : chat.id.split('@')[0],
@@ -1166,8 +1166,8 @@ export const InboxPage: React.FC = () => {
       isWeb: false,
       whatsappChat: chat,
       webConversation: null
-    })),
-    ...webConversations.map(conv => ({
+    })) : []),
+    ...(Array.isArray(webConversations) ? webConversations.map(conv => ({
       id: conv.public_id,
       contactName: conv.visitor?.name || conv.title || 'Visitante Web',
       contactPhone: conv.visitor?.phone || 'N/A',
@@ -1187,7 +1187,7 @@ export const InboxPage: React.FC = () => {
       isWeb: true,
       whatsappChat: null,
       webConversation: conv
-    }))
+    })) : [])
   ];
 
   const filteredConversations = allConversations.filter(conversation => {
@@ -1452,7 +1452,7 @@ export const InboxPage: React.FC = () => {
                   className="px-3 py-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 >
                   <option value="all">Todas las etiquetas</option>
-                  {availableTags.map(tag => (
+                  {Array.isArray(availableTags) && availableTags.map(tag => (
                     <option key={tag.id} value={tag.name}>
                       {tag.name}
                     </option>
@@ -1469,7 +1469,7 @@ export const InboxPage: React.FC = () => {
                 >
                   <option value="all">Todos los asistentes</option>
                   <option value="unassigned">Sin asignar</option>
-                  {availableAssistants.map(assistant => (
+                  {Array.isArray(availableAssistants) && availableAssistants.map(assistant => (
                     <option key={assistant.id} value={assistant.name}>
                       {assistant.name}
                     </option>
@@ -1542,7 +1542,7 @@ export const InboxPage: React.FC = () => {
               </div>
             ) : (
               <div className="p-2">
-                {filteredConversations.map((conversation) => {
+                {Array.isArray(filteredConversations) && filteredConversations.map((conversation) => {
                   const PlatformIcon = getPlatformIcon(conversation.platform);
                   return (
                     <div
@@ -1599,7 +1599,7 @@ export const InboxPage: React.FC = () => {
                             {/* Etiquetas */}
                             {conversation.tags && conversation.tags.length > 0 && (
                               <div className="flex flex-wrap gap-1">
-                                {conversation.tags.slice(0, 3).map((tag, index) => (
+                                {Array.isArray(conversation.tags) && conversation.tags.slice(0, 3).map((tag, index) => (
                                   <span
                                     key={index}
                                     className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
@@ -1678,7 +1678,7 @@ export const InboxPage: React.FC = () => {
                       <p className="text-gray-500">No hay mensajes en este chat</p>
                     </div>
                   ) : (
-                    whatsappMessages.map((message) => (
+                    Array.isArray(whatsappMessages) && whatsappMessages.map((message) => (
                       <div
                         key={message.id}
                         className={`flex ${message.fromMe ? 'justify-end' : 'justify-start'}`}
@@ -1735,7 +1735,7 @@ export const InboxPage: React.FC = () => {
                       <p className="text-gray-500">No hay mensajes en esta conversación</p>
                     </div>
                   ) : (
-                    webMessages.map((message, index) => {
+                    Array.isArray(webMessages) && webMessages.map((message, index) => {
                       console.log(`Renderizando mensaje ${index + 1}/${webMessages.length}:`, message);
                       return (
                         <div
@@ -1770,7 +1770,7 @@ export const InboxPage: React.FC = () => {
                   )
                 ) : (
                   // Mostrar mensajes normales
-                  selectedConv.messages.map((message) => (
+                  Array.isArray(selectedConv.messages) && selectedConv.messages.map((message) => (
                     <div
                       key={message.id}
                       className={`flex ${message.sender === 'user' ? 'justify-start' : 'justify-end'}`}

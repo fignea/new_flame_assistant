@@ -901,6 +901,10 @@ export class ApiService {
     return this.get<Contact[]>(`/api/tags/${tagId}/contacts`);
   }
 
+  async getTags() {
+    return this.get<Tag[]>('/api/tags');
+  }
+
   async getTagStats() {
     return this.get<TagStats>('/api/tags/stats');
   }

@@ -72,7 +72,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
       } md:translate-x-0`}>
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200/50 dark:border-dark-border/50">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200/50 dark:border-dark-border/50 flex-shrink-0">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
                 <Flame className="w-6 h-6 text-white" />
@@ -89,8 +89,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
             </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2">
+          {/* Navigation - Scrollable */}
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.href;
@@ -111,8 +111,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
             })}
           </nav>
 
-          {/* User info and actions */}
-          <div className="p-4 border-t border-gray-200/50 dark:border-dark-border/50 space-y-3">
+          {/* User info and actions - Fixed at bottom */}
+          <div className="p-4 border-t border-gray-200/50 dark:border-dark-border/50 space-y-3 flex-shrink-0">
             {/* User info */}
             {user && (
               <div className="flex items-center space-x-3 px-4 py-3 rounded-2xl bg-white/50 dark:bg-dark-surface/50 backdrop-blur-sm border border-gray-200/50 dark:border-dark-border/50">
