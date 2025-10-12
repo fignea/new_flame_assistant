@@ -29,6 +29,7 @@ import templatesRoutes from './routes/templates';
 import tagsRoutes from './routes/tags';
 import autoResponseRoutes from './routes/auto-response';
 import mediaRoutes from './routes/media';
+import dashboardRoutes from './routes/dashboard';
 
 // Importar servicios
 import { whatsappService } from './services/WhatsAppService';
@@ -210,6 +211,7 @@ class WhatsAppManagerServer {
     this.app.use('/api/tags', tagsRoutes);
     this.app.use('/api/auto-response', autoResponseRoutes);
     this.app.use('/api/media', mediaRoutes);
+    this.app.use('/api/dashboard', dashboardRoutes);
 
     // Root endpoint
     this.app.get('/', (req, res) => {

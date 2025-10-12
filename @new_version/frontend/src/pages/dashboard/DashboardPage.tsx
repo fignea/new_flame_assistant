@@ -72,70 +72,15 @@ const DashboardPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Cargar estadísticas de todos los módulos
-      const [
-        assistantsStats,
-        templatesStats,
-        tagsStats,
-        assignmentsStats
-      ] = await Promise.all([
-        apiService.getAssistantsStats(),
-        apiService.getTemplatesStats(),
-        apiService.getTagsStats(),
-        apiService.getAssignmentsStats()
-      ]);
-
-      // Simular estadísticas de conversaciones y mensajes (en un proyecto real vendrían del backend)
-      const mockConversationStats = {
-        total: 1247,
-        today: 23,
-        thisWeek: 156,
-        thisMonth: 634
-      };
-
-      const mockMessageStats = {
-        total: 8934,
-        today: 187,
-        thisWeek: 1243,
-        thisMonth: 5234
-      };
-
-      const mockContactStats = {
-        total: 892,
-        newToday: 12,
-        newThisWeek: 78,
-        newThisMonth: 234
-      };
-
-      const dashboardStats: DashboardStats = {
-        assistants: {
-          total: assistantsStats.total || 0,
-          active: assistantsStats.active || 0,
-          inactive: (assistantsStats.total || 0) - (assistantsStats.active || 0)
-        },
-        conversations: mockConversationStats,
-        messages: mockMessageStats,
-        contacts: mockContactStats,
-        templates: {
-          total: templatesStats.total || 0,
-          active: templatesStats.active || 0,
-          categories: templatesStats.categories || 0
-        },
-        tags: {
-          total: tagsStats.total || 0,
-          active: tagsStats.active || 0,
-          conversations: tagsStats.conversations || 0,
-          contacts: tagsStats.contacts || 0
-        },
-        assignments: {
-          total: assignmentsStats.total || 0,
-          autoAssigned: assignmentsStats.autoAssigned || 0,
-          manualAssigned: (assignmentsStats.total || 0) - (assignmentsStats.autoAssigned || 0)
-        }
-      };
-
-      setStats(dashboardStats);
-      setLastUpdated(new Date());
+      // Cargar estadísticas del dashboard desde el backend
+      const response = await apiService.getDashboardStats();
+      
+      if (response.success && response.data) {
+        setStats(response.data);
+        setLastUpdated(new Date());
+      } else {
+        throw new Error(response.message || 'Error al cargar las estadísticas');
+      }
     } catch (err) {
       console.error('Error loading dashboard stats:', err);
       setError('Error al cargar las estadísticas');

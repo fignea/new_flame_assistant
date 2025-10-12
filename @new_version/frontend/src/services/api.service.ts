@@ -464,6 +464,10 @@ export class ApiService {
     return this.get('/api/assignments/stats');
   }
 
+  async getDashboardStats() {
+    return this.get('/api/dashboard/stats');
+  }
+
   async getSchedules(assistantId: string) {
     return this.get(apiConfig.endpoints.assistants.schedules(assistantId));
   }
