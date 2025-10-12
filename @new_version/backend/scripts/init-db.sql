@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS messages (
     whatsapp_message_id VARCHAR(255) NOT NULL,
     contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
     chat_id VARCHAR(255) NOT NULL,
+    chat_hash VARCHAR(255), -- Hash único para identificar conversaciones
     content TEXT NOT NULL,
     message_type VARCHAR(50) DEFAULT 'text',
     is_from_me BOOLEAN DEFAULT FALSE,
@@ -93,10 +94,14 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS scheduled_messages (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
     chat_id VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
+    message_type VARCHAR(50) DEFAULT 'text',
     scheduled_time TIMESTAMP NOT NULL,
     status VARCHAR(50) DEFAULT 'pending',
+    sent_at TIMESTAMP,
+    error_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -251,8 +256,10 @@ CREATE INDEX IF NOT EXISTS idx_contacts_user_id ON contacts(user_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_whatsapp_id ON contacts(whatsapp_id);
 CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);
+CREATE INDEX IF NOT EXISTS idx_messages_chat_hash ON messages(chat_hash);
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX IF NOT EXISTS idx_scheduled_messages_user_id ON scheduled_messages(user_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_messages_contact_id ON scheduled_messages(contact_id);
 CREATE INDEX IF NOT EXISTS idx_scheduled_messages_scheduled_time ON scheduled_messages(scheduled_time);
 CREATE INDEX IF NOT EXISTS idx_scheduled_messages_status ON scheduled_messages(status);
 
