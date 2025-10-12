@@ -1,6 +1,31 @@
 // Configuración de la API
-const API_BASE_URL = 'http://localhost:3001';
-const WS_BASE_URL = 'http://localhost:3001';
+// Detectar si estamos en producción o desarrollo
+const isProduction = process.env.NODE_ENV === 'production';
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+// Función para obtener la URL base del API
+const getApiBaseUrl = () => {
+  // Si hay una variable de entorno definida, usarla
+  if (process.env.VITE_API_URL) {
+    return process.env.VITE_API_URL;
+  }
+  
+  // En producción, usar rutas relativas (Nginx proxy maneja la redirección)
+  if (isProduction) {
+    return ''; // Usar rutas relativas, Nginx redirige /api/ al backend
+  }
+  
+  // En desarrollo, usar localhost
+  return 'http://localhost:3001';
+};
+
+// URLs base según el entorno
+const API_BASE_URL = getApiBaseUrl();
+
+// WebSocket URL - en producción usar el mismo dominio, en desarrollo localhost
+const WS_BASE_URL = isProduction 
+  ? window.location.origin  // En producción, usar el mismo dominio
+  : 'http://localhost:3001'; // En desarrollo, usar localhost
 
 export const apiConfig = {
   baseURL: API_BASE_URL,

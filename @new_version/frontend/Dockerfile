@@ -12,6 +12,10 @@ RUN npm ci
 # Copiar código fuente
 COPY . .
 
+# Configurar variables de entorno para producción
+ENV NODE_ENV=production
+ENV VITE_API_URL=""
+
 # Compilar aplicación
 RUN npm run build
 

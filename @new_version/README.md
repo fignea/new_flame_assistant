@@ -286,6 +286,460 @@ docker cp whatsapp-manager-backend:/app/data ./backup-data
 docker cp whatsapp-manager-backend:/app/sessions ./backup-sessions
 ```
 
+## 🚀 Despliegue en Producción - AWS Linux
+
+### Requisitos Previos
+
+- **EC2 Instance**: Ubuntu 20.04+ o Amazon Linux 2
+- **RAM Mínima**: 2GB (recomendado 4GB+)
+- **Almacenamiento**: 20GB+ (SSD recomendado)
+- **Puertos**: 80, 443, 3001 (configurar Security Groups)
+
+### 1. Preparación del Servidor
+
+```bash
+# Actualizar sistema
+sudo yum update -y  # Amazon Linux
+# sudo apt update && sudo apt upgrade -y  # Ubuntu
+
+# Instalar Docker
+sudo yum install -y docker  # Amazon Linux
+# sudo apt install -y docker.io  # Ubuntu
+
+# Iniciar Docker
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Agregar usuario al grupo docker
+sudo usermod -a -G docker ec2-user
+# sudo usermod -a -G docker ubuntu  # Ubuntu
+
+# Instalar Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# Reiniciar sesión para aplicar cambios
+exit
+```
+
+### 2. Configuración de Seguridad
+
+```bash
+# Configurar firewall
+sudo firewall-cmd --permanent --add-port=80/tcp
+sudo firewall-cmd --permanent --add-port=443/tcp
+sudo firewall-cmd --permanent --add-port=3001/tcp
+sudo firewall-cmd --reload
+
+# O para Ubuntu con ufw:
+# sudo ufw allow 80
+# sudo ufw allow 443
+# sudo ufw allow 3001
+# sudo ufw enable
+```
+
+### 3. Configuración de Variables de Entorno
+
+```bash
+# Crear archivo .env para producción
+cat > .env << EOF
+# Servidor
+NODE_ENV=production
+PORT=3001
+
+# JWT (CAMBIAR EN PRODUCCIÓN)
+JWT_SECRET=tu-clave-super-secreta-de-produccion-2024
+JWT_EXPIRES_IN=7d
+
+# CORS (IMPORTANTE: Usar tu dominio real)
+CORS_ORIGIN=http://tu-dominio.com,https://tu-dominio.com
+
+# Base de datos
+DB_HOST=postgres
+DB_PORT=5432
+DB_NAME=whatsapp_manager
+DB_USER=whatsapp_user
+DB_PASSWORD=tu-password-seguro-de-produccion
+
+# Redis
+REDIS_URL=redis://redis:6379
+REDIS_DB=0
+
+# WhatsApp
+WHATSAPP_SESSION_PATH=/app/sessions
+WHATSAPP_QR_TIMEOUT=120000
+WHATSAPP_CONNECT_TIMEOUT=60000
+
+# Logging
+LOG_LEVEL=info
+EOF
+```
+
+### 4. Configuración de Docker Compose para Producción
+
+```yaml
+# docker-compose.prod.yml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: whatsapp-manager-postgres
+    environment:
+      POSTGRES_DB: whatsapp_manager
+      POSTGRES_USER: whatsapp_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whatsapp_user -d whatsapp_manager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: whatsapp-manager-redis
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: whatsapp-manager-backend
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    volumes:
+      - backend_sessions:/app/sessions
+      - backend_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: whatsapp-manager-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # Nginx Reverse Proxy (Opcional pero recomendado)
+  nginx:
+    image: nginx:alpine
+    container_name: whatsapp-manager-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl  # Para certificados SSL
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_sessions:
+    driver: local
+  backend_logs:
+    driver: local
+
+networks:
+  whatsapp-manager-network:
+    driver: bridge
+```
+
+### 5. Configuración de Nginx (Opcional)
+
+```nginx
+# nginx.conf
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream backend {
+        server backend:3001;
+    }
+
+    upstream frontend {
+        server frontend:80;
+    }
+
+    server {
+        listen 80;
+        server_name tu-dominio.com;
+
+        # Redirigir HTTP a HTTPS
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name tu-dominio.com;
+
+        # Configuración SSL
+        ssl_certificate /etc/nginx/ssl/cert.pem;
+        ssl_certificate_key /etc/nginx/ssl/key.pem;
+
+        # API Backend
+        location /api/ {
+            proxy_pass http://backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Frontend
+        location / {
+            proxy_pass http://frontend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+```
+
+### 6. Despliegue y Monitoreo
+
+```bash
+# Clonar repositorio
+git clone tu-repositorio.git
+cd tu-repositorio
+
+# Configurar variables de entorno
+cp .env.example .env
+nano .env  # Editar con valores de producción
+
+# Iniciar servicios
+docker-compose -f docker-compose.prod.yml up -d
+
+# Verificar estado
+docker-compose -f docker-compose.prod.yml ps
+docker-compose -f docker-compose.prod.yml logs -f
+
+# Monitoreo continuo
+watch -n 5 'docker-compose -f docker-compose.prod.yml ps'
+```
+
+### 7. Scripts de Automatización
+
+```bash
+# deploy.sh
+#!/bin/bash
+set -e
+
+echo "🚀 Iniciando despliegue en producción..."
+
+# Backup de datos existentes
+if [ -d "backup" ]; then
+    echo "📦 Creando backup..."
+    docker-compose -f docker-compose.prod.yml exec postgres pg_dump -U whatsapp_user whatsapp_manager > backup/db_$(date +%Y%m%d_%H%M%S).sql
+fi
+
+# Actualizar código
+echo "📥 Actualizando código..."
+git pull origin main
+
+# Reconstruir y reiniciar
+echo "🔨 Reconstruyendo servicios..."
+docker-compose -f docker-compose.prod.yml down
+docker-compose -f docker-compose.prod.yml up --build -d
+
+# Verificar salud
+echo "🏥 Verificando salud de servicios..."
+sleep 30
+docker-compose -f docker-compose.prod.yml ps
+
+echo "✅ Despliegue completado!"
+```
+
+### 8. Consideraciones de Seguridad
+
+#### Variables de Entorno Críticas
+```bash
+# NUNCA usar valores por defecto en producción
+JWT_SECRET=clave-super-secreta-unica-para-produccion-2024
+DB_PASSWORD=password-super-seguro-para-produccion
+CORS_ORIGIN=https://tu-dominio.com,https://www.tu-dominio.com
+```
+
+#### Configuración de Firewall
+```bash
+# Solo abrir puertos necesarios
+sudo firewall-cmd --permanent --add-port=80/tcp
+sudo firewall-cmd --permanent --add-port=443/tcp
+sudo firewall-cmd --permanent --add-port=22/tcp  # SSH
+sudo firewall-cmd --reload
+```
+
+#### Backup Automático
+```bash
+# backup.sh
+#!/bin/bash
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/home/ec2-user/backups"
+
+mkdir -p $BACKUP_DIR
+
+# Backup de base de datos
+docker-compose -f docker-compose.prod.yml exec -T postgres pg_dump -U whatsapp_user whatsapp_manager > $BACKUP_DIR/db_$DATE.sql
+
+# Backup de sesiones WhatsApp
+docker cp whatsapp-manager-backend:/app/sessions $BACKUP_DIR/sessions_$DATE
+
+# Limpiar backups antiguos (mantener últimos 7 días)
+find $BACKUP_DIR -name "db_*.sql" -mtime +7 -delete
+find $BACKUP_DIR -name "sessions_*" -mtime +7 -exec rm -rf {} \;
+
+echo "Backup completado: $DATE"
+```
+
+### 9. Monitoreo y Logs
+
+```bash
+# Ver logs en tiempo real
+docker-compose -f docker-compose.prod.yml logs -f
+
+# Ver logs específicos
+docker-compose -f docker-compose.prod.yml logs -f backend
+docker-compose -f docker-compose.prod.yml logs -f postgres
+
+# Monitoreo de recursos
+docker stats
+
+# Verificar salud de servicios
+curl -f http://localhost:3001/health
+curl -f http://localhost/
+```
+
+### 10. Troubleshooting Común en Producción
+
+#### Error de CORS
+```bash
+# Verificar configuración CORS
+docker exec whatsapp-manager-backend env | grep CORS
+# Debe mostrar: CORS_ORIGIN=https://tu-dominio.com
+```
+
+#### Base de Datos No Inicializa
+```bash
+# Limpiar y recrear
+docker-compose -f docker-compose.prod.yml down
+docker volume rm new_version_postgres_data
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+#### WhatsApp No Se Conecta
+```bash
+# Verificar logs de WhatsApp
+docker-compose -f docker-compose.prod.yml logs backend | grep -i whatsapp
+
+# Limpiar sesiones si es necesario
+docker exec whatsapp-manager-backend rm -rf /app/sessions/*
+```
+
+### 11. Optimizaciones de Rendimiento
+
+```bash
+# Configurar límites de memoria
+docker-compose -f docker-compose.prod.yml exec redis redis-cli CONFIG SET maxmemory 256mb
+docker-compose -f docker-compose.prod.yml exec redis redis-cli CONFIG SET maxmemory-policy allkeys-lru
+
+# Monitorear uso de recursos
+docker stats --no-stream
+```
+
+### 12. Actualizaciones Automáticas (Opcional)
+
+```bash
+# crontab -e
+# Actualizar cada día a las 2 AM
+0 2 * * * cd /home/ec2-user/tu-proyecto && ./deploy.sh >> /var/log/deploy.log 2>&1
+
+# Backup diario a las 3 AM
+0 3 * * * cd /home/ec2-user/tu-proyecto && ./backup.sh >> /var/log/backup.log 2>&1
+```
+
+### ⚠️ Consideraciones Importantes
+
+1. **Dominio y SSL**: Configura un dominio real y certificados SSL
+2. **Backup Regular**: Implementa backups automáticos de la base de datos
+3. **Monitoreo**: Configura alertas para caídas de servicio
+4. **Seguridad**: Cambia todas las contraseñas por defecto
+5. **Recursos**: Monitorea el uso de CPU y memoria
+6. **Logs**: Implementa rotación de logs para evitar llenar el disco
+7. **Actualizaciones**: Mantén Docker y las imágenes actualizadas
+
+### 🔧 Comandos Útiles para Producción
+
+```bash
+# Reiniciar solo un servicio
+docker-compose -f docker-compose.prod.yml restart backend
+
+# Ver estado detallado
+docker-compose -f docker-compose.prod.yml ps -a
+
+# Limpiar recursos no utilizados
+docker system prune -f
+
+# Ver uso de espacio
+docker system df
+
+# Backup rápido
+docker-compose -f docker-compose.prod.yml exec postgres pg_dump -U whatsapp_user whatsapp_manager > backup.sql
+```
+
 ## 🔒 Seguridad
 
 - ✅ Autenticación JWT

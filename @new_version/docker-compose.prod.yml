@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: whatsapp-manager-postgres
+    environment:
+      POSTGRES_DB: whatsapp_manager
+      POSTGRES_USER: whatsapp_user
+      POSTGRES_PASSWORD: whatsapp_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whatsapp_user -d whatsapp_manager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: whatsapp-manager-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: whatsapp-manager-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - JWT_SECRET=whatsapp-manager-super-secret-jwt-key-production-2024
+      - JWT_EXPIRES_IN=7d
+      - CORS_ORIGIN=*
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=whatsapp_manager
+      - DB_USER=whatsapp_user
+      - DB_PASSWORD=whatsapp_password
+      - REDIS_URL=redis://redis:6379
+      - REDIS_DB=0
+      - WHATSAPP_SESSION_PATH=/app/sessions
+      - WHATSAPP_QR_TIMEOUT=120000
+      - WHATSAPP_CONNECT_TIMEOUT=60000
+      - LOG_LEVEL=info
+    volumes:
+      - backend_sessions:/app/sessions
+      - backend_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: whatsapp-manager-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - whatsapp-manager-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_sessions:
+    driver: local
+  backend_logs:
+    driver: local
+
+networks:
+  whatsapp-manager-network:
+    driver: bridge
