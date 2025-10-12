@@ -79,7 +79,7 @@ async function executeMigration() {
                 INSERT INTO users (email, password, name, created_at, updated_at)
                 VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT (email) DO NOTHING
-            `, ['admin@flame.com', '$2b$10$d1eWDei/fDwpp', 'Administrador']);
+            `, ['admin@flame.com', '$2a$10$I0OxCUtctlX2g1KR5kHjF.JXA3ub/BMiq7QVtoyaMV42NOTVai5ZC', 'Administrator']);
             
             console.log('✅ Usuario por defecto creado');
         } else {

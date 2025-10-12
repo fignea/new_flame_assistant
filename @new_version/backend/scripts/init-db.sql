@@ -335,10 +335,10 @@ CREATE TRIGGER update_media_files_updated_at BEFORE UPDATE ON media_files FOR EA
 
 -- Insertar usuario de demostración por defecto
 -- Email: admin@flame.com
--- Contraseña: flame123 (hash bcrypt)
+-- Contraseña: flame123 (hash bcryptjs)
 INSERT INTO users (email, password, name) VALUES (
     'admin@flame.com',
-    '$2b$10$d1eWDei/fDwpp', -- flame123
+    '$2a$10$I0OxCUtctlX2g1KR5kHjF.JXA3ub/BMiq7QVtoyaMV42NOTVai5ZC', -- flame123
     'Administrator'
 ) ON CONFLICT (email) DO NOTHING;
 
