@@ -52,6 +52,24 @@ CREATE TABLE IF NOT EXISTS contacts (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Crear tabla de asistentes (debe ir antes de messages por las referencias)
+CREATE TABLE IF NOT EXISTS assistants (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    prompt TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    openai_api_key TEXT,
+    model VARCHAR(50) DEFAULT 'gpt-3.5-turbo',
+    max_tokens INTEGER DEFAULT 150,
+    temperature DECIMAL(2,1) DEFAULT 0.7,
+    auto_assign BOOLEAN DEFAULT TRUE,
+    response_delay INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Crear tabla de mensajes
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
@@ -83,23 +101,6 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Crear tabla de asistentes
-CREATE TABLE IF NOT EXISTS assistants (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    prompt TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    openai_api_key TEXT,
-    model VARCHAR(50) DEFAULT 'gpt-3.5-turbo',
-    max_tokens INTEGER DEFAULT 150,
-    temperature DECIMAL(2,1) DEFAULT 0.7,
-    auto_assign BOOLEAN DEFAULT TRUE,
-    response_delay INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
 -- Crear tabla de visitantes web
 CREATE TABLE IF NOT EXISTS web_visitors (
@@ -337,7 +338,7 @@ CREATE TRIGGER update_media_files_updated_at BEFORE UPDATE ON media_files FOR EA
 -- Contraseña: flame123 (hash bcrypt)
 INSERT INTO users (email, password, name) VALUES (
     'admin@flame.com',
-    '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', -- flame123
+    '$2b$10$d1eWDei/fDwpp', -- flame123
     'Administrator'
 ) ON CONFLICT (email) DO NOTHING;
 

@@ -74,16 +74,12 @@ async function executeMigration() {
         
         if (!hasDefaultUser) {
             console.log('👤 Creando usuario por defecto...');
-            
-            // Crear usuario por defecto
-            const bcrypt = require('bcrypt');
-            const hashedPassword = await bcrypt.hash('flame123', 10);
-            
+                        
             await client.query(`
                 INSERT INTO users (email, password, name, created_at, updated_at)
                 VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT (email) DO NOTHING
-            `, ['admin@flame.com', hashedPassword, 'Administrador']);
+            `, ['admin@flame.com', '$2b$10$d1eWDei/fDwpp', 'Administrador']);
             
             console.log('✅ Usuario por defecto creado');
         } else {
