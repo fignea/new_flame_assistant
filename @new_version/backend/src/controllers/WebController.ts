@@ -389,7 +389,14 @@ export class WebController {
       }
 
       // Verificar que la conversación pertenece al usuario
-      const conversation = await this.getConversationById(parseInt(conversationId), userId);
+      // Intentar primero por ID numérico, luego por public_id
+      let conversation = null;
+      if (!isNaN(parseInt(conversationId))) {
+        conversation = await this.getConversationById(parseInt(conversationId), userId);
+      } else {
+        conversation = await this.getConversationByPublicId(conversationId, userId);
+      }
+
       if (!conversation) {
         return res.status(404).json({
           success: false,
@@ -1123,7 +1130,14 @@ export class WebController {
       }
 
       // Verificar que la conversación pertenece al usuario
-      const conversation = await this.getConversationById(parseInt(conversationId), userId);
+      // Intentar primero por ID numérico, luego por public_id
+      let conversation = null;
+      if (!isNaN(parseInt(conversationId))) {
+        conversation = await this.getConversationById(parseInt(conversationId), userId);
+      } else {
+        conversation = await this.getConversationByPublicId(conversationId, userId);
+      }
+
       if (!conversation) {
         return res.status(404).json({
           success: false,
@@ -1133,7 +1147,7 @@ export class WebController {
 
       await database.query(
         'UPDATE web_messages SET is_read = true WHERE conversation_id = $1 AND sender_type = \'visitor\'',
-        [conversationId]
+        [conversation.id]
       );
 
       return res.json({

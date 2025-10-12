@@ -1383,7 +1383,9 @@ export const InboxPage: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-dark-bg dark:via-dark-surface dark:to-dark-card">
       <div className="flex h-screen flex-col lg:flex-row">
         {/* Sidebar - Lista de conversaciones */}
-        <div className="w-full sm:w-1/2 lg:w-1/3 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-dark-border/50 flex flex-col min-w-0">
+        <div className={`w-full lg:w-1/3 xl:w-1/4 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-dark-border/50 flex flex-col min-w-0 ${
+          selectedConversation ? 'hidden lg:flex' : 'flex'
+        }`}>
           {/* Header */}
           <div className="p-4 sm:p-6 border-b border-gray-200/50 dark:border-dark-border/50">
             <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent mb-4">
@@ -1630,17 +1632,30 @@ export const InboxPage: React.FC = () => {
           {selectedConv ? (
             <>
               {/* Chat Header */}
-              <div className="p-6 border-b border-gray-200/50 dark:border-dark-border/50 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl">
+              <div className="p-4 sm:p-6 border-b border-gray-200/50 dark:border-dark-border/50 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl flex items-center justify-center">
-                      <User className="w-6 h-6 text-purple-500" />
+                  <div className="flex items-center space-x-3">
+                    {/* Botón para volver a la lista en pantallas pequeñas */}
+                    <button 
+                      onClick={() => {
+                        setSelectedConversation(null);
+                        navigate('/inbox');
+                      }}
+                      className="lg:hidden p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    
+                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl flex items-center justify-center">
+                      <User className="w-5 h-5 text-purple-500" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                         {selectedConv.contactName}
                       </h2>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                      <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
                         <span>{selectedConv.contactPhone}</span>
                         <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedConv.status)}`}>
                           {selectedConv.status}
@@ -1664,7 +1679,7 @@ export const InboxPage: React.FC = () => {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
                 {(isLoadingWhatsApp || isLoadingWeb) ? (
                   <div className="flex items-center justify-center h-32">
                     <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
@@ -1683,7 +1698,7 @@ export const InboxPage: React.FC = () => {
                         key={message.id}
                         className={`flex ${message.fromMe ? 'justify-end' : 'justify-start'}`}
                       >
-                        <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                        <div className={`max-w-xs sm:max-w-sm md:max-w-md px-4 py-2 rounded-2xl ${
                           message.fromMe
                             ? 'bg-green-500 text-white'
                             : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
@@ -1742,7 +1757,7 @@ export const InboxPage: React.FC = () => {
                           key={message.id}
                           className={`flex ${message.sender_type === 'agent' ? 'justify-end' : 'justify-start'}`}
                         >
-                          <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                          <div className={`max-w-xs sm:max-w-sm md:max-w-md px-4 py-2 rounded-2xl ${
                             message.sender_type === 'agent'
                               ? 'bg-blue-500 text-white'
                               : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
@@ -1800,10 +1815,26 @@ export const InboxPage: React.FC = () => {
                     </div>
                   ))
                 )}
+                
+                {/* Footer del área de mensajes */}
+                <div className="mt-4 pt-4 border-t border-gray-200/50 dark:border-gray-700/50">
+                  {isWhatsAppConversation && whatsappStatus?.isConnected && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
+                      <MessageCircle className="w-3 h-3" />
+                      <span>Enviando a través de WhatsApp</span>
+                    </div>
+                  )}
+                  {selectedConv?.isWeb && webChatEnabled && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
+                      <Globe className="w-3 h-3" />
+                      <span>Enviando a través de Web Chat</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Message Input */}
-              <div className="p-6 border-t border-gray-200/50 dark:border-dark-border/50 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl">
+              <div className="p-4 sm:p-6 border-t border-gray-200/50 dark:border-dark-border/50 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl">
                 {isWhatsAppConversation && !whatsappStatus?.isConnected && (
                   <div className="mb-4 p-3 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg">
                     <p className="text-yellow-800 dark:text-yellow-200 text-sm">
@@ -1852,19 +1883,6 @@ export const InboxPage: React.FC = () => {
                     <Send className="w-5 h-5" />
                   </button>
                 </div>
-                
-                {isWhatsAppConversation && whatsappStatus?.isConnected && (
-                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
-                    <MessageCircle className="w-3 h-3" />
-                    <span>Enviando a través de WhatsApp</span>
-                  </div>
-                )}
-                {selectedConv?.isWeb && webChatEnabled && (
-                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
-                    <Globe className="w-3 h-3" />
-                    <span>Enviando a través de Web Chat</span>
-                  </div>
-                )}
               </div>
             </>
           ) : (
