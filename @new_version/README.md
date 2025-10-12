@@ -21,36 +21,49 @@ Una plataforma completa para gestionar mensajes de WhatsApp Web, programar enví
 # Entrar al directorio
 cd @new_version
 
-# Ejecutar script de inicio automático
+# Para desarrollo
 ./start.sh
+
+# Para producción
+./start-universal.sh --prod
 ```
 
-**¡Eso es todo!** El script automáticamente:
-- ✅ Verifica que Docker esté instalado y ejecutándose
-- ✅ Crea los directorios necesarios
-- ✅ Construye los contenedores
-- ✅ Inicia los servicios
-- ✅ Espera a que estén listos
-- ✅ Crea el usuario por defecto
-- ✅ Verifica que todo funcione
+**¡Eso es todo!** Los scripts automáticamente:
+- ✅ Verifican que Docker esté instalado y ejecutándose
+- ✅ Crean los directorios necesarios
+- ✅ Construyen los contenedores
+- ✅ Inician los servicios
+- ✅ Esperan a que estén listos
+- ✅ **Ejecutan la migración completa de la base de datos**
+- ✅ Crean el usuario por defecto
+- ✅ Verifican que todo funcione
 
 La aplicación estará disponible en:
 - **Frontend**: http://localhost
 - **Backend**: http://localhost:3001
 - **Health Check**: http://localhost:3001/health
 
+### Scripts Disponibles
+
+```bash
+# Desarrollo
+./start.sh                    # Iniciar en modo desarrollo
+./start-universal.sh          # Script universal (desarrollo por defecto)
+
+# Producción
+./start-universal.sh --prod   # Iniciar en modo producción
+./deploy-production.sh        # Despliegue completo en producción
+./fix-database.sh             # Solucionar problemas de base de datos
+
+# Utilidades
+./stop.sh                     # Detener servicios
+./test-docker.sh              # Probar todo el sistema
+./clean.sh                    # Limpiar todo (incluyendo datos)
+```
+
 ### Comandos Docker Útiles
 
 ```bash
-# Iniciar servicios
-./start.sh
-
-# Detener servicios
-./stop.sh
-
-# Probar todo el sistema
-./test-docker.sh
-
 # Ver logs en tiempo real
 docker-compose logs -f
 
@@ -59,6 +72,10 @@ docker-compose ps
 
 # Limpiar todo (incluyendo datos)
 docker-compose down --rmi all --volumes
+
+# Para producción
+docker-compose -f docker-compose.prod.yml logs -f
+docker-compose -f docker-compose.prod.yml ps
 ```
 
 ### Desarrollo Local
