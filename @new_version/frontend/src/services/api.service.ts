@@ -268,7 +268,30 @@ export class ApiService {
 
   // Métodos HTTP
   async get<T>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
-    const url = new URL(buildURL(endpoint));
+    const fullUrl = buildURL(endpoint);
+    
+    // En producción, usar la URL directamente sin new URL() para evitar problemas con URLs relativas
+    if (process.env.NODE_ENV === 'production') {
+      let url = fullUrl;
+      if (params) {
+        const searchParams = new URLSearchParams();
+        Object.keys(params).forEach(key => {
+          if (params[key] !== undefined && params[key] !== null) {
+            searchParams.append(key, params[key].toString());
+          }
+        });
+        const queryString = searchParams.toString();
+        if (queryString) {
+          url += (url.includes('?') ? '&' : '?') + queryString;
+        }
+      }
+      return this.request<T>(url, {
+        method: 'GET'
+      });
+    }
+    
+    // En desarrollo, usar new URL() como antes
+    const url = new URL(fullUrl);
     if (params) {
       Object.keys(params).forEach(key => {
         if (params[key] !== undefined && params[key] !== null) {
