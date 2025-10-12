@@ -173,6 +173,9 @@ CREATE TABLE IF NOT EXISTS response_templates (
     content TEXT NOT NULL,
     trigger_keywords TEXT[], -- Palabras clave que activan esta plantilla
     conditions JSONB, -- Condiciones específicas
+    category VARCHAR(100), -- Categoría de la plantilla
+    priority INTEGER DEFAULT 0, -- Prioridad de la plantilla
+    response_delay INTEGER DEFAULT 0, -- Retraso en segundos antes de responder
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -183,7 +186,9 @@ CREATE TABLE IF NOT EXISTS tags (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
+    description TEXT,
     color VARCHAR(7) DEFAULT '#3B82F6', -- Color en hex
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -191,23 +196,33 @@ CREATE TABLE IF NOT EXISTS tags (
 -- 4. Etiquetas de conversaciones
 CREATE TABLE IF NOT EXISTS conversation_tags (
     conversation_id VARCHAR(255) NOT NULL,
+    platform VARCHAR(50) NOT NULL,
     tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (conversation_id, tag_id)
+    PRIMARY KEY (conversation_id, platform, tag_id)
 );
 
--- 5. Historial de interacciones
+-- 5. Etiquetas de contactos
+CREATE TABLE IF NOT EXISTS contact_tags (
+    contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
+    tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (contact_id, tag_id)
+);
+
+-- 6. Historial de interacciones
 CREATE TABLE IF NOT EXISTS interaction_history (
     id SERIAL PRIMARY KEY,
     contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
     conversation_id VARCHAR(255) NOT NULL,
+    platform VARCHAR(50) NOT NULL,
     interaction_type VARCHAR(50) NOT NULL, -- 'message', 'call', 'meeting'
     content TEXT,
     metadata JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Notas de contactos
+-- 7. Notas de contactos
 CREATE TABLE IF NOT EXISTS contact_notes (
     id SERIAL PRIMARY KEY,
     contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
@@ -218,7 +233,7 @@ CREATE TABLE IF NOT EXISTS contact_notes (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 7. Configuración de asistentes
+-- 8. Configuración de asistentes
 CREATE TABLE IF NOT EXISTS assistant_configs (
     id SERIAL PRIMARY KEY,
     assistant_id INTEGER REFERENCES assistants(id) ON DELETE CASCADE,
@@ -266,7 +281,11 @@ CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id);
 CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
 
 CREATE INDEX IF NOT EXISTS idx_conversation_tags_conversation_id ON conversation_tags(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_tags_platform ON conversation_tags(platform);
 CREATE INDEX IF NOT EXISTS idx_conversation_tags_tag_id ON conversation_tags(tag_id);
+
+CREATE INDEX IF NOT EXISTS idx_contact_tags_contact_id ON contact_tags(contact_id);
+CREATE INDEX IF NOT EXISTS idx_contact_tags_tag_id ON contact_tags(tag_id);
 
 CREATE INDEX IF NOT EXISTS idx_interaction_history_contact_id ON interaction_history(contact_id);
 CREATE INDEX IF NOT EXISTS idx_interaction_history_conversation_id ON interaction_history(conversation_id);
@@ -350,3 +369,20 @@ INSERT INTO assistants (user_id, name, description, prompt, is_active) VALUES (
     'Eres un asistente virtual de WhatsApp. Responde de manera amable y profesional a las consultas de los usuarios. Si no sabes algo, admítelo y ofrece ayuda alternativa.',
     true
 ) ON CONFLICT DO NOTHING;
+
+-- Crear etiquetas de demostración
+INSERT INTO tags (user_id, name, description, color, is_active) VALUES 
+    ((SELECT id FROM users WHERE email = 'admin@flame.com'), 'Ventas', 'Etiqueta para conversaciones de ventas', '#10B981', true),
+    ((SELECT id FROM users WHERE email = 'admin@flame.com'), 'Soporte', 'Etiqueta para consultas de soporte técnico', '#F59E0B', true),
+    ((SELECT id FROM users WHERE email = 'admin@flame.com'), 'Urgente', 'Etiqueta para asuntos urgentes', '#EF4444', true),
+    ((SELECT id FROM users WHERE email = 'admin@flame.com'), 'Nuevo Cliente', 'Etiqueta para nuevos clientes', '#8B5CF6', true),
+    ((SELECT id FROM users WHERE email = 'admin@flame.com'), 'Seguimiento', 'Etiqueta para seguimiento de casos', '#06B6D4', true)
+ON CONFLICT DO NOTHING;
+
+-- Crear plantillas de demostración
+INSERT INTO response_templates (assistant_id, name, content, trigger_keywords, category, priority, response_delay, is_active) VALUES 
+    ((SELECT id FROM assistants WHERE name = 'Asistente General'), 'Saludo Inicial', '¡Hola! Gracias por contactarnos. ¿En qué puedo ayudarte hoy?', ARRAY['hola', 'buenos días', 'buenas tardes', 'buenas noches'], 'greeting', 1, 2, true),
+    ((SELECT id FROM assistants WHERE name = 'Asistente General'), 'Consulta de Precios', 'Te ayudo con información sobre nuestros precios. ¿Te interesa algún producto específico?', ARRAY['precio', 'costo', 'cuanto cuesta', 'valor'], 'information', 2, 3, true),
+    ((SELECT id FROM assistants WHERE name = 'Asistente General'), 'Soporte Técnico', 'Entiendo que tienes un problema técnico. Voy a conectarte con nuestro equipo de soporte.', ARRAY['problema', 'error', 'no funciona', 'ayuda técnica'], 'escalation', 3, 1, true),
+    ((SELECT id FROM assistants WHERE name = 'Asistente General'), 'Despedida', '¡Gracias por contactarnos! Si tienes más preguntas, no dudes en escribirnos. ¡Que tengas un excelente día!', ARRAY['gracias', 'chau', 'adiós', 'hasta luego'], 'farewell', 1, 2, true)
+ON CONFLICT DO NOTHING;

@@ -24,26 +24,26 @@ export class TemplateService {
 
       await database.run(
         `INSERT INTO response_templates 
-         (assistant_id, user_id, name, content, category, trigger_keywords, 
-          is_active, priority, response_delay, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+         (assistant_id, name, content, trigger_keywords, category, priority, response_delay,
+          is_active, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
         [
           template.assistant_id,
-          userId,
           template.name,
           template.content,
-          template.category || 'general',
           `{${(template.trigger_keywords || []).map(k => `"${k}"`).join(',')}}`,
-          template.is_active !== undefined ? template.is_active : true,
+          template.category || null,
           template.priority || 0,
-          template.response_delay || 0
+          template.response_delay || 0,
+          template.is_active !== undefined ? template.is_active : true
         ]
       );
 
       // Obtener la plantilla creada
       const result = await database.get(
-        `SELECT * FROM response_templates 
-         WHERE user_id = $1 AND name = $2 ORDER BY created_at DESC LIMIT 1`,
+        `SELECT rt.* FROM response_templates rt
+         JOIN assistants a ON rt.assistant_id = a.id
+         WHERE a.user_id = $1 AND rt.name = $2 ORDER BY rt.created_at DESC LIMIT 1`,
         [userId, template.name]
       );
 
@@ -67,23 +67,23 @@ export class TemplateService {
   ): Promise<ResponseTemplate[]> {
     try {
       let query = `
-        SELECT * FROM response_templates 
-        WHERE user_id = $1
+        SELECT rt.* FROM response_templates rt
+        JOIN assistants a ON rt.assistant_id = a.id
+        WHERE a.user_id = $1
       `;
       const params: any[] = [userId];
 
       if (assistantId) {
-        query += ' AND assistant_id = $2';
+        query += ' AND rt.assistant_id = $2';
         params.push(assistantId);
       }
 
       if (category) {
-        const paramIndex = params.length + 1;
-        query += ` AND category = $${paramIndex}`;
+        query += ' AND rt.category = $' + (params.length + 1);
         params.push(category);
       }
 
-      query += ' ORDER BY priority DESC, created_at DESC';
+      query += ' ORDER BY rt.created_at DESC';
 
       const templates = await database.all(query, params);
 
@@ -104,7 +104,9 @@ export class TemplateService {
   static async getTemplateById(templateId: number, userId: number): Promise<ResponseTemplate | null> {
     try {
       const template = await database.get(
-        'SELECT * FROM response_templates WHERE id = $1 AND user_id = $2',
+        `SELECT rt.* FROM response_templates rt
+         JOIN assistants a ON rt.assistant_id = a.id
+         WHERE rt.id = $1 AND a.user_id = $2`,
         [templateId, userId]
       );
 
@@ -133,7 +135,9 @@ export class TemplateService {
     try {
       // Verificar que la plantilla pertenece al usuario
       const existingTemplate = await database.get(
-        'SELECT id FROM response_templates WHERE id = $1 AND user_id = $2',
+        `SELECT rt.id FROM response_templates rt
+         JOIN assistants a ON rt.assistant_id = a.id
+         WHERE rt.id = $1 AND a.user_id = $2`,
         [templateId, userId]
       );
 
@@ -166,11 +170,6 @@ export class TemplateService {
         values.push(`{${updates.trigger_keywords.map(k => `"${k}"`).join(',')}}`);
       }
 
-      if (updates.is_active !== undefined) {
-        fields.push(`is_active = $${paramIndex++}`);
-        values.push(updates.is_active);
-      }
-
       if (updates.priority !== undefined) {
         fields.push(`priority = $${paramIndex++}`);
         values.push(updates.priority);
@@ -179,6 +178,11 @@ export class TemplateService {
       if (updates.response_delay !== undefined) {
         fields.push(`response_delay = $${paramIndex++}`);
         values.push(updates.response_delay);
+      }
+
+      if (updates.is_active !== undefined) {
+        fields.push(`is_active = $${paramIndex++}`);
+        values.push(updates.is_active);
       }
 
       if (fields.length === 0) {
@@ -191,17 +195,17 @@ export class TemplateService {
       const query = `
         UPDATE response_templates 
         SET ${fields.join(', ')} 
-        WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+        WHERE id = $${paramIndex}
         RETURNING *
       `;
-
-      values.push(userId);
 
       await database.run(query, values);
 
       // Obtener la plantilla actualizada
       const result = await database.get(
-        `SELECT * FROM response_templates WHERE id = $1 AND user_id = $2`,
+        `SELECT rt.* FROM response_templates rt
+         JOIN assistants a ON rt.assistant_id = a.id
+         WHERE rt.id = $1 AND a.user_id = $2`,
         [templateId, userId]
       );
 
@@ -224,9 +228,21 @@ export class TemplateService {
    */
   static async deleteTemplate(templateId: number, userId: number): Promise<boolean> {
     try {
-      const result = await database.run(
-        'DELETE FROM response_templates WHERE id = $1 AND user_id = $2',
+      // Primero verificar que la plantilla pertenece al usuario
+      const existingTemplate = await database.get(
+        `SELECT rt.id FROM response_templates rt
+         JOIN assistants a ON rt.assistant_id = a.id
+         WHERE rt.id = $1 AND a.user_id = $2`,
         [templateId, userId]
+      );
+
+      if (!existingTemplate) {
+        return false;
+      }
+
+      const result = await database.run(
+        'DELETE FROM response_templates WHERE id = $1',
+        [templateId]
       );
 
       return result.changes > 0;
@@ -246,9 +262,10 @@ export class TemplateService {
   ): Promise<ResponseTemplate[]> {
     try {
       let query = `
-        SELECT * FROM response_templates 
-        WHERE user_id = $1 
-        AND is_active = true
+        SELECT rt.* FROM response_templates rt
+        JOIN assistants a ON rt.assistant_id = a.id
+        WHERE a.user_id = $1 
+        AND rt.is_active = true
         AND (
       `;
 
@@ -257,18 +274,18 @@ export class TemplateService {
 
       keywords.forEach((keyword, index) => {
         const paramIndex = params.length + 1;
-        conditions.push(`trigger_keywords::text ILIKE $${paramIndex}`);
+        conditions.push(`rt.trigger_keywords::text ILIKE $${paramIndex}`);
         params.push(`%${keyword}%`);
       });
 
       query += conditions.join(' OR ') + ')';
 
       if (assistantId) {
-        query += ' AND assistant_id = $' + (params.length + 1);
+        query += ' AND rt.assistant_id = $' + (params.length + 1);
         params.push(assistantId);
       }
 
-      query += ' ORDER BY priority DESC, created_at DESC';
+      query += ' ORDER BY rt.created_at DESC';
 
       const templates = await database.all(query, params);
 
@@ -292,20 +309,21 @@ export class TemplateService {
   ): Promise<ResponseTemplate[]> {
     try {
       let query = `
-        SELECT * FROM response_templates 
-        WHERE user_id = $1 
-        AND category = $2
-        AND is_active = true
+        SELECT rt.* FROM response_templates rt
+        JOIN assistants a ON rt.assistant_id = a.id
+        WHERE a.user_id = $1 
+        AND rt.category = $2
+        AND rt.is_active = true
       `;
 
       const params: any[] = [userId, category];
 
       if (assistantId) {
-        query += ' AND assistant_id = $3';
+        query += ' AND rt.assistant_id = $3';
         params.push(assistantId);
       }
 
-      query += ' ORDER BY priority DESC, created_at DESC';
+      query += ' ORDER BY rt.created_at DESC';
 
       const templates = await database.all(query, params);
 
@@ -359,17 +377,20 @@ export class TemplateService {
       const stats = await database.get(
         `SELECT 
            COUNT(*) as total_templates,
-           COUNT(CASE WHEN is_active = true THEN 1 END) as active_templates
-         FROM response_templates 
-         WHERE user_id = $1`,
+           COUNT(CASE WHEN rt.is_active = true THEN 1 END) as active_templates
+         FROM response_templates rt
+         JOIN assistants a ON rt.assistant_id = a.id
+         WHERE a.user_id = $1`,
         [userId]
       );
 
+      // Obtener estadísticas por categoría
       const categoryStats = await database.all(
-        `SELECT category, COUNT(*) as count
-         FROM response_templates 
-         WHERE user_id = $1 AND is_active = true
-         GROUP BY category`,
+        `SELECT rt.category, COUNT(*) as count
+         FROM response_templates rt
+         JOIN assistants a ON rt.assistant_id = a.id
+         WHERE a.user_id = $1 AND rt.is_active = true AND rt.category IS NOT NULL
+         GROUP BY rt.category`,
         [userId]
       );
 
