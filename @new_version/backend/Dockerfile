@@ -3,7 +3,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Instalar dependencias del sistema necesarias para Baileys
+# Instalar dependencias del sistema necesarias para Baileys y PostgreSQL
 RUN apk add --no-cache \
     python3 \
     make \
@@ -16,7 +16,8 @@ RUN apk add --no-cache \
     pixman-dev \
     pangomm-dev \
     libjpeg-turbo-dev \
-    freetype-dev
+    freetype-dev \
+    postgresql-client
 
 # Copiar package files
 COPY package*.json ./
@@ -34,6 +35,9 @@ RUN npm run build
 RUN mkdir -p data sessions logs uploads uploads/thumbnails && \
     chown -R node:node data sessions logs uploads
 
+# Hacer ejecutable el script de migración
+RUN chmod +x scripts/migrate-database.js
+
 # Cambiar a usuario node por seguridad
 USER node
 
@@ -43,7 +47,11 @@ EXPOSE 3001
 # Variables de entorno por defecto
 ENV NODE_ENV=production
 ENV PORT=3001
-ENV DB_PATH=/app/data/whatsapp_manager.db
+ENV DB_HOST=postgres
+ENV DB_PORT=5432
+ENV DB_NAME=whatsapp_manager
+ENV DB_USER=whatsapp_user
+ENV DB_PASSWORD=whatsapp_password
 ENV WHATSAPP_SESSION_PATH=/app/sessions
 ENV JWT_SECRET=whatsapp-manager-docker-secret-2024
 ENV JWT_EXPIRES_IN=7d

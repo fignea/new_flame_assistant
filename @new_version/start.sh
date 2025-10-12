@@ -1,6 +1,45 @@
 #!/bin/bash
 
-echo "🚀 Iniciando WhatsApp Manager..."
+# Configuración por defecto
+ENVIRONMENT="dev"
+COMPOSE_FILE="docker-compose.yml"
+
+# Procesar argumentos
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --prod|--production)
+            ENVIRONMENT="prod"
+            COMPOSE_FILE="docker-compose.prod.yml"
+            shift
+            ;;
+        --dev|--development)
+            ENVIRONMENT="dev"
+            COMPOSE_FILE="docker-compose.yml"
+            shift
+            ;;
+        -h|--help)
+            echo "Uso: $0 [OPCIONES]"
+            echo ""
+            echo "Opciones:"
+            echo "  --prod, --production    Iniciar en modo producción"
+            echo "  --dev, --development   Iniciar en modo desarrollo (por defecto)"
+            echo "  -h, --help             Mostrar esta ayuda"
+            echo ""
+            echo "Ejemplos:"
+            echo "  $0                     # Modo desarrollo"
+            echo "  $0 --dev               # Modo desarrollo"
+            echo "  $0 --prod              # Modo producción"
+            exit 0
+            ;;
+        *)
+            echo "❌ Opción desconocida: $1"
+            echo "Usa --help para ver las opciones disponibles"
+            exit 1
+            ;;
+    esac
+done
+
+echo "🚀 Iniciando WhatsApp Manager en modo $ENVIRONMENT..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Verificar que Docker esté instalado
@@ -39,16 +78,16 @@ echo "✅ Directorios creados"
 
 # Detener contenedores existentes si están ejecutándose
 echo "🛑 Deteniendo contenedores existentes..."
-docker-compose down > /dev/null 2>&1
+docker-compose -f $COMPOSE_FILE down > /dev/null 2>&1
 
 # Limpiar solo imágenes anteriores (mantener volúmenes)
 echo "🧹 Limpiando imágenes anteriores (manteniendo datos)..."
-docker-compose down --rmi all --remove-orphans > /dev/null 2>&1
+docker-compose -f $COMPOSE_FILE down --rmi all --remove-orphans > /dev/null 2>&1
 
 # Construir contenedores
 echo "🔨 Construyendo contenedores..."
 echo "   📦 Esto puede tomar varios minutos la primera vez..."
-docker-compose build --no-cache
+docker-compose -f $COMPOSE_FILE build --no-cache
 
 if [ $? -ne 0 ]; then
     echo "❌ Error construyendo contenedores"
@@ -59,7 +98,7 @@ echo "✅ Contenedores construidos exitosamente"
 
 # Iniciar servicios
 echo "🚀 Iniciando servicios..."
-docker-compose up -d
+docker-compose -f $COMPOSE_FILE up -d
 
 if [ $? -ne 0 ]; then
     echo "❌ Error iniciando servicios"
@@ -80,7 +119,7 @@ for i in {1..40}; do
     fi
     if [ $i -eq 40 ]; then
         echo "   ❌ Backend no responde después de 2 minutos"
-        echo "   📊 Ver logs: docker-compose logs backend"
+        echo "   📊 Ver logs: docker-compose -f $COMPOSE_FILE logs backend"
         exit 1
     fi
     sleep 3
@@ -97,7 +136,7 @@ for i in {1..20}; do
     fi
     if [ $i -eq 20 ]; then
         echo "   ❌ Frontend no responde después de 1 minuto"
-        echo "   📊 Ver logs: docker-compose logs frontend"
+        echo "   📊 Ver logs: docker-compose -f $COMPOSE_FILE logs frontend"
         exit 1
     fi
     sleep 3
@@ -110,57 +149,48 @@ echo "🗄️ Ejecutando migraciones de base de datos..."
 # Esperar a que PostgreSQL esté completamente listo
 echo "   ⏳ Esperando a que PostgreSQL esté listo..."
 for i in {1..20}; do
-    if docker-compose exec postgres pg_isready -U whatsapp_user -d whatsapp_manager > /dev/null 2>&1; then
+    if docker-compose -f $COMPOSE_FILE exec postgres pg_isready -U whatsapp_user -d whatsapp_manager > /dev/null 2>&1; then
         echo "   ✅ PostgreSQL listo"
         break
     fi
     if [ $i -eq 20 ]; then
         echo "   ❌ PostgreSQL no responde después de 1 minuto"
-        echo "   📊 Ver logs: docker-compose logs postgres"
+        echo "   📊 Ver logs: docker-compose -f $COMPOSE_FILE logs postgres"
         exit 1
     fi
     sleep 3
     echo "   ⏳ Esperando PostgreSQL... ($i/20)"
 done
 
-# Verificar si la migración ya se ejecutó
-echo "   🔍 Verificando si la migración ya se ejecutó..."
-USER_COUNT=$(docker-compose exec -T postgres psql -U whatsapp_user -d whatsapp_manager -t -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' \n' || echo "0")
+# Ejecutar migración usando el script mejorado
+echo "   🔄 Ejecutando migración mejorada..."
+docker-compose -f $COMPOSE_FILE exec backend npm run migrate
 
-if [ "$USER_COUNT" = "0" ]; then
-    echo "   ⚠️  La migración no se ejecutó automáticamente. Ejecutando manualmente..."
+if [ $? -eq 0 ]; then
+    echo "   ✅ Migración completada exitosamente"
+else
+    echo "   ⚠️  Error en migración automática, intentando migración manual..."
     
-    # Ejecutar script de inicialización completo
-    echo "   📝 Ejecutando script de inicialización completo..."
-    docker-compose exec -T postgres psql -U whatsapp_user -d whatsapp_manager < backend/scripts/init-db.sql
+    # Fallback: ejecutar migración manual
+    echo "   📝 Ejecutando migración manual..."
+    docker-compose -f $COMPOSE_FILE exec -T postgres psql -U whatsapp_user -d whatsapp_manager < backend/scripts/init-db.sql
     
     # Verificar que se creó el usuario
-    USER_COUNT=$(docker-compose exec -T postgres psql -U whatsapp_user -d whatsapp_manager -t -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' \n')
+    USER_COUNT=$(docker-compose -f $COMPOSE_FILE exec -T postgres psql -U whatsapp_user -d whatsapp_manager -t -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' \n')
     
     if [ "$USER_COUNT" -gt "0" ]; then
         echo "   ✅ Usuario por defecto creado exitosamente"
     else
         echo "   ❌ Error al crear usuario por defecto"
         echo "   📊 Ver logs de PostgreSQL:"
-        docker-compose logs postgres | tail -20
+        docker-compose -f $COMPOSE_FILE logs postgres | tail -20
         exit 1
     fi
-else
-    echo "   ✅ La migración ya se ejecutó correctamente"
-fi
-
-# Verificar que las tablas principales existen
-echo "   🔍 Verificando estructura de la base de datos..."
-TABLE_COUNT=$(docker-compose exec -T postgres psql -U whatsapp_user -d whatsapp_manager -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' \n')
-
-if [ "$TABLE_COUNT" -lt "10" ]; then
-    echo "   ⚠️  La base de datos parece incompleta. Reintentando migración..."
-    docker-compose exec -T postgres psql -U whatsapp_user -d whatsapp_manager < backend/scripts/init-db.sql
 fi
 
 # Mostrar información del usuario por defecto
 echo "   👤 Usuario por defecto:"
-docker-compose exec -T postgres psql -U whatsapp_user -d whatsapp_manager -c "SELECT email, name FROM users WHERE email = 'admin@flame.com';" 2>/dev/null || echo "   ⚠️ No se pudo verificar el usuario"
+docker-compose -f $COMPOSE_FILE exec -T postgres psql -U whatsapp_user -d whatsapp_manager -c "SELECT email, name FROM users WHERE email = 'admin@flame.com';" 2>/dev/null || echo "   ⚠️ No se pudo verificar el usuario"
 
 echo "✅ Migraciones de base de datos completadas"
 
@@ -182,7 +212,7 @@ else
 fi
 
 echo ""
-echo "🎉 Flame AI iniciado exitosamente!"
+echo "🎉 Flame AI iniciado exitosamente en modo $ENVIRONMENT!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "📍 Accede a la aplicación:"
@@ -195,9 +225,9 @@ echo "   📧 Email: admin@flame.com"
 echo "   🔒 Contraseña: flame123"
 echo ""
 echo "📊 Comandos útiles:"
-echo "   📋 Ver logs backend:    docker-compose logs -f backend"
-echo "   📋 Ver logs frontend:   docker-compose logs -f frontend"
-echo "   📋 Ver estado:          docker-compose ps"
+echo "   📋 Ver logs backend:    docker-compose -f $COMPOSE_FILE logs -f backend"
+echo "   📋 Ver logs frontend:   docker-compose -f $COMPOSE_FILE logs -f frontend"
+echo "   📋 Ver estado:          docker-compose -f $COMPOSE_FILE ps"
 echo "   🛑 Detener servicios:   ./stop.sh"
 echo "   🗑️  Limpiar todo:      ./clean.sh"
 echo ""
