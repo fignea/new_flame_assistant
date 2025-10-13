@@ -481,4 +481,177 @@ export class TagService {
       throw error;
     }
   }
+
+  /**
+   * Agregar etiqueta a conversación
+   */
+  static async addConversationTag(
+    conversationId: string,
+    tagId: number,
+    platform: string,
+    userId: number
+  ): Promise<ConversationTag> {
+    try {
+      // Verificar que la etiqueta pertenece al usuario
+      const tag = await database.get(
+        'SELECT id FROM tags WHERE id = $1 AND user_id = $2',
+        [tagId, userId]
+      );
+
+      if (!tag) {
+        throw new Error('Etiqueta no encontrada o no autorizada');
+      }
+
+      // Verificar que no existe la asignación
+      const existing = await database.get(
+        'SELECT * FROM conversation_tags WHERE conversation_id = $1 AND platform = $2 AND tag_id = $3',
+        [conversationId, platform, tagId]
+      );
+
+      if (existing) {
+        throw new Error('La etiqueta ya está asignada a esta conversación');
+      }
+
+      // Insertar la asignación
+      await database.run(
+        'INSERT INTO conversation_tags (conversation_id, platform, tag_id, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)',
+        [conversationId, platform, tagId]
+      );
+
+      // Obtener la asignación creada
+      const result = await database.get(
+        'SELECT * FROM conversation_tags WHERE conversation_id = $1 AND platform = $2 AND tag_id = $3',
+        [conversationId, platform, tagId]
+      );
+
+      return result;
+    } catch (error) {
+      console.error('Error agregando etiqueta a conversación:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar etiqueta de conversación
+   */
+  static async removeConversationTag(
+    conversationId: string,
+    tagId: number,
+    platform: string,
+    userId: number
+  ): Promise<boolean> {
+    try {
+      // Verificar que la etiqueta pertenece al usuario
+      const tag = await database.get(
+        'SELECT id FROM tags WHERE id = $1 AND user_id = $2',
+        [tagId, userId]
+      );
+
+      if (!tag) {
+        throw new Error('Etiqueta no encontrada o no autorizada');
+      }
+
+      // Eliminar la asignación
+      const result = await database.run(
+        'DELETE FROM conversation_tags WHERE conversation_id = $1 AND platform = $2 AND tag_id = $3',
+        [conversationId, platform, tagId]
+      );
+
+      return result.changes > 0;
+    } catch (error) {
+      console.error('Error eliminando etiqueta de conversación:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Agregar etiqueta a contacto
+   */
+  static async addContactTag(
+    contactId: string,
+    tagId: number,
+    userId: number
+  ): Promise<ContactTag> {
+    try {
+      // Verificar que la etiqueta pertenece al usuario
+      const tag = await database.get(
+        'SELECT id FROM tags WHERE id = $1 AND user_id = $2',
+        [tagId, userId]
+      );
+
+      if (!tag) {
+        throw new Error('Etiqueta no encontrada o no autorizada');
+      }
+
+      // Verificar que el contacto pertenece al usuario
+      const contact = await database.get(
+        'SELECT id FROM contacts WHERE id = $1 AND user_id = $2',
+        [contactId, userId]
+      );
+
+      if (!contact) {
+        throw new Error('Contacto no encontrado o no autorizado');
+      }
+
+      // Verificar que no existe la asignación
+      const existing = await database.get(
+        'SELECT * FROM contact_tags WHERE contact_id = $1 AND tag_id = $2',
+        [contactId, tagId]
+      );
+
+      if (existing) {
+        throw new Error('La etiqueta ya está asignada a este contacto');
+      }
+
+      // Insertar la asignación
+      await database.run(
+        'INSERT INTO contact_tags (contact_id, tag_id, created_at) VALUES ($1, $2, CURRENT_TIMESTAMP)',
+        [contactId, tagId]
+      );
+
+      // Obtener la asignación creada
+      const result = await database.get(
+        'SELECT * FROM contact_tags WHERE contact_id = $1 AND tag_id = $2',
+        [contactId, tagId]
+      );
+
+      return result;
+    } catch (error) {
+      console.error('Error agregando etiqueta a contacto:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar etiqueta de contacto
+   */
+  static async removeContactTag(
+    contactId: string,
+    tagId: number,
+    userId: number
+  ): Promise<boolean> {
+    try {
+      // Verificar que la etiqueta pertenece al usuario
+      const tag = await database.get(
+        'SELECT id FROM tags WHERE id = $1 AND user_id = $2',
+        [tagId, userId]
+      );
+
+      if (!tag) {
+        throw new Error('Etiqueta no encontrada o no autorizada');
+      }
+
+      // Eliminar la asignación
+      const result = await database.run(
+        'DELETE FROM contact_tags WHERE contact_id = $1 AND tag_id = $2',
+        [contactId, tagId]
+      );
+
+      return result.changes > 0;
+    } catch (error) {
+      console.error('Error eliminando etiqueta de contacto:', error);
+      throw error;
+    }
+  }
+
 }

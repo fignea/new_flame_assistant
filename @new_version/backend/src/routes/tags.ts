@@ -12,11 +12,19 @@ router.use(authenticate);
 router.post('/', tagValidation, TagController.createTag);
 router.get('/', TagController.getUserTags);
 router.get('/stats', TagController.getTagStats);
-router.get('/conversation/:conversationId/:platform', TagController.getConversationTags);
-router.get('/contact/:contactId', TagController.getContactTags);
 router.get('/:id', TagController.getTagById);
 router.put('/:id', TagController.updateTag);
 router.delete('/:id', TagController.deleteTag);
+
+// Rutas de gestión de tags en conversaciones
+router.post('/conversation', TagController.addConversationTag);
+router.delete('/conversation/:conversationId/:tagId/:platform', TagController.removeConversationTag);
+router.get('/conversation/:conversationId/:platform', TagController.getConversationTags);
+
+// Rutas de gestión de tags en contactos
+router.post('/contact', TagController.addContactTag);
+router.delete('/contact/:contactId/:tagId', TagController.removeContactTag);
+router.get('/contact/:contactId', TagController.getContactTags);
 
 // Rutas de asignación de etiquetas
 router.post('/:id/conversation', TagController.tagConversation);

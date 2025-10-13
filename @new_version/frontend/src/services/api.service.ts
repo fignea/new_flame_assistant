@@ -996,6 +996,38 @@ export class ApiService {
     }>(`/api/assistants/${assistantId}/usage`);
   }
 
+  // Métodos para gestión de tags en conversaciones
+  async addConversationTag(conversationId: string, tagId: number, platform: string) {
+    return this.post('/api/tags/conversation', {
+      conversation_id: conversationId,
+      tag_id: tagId,
+      platform: platform
+    });
+  }
+
+  async removeConversationTag(conversationId: string, tagId: number, platform: string) {
+    return this.delete(`/api/tags/conversation/${conversationId}/${tagId}/${platform}`);
+  }
+
+  async addContactTag(contactId: string, tagId: number) {
+    return this.post('/api/tags/contact', {
+      contact_id: contactId,
+      tag_id: tagId
+    });
+  }
+
+  async removeContactTag(contactId: string, tagId: number) {
+    return this.delete(`/api/tags/contact/${contactId}/${tagId}`);
+  }
+
+  async getConversationTags(conversationId: string, platform: string) {
+    return this.get(`/api/tags/conversation/${conversationId}/${platform}`);
+  }
+
+  async getContactTags(contactId: string) {
+    return this.get(`/api/tags/contact/${contactId}`);
+  }
+
   // Métodos para Notas de Contacto
   async getContactNotes(contactId: string) {
     return this.get<ContactNote[]>(`/api/contacts/${contactId}/notes`);

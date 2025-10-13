@@ -429,4 +429,137 @@ export class TagController {
       });
     }
   }
+
+  /**
+   * Agregar etiqueta a conversación
+   * POST /api/tags/conversation
+   */
+  static async addConversationTag(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const { conversation_id, tag_id, platform } = req.body;
+
+      if (!conversation_id || !tag_id || !platform) {
+        return res.status(400).json({
+          success: false,
+          error: 'Faltan campos requeridos: conversation_id, tag_id, platform'
+        });
+      }
+
+      const result = await TagService.addConversationTag(
+        conversation_id,
+        tag_id,
+        platform,
+        userId
+      );
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Etiqueta agregada a la conversación exitosamente'
+      });
+    } catch (error: any) {
+      console.error('Error agregando etiqueta a conversación:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  /**
+   * Eliminar etiqueta de conversación
+   * DELETE /api/tags/conversation/:conversationId/:tagId/:platform
+   */
+  static async removeConversationTag(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const { conversationId, tagId, platform } = req.params;
+
+      const result = await TagService.removeConversationTag(
+        conversationId,
+        parseInt(tagId),
+        platform,
+        userId
+      );
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Etiqueta eliminada de la conversación exitosamente'
+      });
+    } catch (error: any) {
+      console.error('Error eliminando etiqueta de conversación:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  /**
+   * Agregar etiqueta a contacto
+   * POST /api/tags/contact
+   */
+  static async addContactTag(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const { contact_id, tag_id } = req.body;
+
+      if (!contact_id || !tag_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'Faltan campos requeridos: contact_id, tag_id'
+        });
+      }
+
+      const result = await TagService.addContactTag(
+        contact_id,
+        tag_id,
+        userId
+      );
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Etiqueta agregada al contacto exitosamente'
+      });
+    } catch (error: any) {
+      console.error('Error agregando etiqueta a contacto:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
+  /**
+   * Eliminar etiqueta de contacto
+   * DELETE /api/tags/contact/:contactId/:tagId
+   */
+  static async removeContactTag(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const { contactId, tagId } = req.params;
+
+      const result = await TagService.removeContactTag(
+        contactId,
+        parseInt(tagId),
+        userId
+      );
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Etiqueta eliminada del contacto exitosamente'
+      });
+    } catch (error: any) {
+      console.error('Error eliminando etiqueta de contacto:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error interno del servidor'
+      });
+    }
+  }
+
 }
