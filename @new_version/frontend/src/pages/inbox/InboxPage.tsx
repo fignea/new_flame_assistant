@@ -1631,8 +1631,8 @@ export const InboxPage: React.FC = () => {
         <div className="flex-1 flex flex-col min-w-0">
           {selectedConv ? (
             <>
-              {/* Chat Header */}
-              <div className="p-4 sm:p-6 border-b border-gray-200/50 dark:border-dark-border/50 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl">
+              {/* Chat Header - Fijo */}
+              <div className="p-4 sm:p-6 border-b border-gray-200/50 dark:border-dark-border/50 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl sticky top-0 z-10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     {/* Botón para volver a la lista en pantallas pequeñas */}
@@ -1815,22 +1815,22 @@ export const InboxPage: React.FC = () => {
                     </div>
                   ))
                 )}
-                
-                {/* Footer del área de mensajes */}
-                <div className="mt-4 pt-4 border-t border-gray-200/50 dark:border-gray-700/50">
-                  {isWhatsAppConversation && whatsappStatus?.isConnected && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
-                      <MessageCircle className="w-3 h-3" />
-                      <span>Enviando a través de WhatsApp</span>
-                    </div>
-                  )}
-                  {selectedConv?.isWeb && webChatEnabled && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
-                      <Globe className="w-3 h-3" />
-                      <span>Enviando a través de Web Chat</span>
-                    </div>
-                  )}
-                </div>
+              </div>
+
+              {/* Footer estático del chat */}
+              <div className="px-4 sm:px-6 py-2 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-t border-gray-200/50 dark:border-dark-border/50">
+                {isWhatsAppConversation && whatsappStatus?.isConnected && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
+                    <MessageCircle className="w-3 h-3" />
+                    <span>Enviando a través de WhatsApp</span>
+                  </div>
+                )}
+                {selectedConv?.isWeb && webChatEnabled && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
+                    <Globe className="w-3 h-3" />
+                    <span>Enviando a través de Web Chat</span>
+                  </div>
+                )}
               </div>
 
               {/* Message Input */}
@@ -1843,8 +1843,8 @@ export const InboxPage: React.FC = () => {
                   </div>
                 )}
                 
-                <div className="flex items-end space-x-3">
-                  <button className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <div className="flex items-center space-x-3">
+                  <button className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0">
                     <Paperclip className="w-5 h-5 text-gray-500" />
                   </button>
                   
@@ -1862,7 +1862,7 @@ export const InboxPage: React.FC = () => {
                       }
                       rows={1}
                       disabled={isWhatsAppConversation && !whatsappStatus?.isConnected}
-                      className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
                     />
                     <button className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                       <Smile className="w-5 h-5 text-gray-500" />
@@ -1872,7 +1872,7 @@ export const InboxPage: React.FC = () => {
                   <button
                     onClick={handleSendMessage}
                     disabled={!newMessage.trim() || (isWhatsAppConversation && !whatsappStatus?.isConnected) || (selectedConv?.isWeb && !webChatEnabled)}
-                    className={`p-3 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    className={`p-3 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 h-12 w-12 flex items-center justify-center ${
                       isWhatsAppConversation
                         ? 'bg-green-500 text-white hover:bg-green-600'
                         : selectedConv?.isWeb
