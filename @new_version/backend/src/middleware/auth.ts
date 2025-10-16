@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import { AuthenticatedRequest, User, Tenant } from '../types';
 import { database } from '../config/database';
 

@@ -35,7 +35,7 @@ export class ScheduledMessagesService {
       const result = await database.query(
         `SELECT sm.*, c.whatsapp_id, c.name as contact_name
          FROM scheduled_messages sm
-         LEFT JOIN contacts c ON sm.chat_id = c.whatsapp_id
+         LEFT JOIN contacts c ON sm.contact_id = c.id
          WHERE sm.status = 'pending' 
          AND sm.scheduled_time <= NOW()
          ORDER BY sm.scheduled_time ASC
@@ -119,12 +119,12 @@ export class ScheduledMessagesService {
     }
   }
 
-  public async getUpcomingMessages(userId: number, limit: number = 5): Promise<any[]> {
+  public async getUpcomingMessages(userId: string, limit: number = 5): Promise<any[]> {
     try {
       const result = await database.query(
         `SELECT sm.*, c.name as contact_name, c.whatsapp_id
          FROM scheduled_messages sm
-         LEFT JOIN contacts c ON sm.chat_id = c.whatsapp_id
+         LEFT JOIN contacts c ON sm.contact_id = c.id
          WHERE sm.user_id = $1 
          AND sm.status = 'pending'
          AND sm.scheduled_time > NOW()
@@ -139,12 +139,12 @@ export class ScheduledMessagesService {
     }
   }
 
-  public async getRecentSentMessages(userId: number, limit: number = 10): Promise<any[]> {
+  public async getRecentSentMessages(userId: string, limit: number = 10): Promise<any[]> {
     try {
       const result = await database.query(
         `SELECT sm.*, c.name as contact_name, c.whatsapp_id
          FROM scheduled_messages sm
-         LEFT JOIN contacts c ON sm.chat_id = c.whatsapp_id
+         LEFT JOIN contacts c ON sm.contact_id = c.id
          WHERE sm.user_id = $1 
          AND sm.status = 'sent'
          ORDER BY sm.sent_at DESC
@@ -158,12 +158,12 @@ export class ScheduledMessagesService {
     }
   }
 
-  public async getFailedMessages(userId: number, limit: number = 10): Promise<any[]> {
+  public async getFailedMessages(userId: string, limit: number = 10): Promise<any[]> {
     try {
       const result = await database.query(
         `SELECT sm.*, c.name as contact_name, c.whatsapp_id
          FROM scheduled_messages sm
-         LEFT JOIN contacts c ON sm.chat_id = c.whatsapp_id
+         LEFT JOIN contacts c ON sm.contact_id = c.id
          WHERE sm.user_id = $1 
          AND sm.status = 'failed'
          ORDER BY sm.updated_at DESC
@@ -177,7 +177,7 @@ export class ScheduledMessagesService {
     }
   }
 
-  public async retryFailedMessage(messageId: number, userId: number): Promise<boolean> {
+  public async retryFailedMessage(messageId: string, userId: string): Promise<boolean> {
     try {
       // Verificar que el mensaje existe, pertenece al usuario y está fallido
       const message = await database.get(

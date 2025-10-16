@@ -360,3 +360,6 @@ export class DashboardController {
     }
   }
 }
+
+// Exportar instancia del controlador
+export const dashboardController = new DashboardController();

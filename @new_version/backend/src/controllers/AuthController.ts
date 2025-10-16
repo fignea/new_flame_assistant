@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
+import * as jwt from 'jsonwebtoken';
 import { database } from '../config/database';
 import { generateToken } from '../middleware/auth';
 import { 
@@ -51,17 +52,8 @@ export class AuthController {
         });
       }
 
-      // Verificar que el tenant esté activo
-      if (user.tenant_status !== 'active') {
-        return res.status(403).json({
-          success: false,
-          message: 'Tenant suspendido o inactivo'
-        });
-      }
-
       // Verificar contraseña
       const isValidPassword = await bcrypt.compare(password, user.password_hash);
-      
       if (!isValidPassword) {
         return res.status(401).json({
           success: false,
@@ -69,29 +61,34 @@ export class AuthController {
         });
       }
 
-      // Actualizar último login
-      await database.run(
-        'UPDATE users SET last_login_at = NOW() WHERE id = $1',
-        [user.id]
-      );
+      // Verificar que el tenant esté activo
+      if (user.tenant_status !== 'active') {
+        return res.status(401).json({
+          success: false,
+          message: 'Tenant inactivo'
+        });
+      }
 
-      // Generar token
-      const userData: User = {
+      // Generar tokens
+      const accessToken = generateToken(user, user);
+      const refreshToken = generateToken(user, user); // Por simplicidad, usamos el mismo token
+
+      // Preparar respuesta
+      const userResponse: User = {
         id: user.id,
         tenant_id: user.tenant_id,
         email: user.email,
-        password_hash: user.password_hash,
         name: user.name,
         role: user.role,
-        permissions: user.permissions || {},
+        permissions: user.permissions,
         profile: {},
         preferences: {},
         is_active: user.is_active,
-        created_at: '',
-        updated_at: ''
+        created_at: user.created_at,
+        updated_at: user.updated_at
       };
 
-      const tenantData: Tenant = {
+      const tenantResponse: Tenant = {
         id: user.tenant_id,
         slug: user.slug,
         name: user.tenant_name,
@@ -99,26 +96,20 @@ export class AuthController {
         status: user.tenant_status,
         settings: {},
         billing_info: {},
-        limits: user.limits || {},
-        created_at: '',
-        updated_at: ''
+        limits: user.limits,
+        created_at: user.created_at,
+        updated_at: user.updated_at
       };
 
-      const token = generateToken(userData, tenantData);
-
-      // Respuesta exitosa (sin incluir la contraseña)
-      const { password_hash: _, ...userWithoutPassword } = userData;
-      
       return res.json({
         success: true,
         data: {
-          user: userWithoutPassword,
-          tenant: tenantData,
-          access_token: token,
-          refresh_token: token, // Por ahora usamos el mismo token
-          expires_in: 7 * 24 * 60 * 60 // 7 días en segundos
-        },
-        message: 'Inicio de sesión exitoso'
+          user: userResponse,
+          tenant: tenantResponse,
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_in: 7 * 24 * 60 * 60
+        }
       });
 
     } catch (error) {
@@ -132,7 +123,7 @@ export class AuthController {
 
   public async register(req: Request<{}, ApiResponse<AuthResponse>, RegisterRequest>, res: Response<ApiResponse<AuthResponse>>) {
     try {
-      const { email, password, name, tenant_slug, role = 'agent' } = req.body;
+      const { email, password, name, tenant_slug } = req.body;
 
       // Validar datos de entrada
       if (!email || !password || !name) {
@@ -142,99 +133,125 @@ export class AuthController {
         });
       }
 
-      // Buscar tenant por slug
-      let tenant: any;
+      // Verificar si el usuario ya existe
+      const existingUser = await database.get(
+        'SELECT id FROM users WHERE email = $1',
+        [email.toLowerCase()]
+      );
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'El usuario ya existe'
+        });
+      }
+
+      // Buscar o crear tenant
+      let tenant;
       if (tenant_slug) {
+        // Buscar tenant existente
         tenant = await database.get(
           'SELECT * FROM tenants WHERE slug = $1 AND deleted_at IS NULL',
           [tenant_slug]
         );
         
         if (!tenant) {
-          return res.status(404).json({
+          return res.status(400).json({
             success: false,
             message: 'Tenant no encontrado'
           });
         }
-
-        if (tenant.status !== 'active') {
-          return res.status(403).json({
-            success: false,
-            message: 'Tenant no está activo'
-          });
-        }
       } else {
-        // Si no se proporciona tenant, crear uno nuevo
+        // Crear nuevo tenant
         const tenantData: CreateTenantRequest = {
           name: `${name}'s Organization`,
+          domain: undefined,
           plan_type: 'starter',
-          settings: { timezone: 'America/Mexico_City', language: 'es' },
-          limits: { max_users: 10, max_contacts: 1000, max_conversations: 5000 }
+          settings: {},
+          billing_info: {},
+          limits: {
+            max_users: 5,
+            max_contacts: 100,
+            max_conversations: 50
+          }
         };
 
-        const tenantId = await this.createTenant(tenantData);
-        tenant = await database.get('SELECT * FROM tenants WHERE id = $1', [tenantId]);
+        const newTenant = await database.run(`
+          INSERT INTO tenants (name, slug, plan_type, settings, billing_info, limits)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING *
+        `, [
+          tenantData.name,
+          `org-${Date.now()}`,
+          tenantData.plan_type,
+          JSON.stringify(tenantData.settings),
+          JSON.stringify(tenantData.billing_info),
+          JSON.stringify(tenantData.limits)
+        ]);
+
+        tenant = newTenant;
       }
 
-      // Verificar si el usuario ya existe en este tenant
-      const existingUser = await database.get(
-        'SELECT id FROM users WHERE email = $1 AND tenant_id = $2',
-        [email.toLowerCase(), tenant.id]
-      );
-
-      if (existingUser) {
-        return res.status(409).json({
-          success: false,
-          message: 'El usuario ya existe en este tenant'
-        });
-      }
-
-      // Verificar límites del tenant
-      const userCount = await database.get(
-        'SELECT COUNT(*) as count FROM users WHERE tenant_id = $1 AND deleted_at IS NULL',
-        [tenant.id]
-      ) as any;
-
-      if (userCount.count >= tenant.limits.max_users) {
-        return res.status(403).json({
-          success: false,
-          message: 'Límite de usuarios alcanzado para este tenant'
-        });
-      }
-
-      // Encriptar contraseña
-      const saltRounds = 10;
+      // Hash de la contraseña
+      const saltRounds = 12;
       const passwordHash = await bcrypt.hash(password, saltRounds);
 
       // Crear usuario
-      const userId = await database.run(`
-        INSERT INTO users (tenant_id, email, password_hash, name, role, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, TRUE, NOW(), NOW())
-        RETURNING id
-      `, [tenant.id, email.toLowerCase(), passwordHash, name, role]);
+      const newUser = await database.run(`
+        INSERT INTO users (tenant_id, email, password_hash, name, role, permissions, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `, [
+        tenant.id,
+        email.toLowerCase(),
+        passwordHash,
+        name,
+        'owner',
+        JSON.stringify({}),
+        true
+      ]);
 
-      // Obtener usuario creado
-      const newUser = await database.get(
-        'SELECT id, tenant_id, email, name, role, permissions, is_active, created_at, updated_at FROM users WHERE id = $1',
-        [userId]
-      ) as User;
+      // Generar tokens
+      const accessToken = generateToken(newUser, tenant);
+      const refreshToken = generateToken(newUser, tenant);
 
-      // Generar token
-      const token = generateToken(newUser, tenant);
+      // Preparar respuesta
+      const userResponse: User = {
+        id: newUser.id,
+        tenant_id: newUser.tenant_id,
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role,
+        permissions: newUser.permissions,
+        profile: {},
+        preferences: {},
+        is_active: newUser.is_active,
+        created_at: newUser.created_at,
+        updated_at: newUser.updated_at
+      };
 
-      // Respuesta exitosa
-      const { password_hash: _, ...userWithoutPassword } = newUser;
-      
+      const tenantResponse: Tenant = {
+        id: tenant.id,
+        slug: tenant.slug,
+        name: tenant.name,
+        plan_type: tenant.plan_type,
+        status: tenant.status,
+        settings: tenant.settings,
+        billing_info: tenant.billing_info,
+        limits: tenant.limits,
+        created_at: tenant.created_at,
+        updated_at: tenant.updated_at
+      };
+
       return res.status(201).json({
         success: true,
         data: {
-          user: userWithoutPassword,
-          tenant: tenant,
-          access_token: token,
-          refresh_token: token,
+          user: userResponse,
+          tenant: tenantResponse,
+          access_token: accessToken,
+          refresh_token: refreshToken,
           expires_in: 7 * 24 * 60 * 60
-        },
-        message: 'Usuario registrado exitosamente'
+        }
       });
 
     } catch (error) {
@@ -246,100 +263,71 @@ export class AuthController {
     }
   }
 
-  public async createTenant(tenantData: CreateTenantRequest): Promise<string> {
+  public async getProfile(req: Request, res: Response) {
     try {
-      // Generar slug único
-      const baseSlug = tenantData.name.toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-      
-      let slug = baseSlug;
-      let counter = 0;
-      
-      while (await this.tenantSlugExists(slug)) {
-        counter++;
-        slug = `${baseSlug}-${counter}`;
-      }
+      const user = (req as any).user;
+      const tenant = (req as any).tenant;
 
-      // Crear tenant
-      const tenantId = await database.run(`
-        INSERT INTO tenants (slug, name, domain, plan_type, status, settings, billing_info, limits, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, NOW(), NOW())
-        RETURNING id
-      `, [
-        slug,
-        tenantData.name,
-        tenantData.domain || null,
-        tenantData.plan_type || 'starter',
-        JSON.stringify(tenantData.settings || {}),
-        JSON.stringify(tenantData.billing_info || {}),
-        JSON.stringify(tenantData.limits || {})
-      ]);
-
-      return tenantId;
-    } catch (error) {
-      console.error('Error creating tenant:', error);
-      throw error;
-    }
-  }
-
-  private async tenantSlugExists(slug: string): Promise<boolean> {
-    const result = await database.get(
-      'SELECT id FROM tenants WHERE slug = $1',
-      [slug]
-    );
-    return !!result;
-  }
-
-  public async getTenants(req: Request, res: Response<ApiResponse<Tenant[]>>) {
-    try {
-      const tenants = await database.all(
-        'SELECT * FROM tenants WHERE deleted_at IS NULL ORDER BY created_at DESC'
-      ) as Tenant[];
-
-      return res.json({
-        success: true,
-        data: tenants
-      });
-    } catch (error) {
-      console.error('Get tenants error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Error obteniendo tenants'
-      });
-    }
-  }
-
-  public async getTenantBySlug(req: Request, res: Response<ApiResponse<Tenant>>) {
-    try {
-      const { slug } = req.params;
-
-      const tenant = await database.get(
-        'SELECT * FROM tenants WHERE slug = $1 AND deleted_at IS NULL',
-        [slug]
-      ) as Tenant;
-
-      if (!tenant) {
-        return res.status(404).json({
+      if (!user || !tenant) {
+        return res.status(401).json({
           success: false,
-          message: 'Tenant no encontrado'
+          message: 'Usuario no autenticado'
         });
       }
 
       return res.json({
         success: true,
-        data: tenant
+        data: {
+          user,
+          tenant
+        }
       });
     } catch (error) {
-      console.error('Get tenant error:', error);
+      console.error('Get profile error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error obteniendo tenant'
+        message: 'Error interno del servidor'
       });
     }
   }
 
-  public async refreshToken(req: Request, res: Response<ApiResponse<{ access_token: string; expires_in: number }>>) {
+  public async updateProfile(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const { name, email } = req.body;
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      // Actualizar perfil
+      const updatedUser = await database.run(`
+        UPDATE users 
+        SET name = $1, email = $2, updated_at = NOW()
+        WHERE id = $3
+        RETURNING *
+      `, [name || user.name, email || user.email, user.id]);
+
+      return res.json({
+        success: true,
+        data: {
+          user: updatedUser,
+          tenant: (req as any).tenant
+        }
+      });
+    } catch (error) {
+      console.error('Update profile error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
+  public async refreshToken(req: Request, res: Response) {
     try {
       const { refresh_token } = req.body;
 
@@ -401,7 +389,7 @@ export class AuthController {
     }
   }
 
-  public async logout(req: Request, res: Response<ApiResponse>) {
+  public async logout(req: Request, res: Response) {
     try {
       // Por ahora solo devolvemos éxito
       // En el futuro se puede implementar blacklist de tokens
@@ -418,3 +406,6 @@ export class AuthController {
     }
   }
 }
+
+// Exportar instancia del controlador
+export const authController = new AuthController();

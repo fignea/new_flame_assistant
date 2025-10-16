@@ -5,11 +5,11 @@ import { authenticate } from '../middleware/auth';
 const router = Router();
 
 // Rutas públicas
-router.post('/login', authController.login.bind(authController));
-router.post('/register', authController.register.bind(authController));
+router.post('/login', (req, res) => authController.login(req, res));
+router.post('/register', (req, res) => authController.register(req, res));
 
 // Rutas protegidas
-router.get('/profile', authenticate, authController.getProfile.bind(authController));
-router.put('/profile', authenticate, authController.updateProfile.bind(authController));
+router.get('/profile', authenticate, (req, res) => authController.getProfile(req, res));
+router.put('/profile', authenticate, (req, res) => authController.updateProfile(req, res));
 
 export default router;

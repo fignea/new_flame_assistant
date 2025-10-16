@@ -176,10 +176,10 @@ export class WhatsAppController {
         });
       }
 
-      // Verificar que el contacto existe y pertenece al usuario
+      // Verificar que el contacto existe y pertenece al tenant
       const contact = await database.get(
-        'SELECT whatsapp_id FROM contacts WHERE user_id = $1 AND whatsapp_id = $2',
-        [userId, contactId]
+        'SELECT whatsapp_id FROM contacts WHERE tenant_id = $1 AND whatsapp_id = $2',
+        [req.tenant?.id, contactId]
       );
 
       if (!contact) {
@@ -234,10 +234,10 @@ export class WhatsAppController {
       let query = `
         SELECT id, whatsapp_id, name, phone_number, is_group, avatar_url, created_at, updated_at
         FROM contacts 
-        WHERE user_id = $1
+        WHERE tenant_id = $1
       `;
-      let countQuery = 'SELECT COUNT(*) as total FROM contacts WHERE user_id = $1';
-      let params: any[] = [userId];
+      let countQuery = 'SELECT COUNT(*) as total FROM contacts WHERE tenant_id = $1';
+      let params: any[] = [req.tenant?.id];
 
       if (search) {
         query += ' AND (name ILIKE $2 OR phone_number ILIKE $3 OR whatsapp_id ILIKE $4)';
@@ -310,8 +310,8 @@ export class WhatsAppController {
       
       // Verificar si el contacto ya existe
       const existingContact = await database.get(
-        'SELECT id FROM contacts WHERE user_id = $1 AND whatsapp_id = $2',
-        [userId, finalWhatsappId]
+        'SELECT id FROM contacts WHERE tenant_id = $1 AND whatsapp_id = $2',
+        [req.tenant?.id, finalWhatsappId]
       );
 
       if (existingContact) {
@@ -323,9 +323,9 @@ export class WhatsAppController {
 
       // Crear el contacto
       const result = await database.run(
-        `INSERT INTO contacts (user_id, whatsapp_id, name, phone_number, is_group, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id`,
-        [userId, finalWhatsappId, name, phone_number || null, is_group]
+        `INSERT INTO contacts (tenant_id, user_id, whatsapp_id, name, phone_number, is_group, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id`,
+        [req.tenant?.id, userId, finalWhatsappId, name, phone_number || null, is_group]
       );
 
       // Obtener el contacto creado
@@ -366,8 +366,8 @@ export class WhatsAppController {
       const contact = await database.get(
         `SELECT id, whatsapp_id, name, phone_number, is_group, avatar_url, created_at, updated_at
          FROM contacts 
-         WHERE id = $1 AND user_id = $2`,
-        [id, userId]
+         WHERE id = $1 AND tenant_id = $2`,
+        [id, req.tenant?.id]
       );
 
       if (!contact) {
@@ -415,10 +415,10 @@ export class WhatsAppController {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = (page - 1) * limit;
 
-      // Verificar que el contacto existe y pertenece al usuario
+      // Verificar que el contacto existe y pertenece al tenant
       const contact = await database.get(
-        'SELECT id, whatsapp_id FROM contacts WHERE user_id = $1 AND (id = $2 OR whatsapp_id = $3)',
-        [userId, contactId, contactId]
+        'SELECT id, whatsapp_id FROM contacts WHERE tenant_id = $1 AND (id = $2 OR whatsapp_id = $3)',
+        [req.tenant?.id, contactId, contactId]
       );
 
       if (!contact) {
@@ -433,14 +433,14 @@ export class WhatsAppController {
           `SELECT id, whatsapp_message_id, content, message_type, is_from_me, 
                   timestamp, created_at
            FROM messages 
-           WHERE user_id = $1 AND chat_id = $2
+           WHERE tenant_id = $1 AND chat_id = $2
            ORDER BY timestamp DESC 
            LIMIT $3 OFFSET $4`,
-          [userId, contactId, limit, offset]
+          [req.tenant?.id, contactId, limit, offset]
         ),
         database.get(
-          'SELECT COUNT(*) as total FROM messages WHERE user_id = $1 AND chat_id = $2',
-          [userId, contactId]
+          'SELECT COUNT(*) as total FROM messages WHERE tenant_id = $1 AND chat_id = $2',
+          [req.tenant?.id, contactId]
         )
       ]);
 
@@ -507,9 +507,9 @@ export class WhatsAppController {
       }
 
       const [contactsCount, messagesCount, scheduledCount] = await Promise.all([
-        database.get('SELECT COUNT(*) as count FROM contacts WHERE user_id = $1', [userId]),
-        database.get('SELECT COUNT(*) as count FROM messages WHERE user_id = $1', [userId]),
-        database.get('SELECT COUNT(*) as count FROM scheduled_messages WHERE user_id = $1 AND status = $2', [userId, 'pending'])
+        database.get('SELECT COUNT(*) as count FROM contacts WHERE tenant_id = $1', [req.tenant?.id]),
+        database.get('SELECT COUNT(*) as count FROM messages WHERE tenant_id = $1', [req.tenant?.id]),
+        database.get('SELECT COUNT(*) as count FROM scheduled_messages WHERE tenant_id = $1 AND status = $2', [req.tenant?.id, 'pending'])
       ]);
 
       const whatsappStats = whatsappService.getStats();
@@ -588,12 +588,12 @@ export class WhatsAppController {
            COUNT(m.id) as message_count,
            MAX(m.timestamp) as last_message_time
          FROM messages m
-         LEFT JOIN contacts c ON c.whatsapp_id = m.chat_id AND c.user_id = m.user_id
-         WHERE m.user_id = $1
+         LEFT JOIN contacts c ON c.whatsapp_id = m.chat_id AND c.tenant_id = m.tenant_id
+         WHERE m.tenant_id = $1
          GROUP BY COALESCE(c.chat_hash, m.chat_hash), m.chat_id, c.name, c.phone_number, c.is_group
          ORDER BY last_message_time DESC NULLS LAST
          LIMIT $2 OFFSET $3`,
-        [userId, limit, offset]
+        [req.tenant?.id, limit, offset]
       );
 
       // Formatear los chats para el frontend usando chat_hash como ID
@@ -676,8 +676,8 @@ export class WhatsAppController {
       if (chatId.includes('@')) {
         // Es un whatsapp_id, buscar el chat_hash correspondiente
         const contactResult = await database.query(
-          'SELECT chat_hash FROM contacts WHERE whatsapp_id = $1 AND user_id = $2',
-          [chatId, userId]
+          'SELECT chat_hash FROM contacts WHERE whatsapp_id = $1 AND tenant_id = $2',
+          [chatId, req.tenant?.id]
         );
         
         if (contactResult.rows.length > 0) {
@@ -690,8 +690,8 @@ export class WhatsAppController {
       } else {
         // Es un chat_hash, buscar el whatsapp_id correspondiente
         const contactResult = await database.query(
-          'SELECT whatsapp_id FROM contacts WHERE chat_hash = $1 AND user_id = $2',
-          [chatId, userId]
+          'SELECT whatsapp_id FROM contacts WHERE chat_hash = $1 AND tenant_id = $2',
+          [chatId, req.tenant?.id]
         );
         
         if (contactResult.rows.length > 0) {
@@ -719,11 +719,11 @@ export class WhatsAppController {
            c.whatsapp_id,
            m.chat_hash
          FROM messages m
-         LEFT JOIN contacts c ON c.whatsapp_id = m.chat_id AND c.user_id = m.user_id
-         WHERE m.user_id = $1 AND (m.chat_hash = $2 OR m.chat_id = $3)
+         LEFT JOIN contacts c ON c.whatsapp_id = m.chat_id AND c.tenant_id = m.tenant_id
+         WHERE m.tenant_id = $1 AND (m.chat_hash = $2 OR m.chat_id = $3)
          ORDER BY m.timestamp ASC
          LIMIT $4 OFFSET $5`,
-        [userId, chatHash, whatsappId, limit, offset]
+        [req.tenant?.id, chatHash, whatsappId, limit, offset]
       );
 
       // Formatear los mensajes para el frontend
@@ -813,8 +813,8 @@ export class WhatsAppController {
 
       // Consulta simplificada para evitar problemas de parámetros
       const totalMessages = await database.get(
-        `SELECT COUNT(*) as count FROM messages WHERE user_id = $1`,
-        [userId]
+        `SELECT COUNT(*) as count FROM messages WHERE tenant_id = $1`,
+        [req.tenant?.id]
       );
 
       console.log('Message stats results:', {
@@ -855,10 +855,10 @@ export class WhatsAppController {
         });
       }
 
-      // Verificar que el contacto pertenece al usuario
+      // Verificar que el contacto pertenece al tenant
       const contact = await database.get(
-        'SELECT * FROM contacts WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        'SELECT * FROM contacts WHERE id = $1 AND tenant_id = $2',
+        [id, req.tenant?.id]
       );
 
       if (!contact) {
@@ -901,10 +901,10 @@ export class WhatsAppController {
         });
       }
 
-      // Verificar que el contacto pertenece al usuario
+      // Verificar que el contacto pertenece al tenant
       const contact = await database.get(
-        'SELECT * FROM contacts WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        'SELECT * FROM contacts WHERE id = $1 AND tenant_id = $2',
+        [id, req.tenant?.id]
       );
 
       if (!contact) {
@@ -947,10 +947,10 @@ export class WhatsAppController {
         });
       }
 
-      // Verificar que el contacto pertenece al usuario
+      // Verificar que el contacto pertenece al tenant
       const contact = await database.get(
-        'SELECT * FROM contacts WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        'SELECT * FROM contacts WHERE id = $1 AND tenant_id = $2',
+        [id, req.tenant?.id]
       );
 
       if (!contact) {
@@ -962,8 +962,8 @@ export class WhatsAppController {
 
       // Eliminar el contacto
       await database.query(
-        'DELETE FROM contacts WHERE id = $1',
-        [id]
+        'DELETE FROM contacts WHERE id = $1 AND tenant_id = $2',
+        [id, req.tenant?.id]
       );
 
       return res.json({
@@ -994,10 +994,10 @@ export class WhatsAppController {
         });
       }
 
-      // Verificar que el contacto pertenece al usuario
+      // Verificar que el contacto pertenece al tenant
       const contact = await database.get(
-        'SELECT * FROM contacts WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        'SELECT * FROM contacts WHERE id = $1 AND tenant_id = $2',
+        [id, req.tenant?.id]
       );
 
       if (!contact) {
@@ -1193,8 +1193,8 @@ export class WhatsAppController {
       const message = await database.query(
         `SELECT media_url, message_type, whatsapp_message_id 
          FROM messages 
-         WHERE whatsapp_message_id = $1 AND user_id = $2`,
-        [messageId, userId]
+         WHERE whatsapp_message_id = $1 AND tenant_id = $2`,
+        [messageId, req.tenant?.id]
       );
 
       if (message.rows.length === 0) {

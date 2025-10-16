@@ -15,8 +15,8 @@ export class ConfigController {
       }
 
       const user = await database.get(
-        'SELECT id, email, name, created_at FROM users WHERE id = ?',
-        [userId]
+        'SELECT id, email, name, created_at FROM users WHERE id = $1 AND tenant_id = $2',
+        [userId, req.tenant?.id]
       );
 
       if (!user) {
@@ -62,8 +62,8 @@ export class ConfigController {
       // Verificar si el email ya existe (si se está actualizando)
       if (email) {
         const existingUser = await database.get(
-          'SELECT id FROM users WHERE email = ? AND id != ?',
-          [email, userId]
+          'SELECT id FROM users WHERE email = $1 AND id != $2 AND tenant_id = $3',
+          [email, userId, req.tenant?.id]
         );
 
         if (existingUser) {
@@ -91,14 +91,14 @@ export class ConfigController {
       params.push(userId);
 
       await database.run(
-        `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
+        `UPDATE users SET ${updates.join(', ')} WHERE id = $${params.length - 1} AND tenant_id = $${params.length}`,
         params
       );
 
       // Obtener el usuario actualizado
       const updatedUser = await database.get(
-        'SELECT id, email, name, created_at FROM users WHERE id = ?',
-        [userId]
+        'SELECT id, email, name, created_at FROM users WHERE id = $1 AND tenant_id = $2',
+        [userId, req.tenant?.id]
       );
 
       return res.json({
@@ -144,8 +144,8 @@ export class ConfigController {
 
       // Obtener usuario con contraseña
       const user = await database.get(
-        'SELECT password FROM users WHERE id = ?',
-        [userId]
+        'SELECT password FROM users WHERE id = $1 AND tenant_id = $2',
+        [userId, req.tenant?.id]
       );
 
       if (!user) {
@@ -213,24 +213,24 @@ export class ConfigController {
         platform: process.platform
       };
 
-      // Contar usuarios
-      const usersCount = await database.get('SELECT COUNT(*) as count FROM users');
+      // Contar usuarios del tenant
+      const usersCount = await database.get('SELECT COUNT(*) as count FROM users WHERE tenant_id = $1', [req.tenant?.id]);
       stats.totalUsers = usersCount?.count || 0;
 
       // Contar contactos
-      const contactsCount = await database.get('SELECT COUNT(*) as count FROM contacts WHERE user_id = ?', [userId]);
+      const contactsCount = await database.get('SELECT COUNT(*) as count FROM contacts WHERE tenant_id = $1', [req.tenant?.id]);
       stats.totalContacts = contactsCount?.count || 0;
 
       // Contar mensajes
-      const messagesCount = await database.get('SELECT COUNT(*) as count FROM messages WHERE user_id = ?', [userId]);
+      const messagesCount = await database.get('SELECT COUNT(*) as count FROM messages WHERE tenant_id = $1', [req.tenant?.id]);
       stats.totalMessages = messagesCount?.count || 0;
 
       // Contar programación
-      const scheduledCount = await database.get('SELECT COUNT(*) as count FROM scheduled_messages WHERE user_id = ?', [userId]);
+      const scheduledCount = await database.get('SELECT COUNT(*) as count FROM scheduled_messages WHERE tenant_id = $1', [req.tenant?.id]);
       stats.totalScheduledMessages = scheduledCount?.count || 0;
 
       // Contar asistentes
-      const assistantsCount = await database.get('SELECT COUNT(*) as count FROM assistants WHERE user_id = ?', [userId]);
+      const assistantsCount = await database.get('SELECT COUNT(*) as count FROM assistants WHERE tenant_id = $1', [req.tenant?.id]);
       stats.totalAssistants = assistantsCount?.count || 0;
 
       return res.json({

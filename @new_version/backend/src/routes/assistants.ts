@@ -8,16 +8,11 @@ const router = Router();
 router.use(authenticate);
 
 // Rutas de asistentes
-router.post('/', assistantsController.create);
-router.get('/', assistantsController.getAll);
-router.get('/stats', assistantsController.getAllStats);
-router.get('/models', assistantsController.getAvailableModels);
-router.post('/validate-key', assistantsController.validateApiKey);
-router.get('/:id', assistantsController.getById);
-router.put('/:id', assistantsController.update);
-router.delete('/:id', assistantsController.delete);
-router.patch('/:id/toggle-status', assistantsController.toggleStatus);
-router.get('/:id/stats', assistantsController.getStats);
-router.get('/:id/usage', assistantsController.getUsageInfo);
+router.post('/', (req, res) => assistantsController.create(req, res));
+router.get('/', (req, res) => assistantsController.getAll(req, res));
+router.get('/:id', (req, res) => assistantsController.getById(req, res));
+router.put('/:id', (req, res) => assistantsController.update(req, res));
+router.delete('/:id', (req, res) => assistantsController.delete(req, res));
+router.get('/:id/stats', (req, res) => assistantsController.getStats(req, res));
 
 export default router;

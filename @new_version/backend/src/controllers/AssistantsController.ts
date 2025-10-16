@@ -472,3 +472,6 @@ export class AssistantsController {
     }
   }
 }
+
+// Exportar instancia del controlador
+export const assistantsController = new AssistantsController();

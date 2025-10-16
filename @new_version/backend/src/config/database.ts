@@ -30,10 +30,11 @@ export const initializeDatabase = async (): Promise<void> => {
     logger.info('✅ Base de datos PostgreSQL conectada exitosamente');
     
     // Configurar parámetros de sesión para multi-tenancy
-    await pool.query(`
-      ALTER DATABASE ${dbConfig.database} SET app.current_tenant_id = NULL;
-      ALTER DATABASE ${dbConfig.database} SET app.current_user_id = NULL;
-    `);
+    // TODO: Implementar configuración de parámetros de sesión
+    // await pool.query(`
+    //   ALTER DATABASE ${dbConfig.database} SET app.current_tenant_id = NULL;
+    //   ALTER DATABASE ${dbConfig.database} SET app.current_user_id = NULL;
+    // `);
     
   } catch (error) {
     logger.error('❌ Error conectando a la base de datos:', error);
@@ -96,26 +97,28 @@ export const transaction = async <T>(callback: (client: PoolClient) => Promise<T
 
 // Configurar contexto del tenant para una conexión
 export const setTenantContext = async (tenantId: string, userId?: string): Promise<void> => {
-  const client = await getClient();
-  try {
-    await client.query('SET app.current_tenant_id = $1', [tenantId]);
-    if (userId) {
-      await client.query('SET app.current_user_id = $1', [userId]);
-    }
-  } finally {
-    client.release();
-  }
+  // TODO: Implementar configuración de contexto de tenant
+  // const client = await getClient();
+  // try {
+  //   await client.query('SET app.current_tenant_id = $1', [tenantId]);
+  //   if (userId) {
+  //     await client.query('SET app.current_user_id = $1', [userId]);
+  //   }
+  // } finally {
+  //   client.release();
+  // }
 };
 
 // Limpiar contexto del tenant
 export const clearTenantContext = async (): Promise<void> => {
-  const client = await getClient();
-  try {
-    await client.query('SET app.current_tenant_id = NULL');
-    await client.query('SET app.current_user_id = NULL');
-  } finally {
-    client.release();
-  }
+  // TODO: Implementar limpieza de contexto de tenant
+  // const client = await getClient();
+  // try {
+  //   await client.query('SET app.current_tenant_id = NULL');
+  //   await client.query('SET app.current_user_id = NULL');
+  // } finally {
+  //   client.release();
+  // }
 };
 
 // Verificar si una tabla existe

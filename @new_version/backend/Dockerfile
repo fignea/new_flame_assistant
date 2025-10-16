@@ -1,5 +1,5 @@
 # Backend Dockerfile
-FROM node:20-alpine
+FROM node:20-alpine as base
 
 WORKDIR /app
 
@@ -28,6 +28,43 @@ RUN npm ci
 # Copiar código fuente
 COPY . .
 
+# Etapa de desarrollo
+FROM base as development
+
+# Variables de entorno para desarrollo
+ENV NODE_ENV=development
+ENV PORT=3001
+ENV DB_HOST=postgres
+ENV DB_PORT=5432
+ENV DB_NAME=flame_assistant_dev
+ENV DB_USER=flame_user
+ENV DB_PASSWORD=flame_password
+ENV REDIS_URL=redis://redis:6379
+ENV WHATSAPP_SESSION_PATH=/app/sessions
+ENV JWT_SECRET=flame-assistant-dev-jwt-key-2024
+ENV JWT_EXPIRES_IN=7d
+ENV CORS_ORIGIN=http://localhost:3000
+ENV LOG_LEVEL=debug
+
+# Crear directorios necesarios con permisos correctos
+RUN mkdir -p data sessions logs uploads uploads/thumbnails && \
+    chown -R node:node data sessions logs uploads
+
+# Hacer ejecutable el script de migración
+RUN chmod +x scripts/migrate-database.js
+
+# Cambiar a usuario node por seguridad
+USER node
+
+# Exponer puerto
+EXPOSE 3001
+
+# Comando de desarrollo
+CMD ["npm", "run", "dev"]
+
+# Etapa de producción
+FROM base as production
+
 # Compilar TypeScript
 RUN npm run build
 
@@ -49,11 +86,12 @@ ENV NODE_ENV=production
 ENV PORT=3001
 ENV DB_HOST=postgres
 ENV DB_PORT=5432
-ENV DB_NAME=whatsapp_manager
-ENV DB_USER=whatsapp_user
-ENV DB_PASSWORD=whatsapp_password
+ENV DB_NAME=flame_assistant
+ENV DB_USER=flame_user
+ENV DB_PASSWORD=flame_password
+ENV REDIS_URL=redis://redis:6379
 ENV WHATSAPP_SESSION_PATH=/app/sessions
-ENV JWT_SECRET=whatsapp-manager-docker-secret-2024
+ENV JWT_SECRET=flame-assistant-docker-secret-2024
 ENV JWT_EXPIRES_IN=7d
 ENV CORS_ORIGIN=http://localhost
 ENV LOG_LEVEL=info
