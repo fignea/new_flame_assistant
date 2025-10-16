@@ -199,36 +199,78 @@ export const InboxPage: React.FC = () => {
       console.log('Socket.IO message received:', message);
       
       if (message.type === 'whatsapp:message') {
-        // Agregar nuevo mensaje a la lista
         const newMessage = message.data;
-        setWhatsappMessages(prev => [...prev, newMessage]);
         
-        // Actualizar la lista de chats si es necesario
-        if (newMessage.chatId) {
-          setWhatsappChats(prev => {
-            const existingChat = prev.find(chat => chat.id === newMessage.chatId);
-            if (existingChat) {
-              // Actualizar el chat existente
-              return prev.map(chat => 
-                chat.id === newMessage.chatId 
-                  ? { ...chat, lastMessage: newMessage.content, lastMessageTime: new Date(newMessage.timestamp * 1000) }
-                  : chat
-              );
-            } else {
-              // Crear nuevo chat si no existe
-              const newChat = {
-                id: newMessage.chatId,
-                name: newMessage.senderName || newMessage.chatId.split('@')[0],
-                phoneNumber: newMessage.chatId.includes('@s.whatsapp.net') ? newMessage.chatId.split('@')[0] : undefined,
-                lastMessage: newMessage.content,
-                lastMessageTime: new Date(newMessage.timestamp * 1000),
-                unreadCount: 0,
-                isGroup: newMessage.chatId.includes('@g.us'),
-                avatar: undefined
-              };
-              return [newChat, ...prev];
-            }
-          });
+        // Verificar si es un mensaje real (con contenido o media) o solo una actualización de estado
+        const isRealMessage = (newMessage.content && newMessage.content.trim() !== '') || 
+                              (newMessage.messageType && ['audio', 'image', 'video', 'document', 'sticker'].includes(newMessage.messageType)) ||
+                              (newMessage.mediaUrl && newMessage.mediaUrl.trim() !== '');
+        
+        // Filtrar solo actualizaciones de estado que no son mensajes reales
+        const isStatusUpdate = newMessage.messageType === 'read_receipt' || 
+                              newMessage.messageType === 'delivery_receipt' ||
+                              newMessage.messageType === 'protocol_update' ||
+                              (!newMessage.content && !newMessage.mediaUrl && !newMessage.messageType);
+        
+        if (isRealMessage && !isStatusUpdate) {
+          // Solo agregar mensajes reales a la lista
+          setWhatsappMessages(prev => [...prev, newMessage]);
+          
+          // Actualizar la lista de chats solo para mensajes reales
+          if (newMessage.chatId) {
+            setWhatsappChats(prev => {
+              const existingChat = prev.find(chat => chat.id === newMessage.chatId);
+              if (existingChat) {
+                // Actualizar el chat existente
+                const lastMessageText = newMessage.content || 
+                  (newMessage.messageType === 'audio' ? '🎵 Audio' :
+                   newMessage.messageType === 'image' ? '📷 Imagen' :
+                   newMessage.messageType === 'video' ? '🎥 Video' :
+                   newMessage.messageType === 'document' ? '📄 Documento' :
+                   newMessage.messageType === 'sticker' ? '😀 Sticker' :
+                   '📎 Archivo');
+                
+                return prev.map(chat => 
+                  chat.id === newMessage.chatId 
+                    ? { ...chat, lastMessage: lastMessageText, lastMessageTime: new Date(newMessage.timestamp * 1000) }
+                    : chat
+                );
+              } else {
+                // Crear nuevo chat solo si es un mensaje real y no es un mensaje propio
+                if (!newMessage.isFromMe) {
+                  const lastMessageText = newMessage.content || 
+                    (newMessage.messageType === 'audio' ? '🎵 Audio' :
+                     newMessage.messageType === 'image' ? '📷 Imagen' :
+                     newMessage.messageType === 'video' ? '🎥 Video' :
+                     newMessage.messageType === 'document' ? '📄 Documento' :
+                     newMessage.messageType === 'sticker' ? '😀 Sticker' :
+                     '📎 Archivo');
+                  
+                  const newChat = {
+                    id: newMessage.chatId,
+                    name: newMessage.senderName || newMessage.chatId.split('@')[0],
+                    phoneNumber: newMessage.chatId.includes('@s.whatsapp.net') ? newMessage.chatId.split('@')[0] : undefined,
+                    lastMessage: lastMessageText,
+                    lastMessageTime: new Date(newMessage.timestamp * 1000),
+                    unreadCount: 1, // Nuevo mensaje = no leído
+                    isGroup: newMessage.chatId.includes('@g.us'),
+                    avatar: undefined
+                  };
+                  return [newChat, ...prev];
+                } else {
+                  // No crear chat para mensajes propios
+                  console.log('📨 Own message received, not creating new chat:', newMessage);
+                  return prev;
+                }
+              }
+            });
+          }
+        } else if (isStatusUpdate) {
+          // Para actualizaciones de estado, solo actualizar el estado de los mensajes existentes
+          console.log('📨 Status update received, not creating new chat:', newMessage);
+        } else {
+          // Mensaje no reconocido
+          console.log('📨 Unknown message type received:', newMessage);
         }
       } else if (message.type === 'whatsapp:connected') {
         // Actualizar estado de conexión
@@ -545,7 +587,7 @@ export const InboxPage: React.FC = () => {
     }
   };
 
-  // Función para detectar mensajes de status
+  // Función para detectar mensajes de status (NO incluir media real)
   const isStatusMessage = (message: WhatsAppMessage): boolean => {
     const statusPatterns = [
       /^\[Status\]/i,
@@ -558,11 +600,8 @@ export const InboxPage: React.FC = () => {
       /^\[Temporal\]/i,
       /^\[Protocol Update\]/i,
       /^\[Security Update\]/i,
-      /^\[Audio\]/i,
-      /^\[Image\]/i,
-      /^\[Video\]/i,
-      /^\[Document\]/i,
-      /^\[Sticker\]/i
+      /^\[Read Receipt\]/i,
+      /^\[Delivery Receipt\]/i
     ];
 
     const statusContent = [
@@ -576,13 +615,11 @@ export const InboxPage: React.FC = () => {
       'Temporal',
       'Protocol Update',
       'Security Update',
-      '[Audio]',
-      '[Image]',
-      '[Video]',
-      '[Document]',
-      '[Sticker]'
+      'Read Receipt',
+      'Delivery Receipt'
     ];
 
+    // Solo filtrar tipos de mensaje que son realmente actualizaciones de estado
     const statusMessageTypes = [
       'ephemeral',
       'view_once',
@@ -590,16 +627,20 @@ export const InboxPage: React.FC = () => {
       'view_once_video',
       'protocol_update',
       'security_update',
-      'audio',
-      'image',
-      'video',
-      'document',
-      'sticker'
+      'read_receipt',
+      'delivery_receipt'
     ];
 
     const messageContent = message.body || message.message?.conversation || '';
     
-    // Filtrar mensajes vacíos o sin contenido
+    // NO filtrar mensajes de media real (audio, image, video, document, sticker)
+    // Estos son mensajes legítimos que deben mostrarse
+    const isMediaMessage = message.type && ['audio', 'image', 'video', 'document', 'sticker'].includes(message.type);
+    if (isMediaMessage) {
+      return false; // Los mensajes de media NO son mensajes de estado
+    }
+    
+    // Filtrar mensajes vacíos o sin contenido (solo si no es media)
     if (!messageContent || messageContent.trim() === '') {
       return true;
     }
@@ -1708,17 +1749,97 @@ export const InboxPage: React.FC = () => {
                               {message.senderName}
                             </div>
                           )}
-                          <p className="text-sm">{message.body}</p>
-                          {message.hasMedia && (
-                            <div className="mt-2 flex items-center space-x-1">
-                              {message.type === 'image' && <ImageIcon className="w-4 h-4" />}
-                              {message.type === 'video' && <Video className="w-4 h-4" />}
-                              {message.type === 'audio' && <Mic className="w-4 h-4" />}
-                              {message.type === 'document' && <FileText className="w-4 h-4" />}
-                              <span className="text-xs opacity-75">
-                                {message.media?.filename || 'Archivo'}
-                              </span>
+                          {/* Contenido del mensaje */}
+                          {message.type === 'audio' ? (
+                            <div className="mt-2">
+                              <div className="flex items-center space-x-2 p-2 bg-black/10 dark:bg-white/10 rounded-lg">
+                                <Mic className="w-4 h-4" />
+                                <audio 
+                                  controls 
+                                  className="flex-1 h-8"
+                                  preload="metadata"
+                                >
+                                  {message.mediaUrl && (
+                                    <source src={message.mediaUrl} type="audio/ogg; codecs=opus" />
+                                  )}
+                                  {message.id && (
+                                    <source src={`/api/whatsapp/media/${message.id}`} type="audio/ogg; codecs=opus" />
+                                  )}
+                                  Tu navegador no soporta la reproducción de audio.
+                                </audio>
+                              </div>
+                              {message.media?.filename && (
+                                <span className="text-xs opacity-75 mt-1 block">
+                                  {message.media.filename}
+                                </span>
+                              )}
                             </div>
+                          ) : message.type === 'image' ? (
+                            <div className="mt-2">
+                              <div className="flex items-center space-x-2 p-2 bg-black/10 dark:bg-white/10 rounded-lg">
+                                <ImageIcon className="w-4 h-4" />
+                                <img 
+                                  src={message.mediaUrl || `/api/whatsapp/media/${message.id}`}
+                                  alt="Imagen"
+                                  className="max-w-full h-32 object-cover rounded"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                              {message.media?.filename && (
+                                <span className="text-xs opacity-75 mt-1 block">
+                                  {message.media.filename}
+                                </span>
+                              )}
+                            </div>
+                          ) : message.type === 'video' ? (
+                            <div className="mt-2">
+                              <div className="flex items-center space-x-2 p-2 bg-black/10 dark:bg-white/10 rounded-lg">
+                                <Video className="w-4 h-4" />
+                                <video 
+                                  controls 
+                                  className="max-w-full h-32 rounded"
+                                  preload="metadata"
+                                >
+                                  {message.mediaUrl && (
+                                    <source src={message.mediaUrl} type="video/mp4" />
+                                  )}
+                                  {message.id && (
+                                    <source src={`/api/whatsapp/media/${message.id}`} type="video/mp4" />
+                                  )}
+                                  Tu navegador no soporta la reproducción de video.
+                                </video>
+                              </div>
+                              {message.media?.filename && (
+                                <span className="text-xs opacity-75 mt-1 block">
+                                  {message.media.filename}
+                                </span>
+                              )}
+                            </div>
+                          ) : message.type === 'document' ? (
+                            <div className="mt-2">
+                              <div className="flex items-center space-x-2 p-2 bg-black/10 dark:bg-white/10 rounded-lg">
+                                <FileText className="w-4 h-4" />
+                                <a 
+                                  href={message.mediaUrl || `/api/whatsapp/media/${message.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:text-blue-300 underline"
+                                >
+                                  {message.media?.filename || 'Documento'}
+                                </a>
+                              </div>
+                            </div>
+                          ) : message.type === 'sticker' ? (
+                            <div className="mt-2">
+                              <div className="flex items-center space-x-2 p-2 bg-black/10 dark:bg-white/10 rounded-lg">
+                                <span className="text-2xl">😀</span>
+                                <span className="text-sm">Sticker</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm">{message.body}</p>
                           )}
                           <div className="flex items-center justify-between mt-1">
                             <span className="text-xs opacity-70">

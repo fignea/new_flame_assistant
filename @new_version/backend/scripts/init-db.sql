@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS contacts (
     is_blocked BOOLEAN DEFAULT FALSE,
     last_interaction TIMESTAMP,
     interaction_count INTEGER DEFAULT 0,
+    chat_hash VARCHAR(255), -- Hash único para identificar conversaciones
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -254,6 +255,7 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_sessions_user_id ON whatsapp_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_user_id ON contacts(user_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_whatsapp_id ON contacts(whatsapp_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_chat_hash ON contacts(chat_hash);
 CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);
 CREATE INDEX IF NOT EXISTS idx_messages_chat_hash ON messages(chat_hash);
@@ -283,9 +285,13 @@ CREATE INDEX IF NOT EXISTS idx_assistant_assignments_is_active ON assistant_assi
 CREATE INDEX IF NOT EXISTS idx_response_templates_assistant_id ON response_templates(assistant_id);
 CREATE INDEX IF NOT EXISTS idx_response_templates_is_active ON response_templates(is_active);
 CREATE INDEX IF NOT EXISTS idx_response_templates_trigger_keywords ON response_templates USING GIN(trigger_keywords);
+CREATE INDEX IF NOT EXISTS idx_response_templates_category ON response_templates(category);
+CREATE INDEX IF NOT EXISTS idx_response_templates_priority ON response_templates(priority);
+CREATE INDEX IF NOT EXISTS idx_response_templates_response_delay ON response_templates(response_delay);
 
 CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id);
 CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
+CREATE INDEX IF NOT EXISTS idx_tags_is_active ON tags(is_active);
 
 CREATE INDEX IF NOT EXISTS idx_conversation_tags_conversation_id ON conversation_tags(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_conversation_tags_platform ON conversation_tags(platform);

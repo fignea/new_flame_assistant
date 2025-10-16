@@ -6,6 +6,43 @@ import { redisConfig } from '../config/redis';
 import { logger } from '../utils/logger';
 import { generateChatHashForWhatsApp, generateDeterministicHash } from '../utils/hash';
 
+// Función auxiliar para obtener MIME type basado en el tipo de mensaje
+function getMimeTypeFromMessageType(messageType: string): string {
+  switch (messageType) {
+    case 'audio':
+      return 'audio/ogg; codecs=opus';
+    case 'image':
+      return 'image/jpeg';
+    case 'video':
+      return 'video/mp4';
+    case 'document':
+      return 'application/octet-stream';
+    case 'sticker':
+      return 'image/webp';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+// Función auxiliar para generar nombre de archivo basado en el tipo de mensaje
+function generateFilenameFromMessageType(messageType: string, messageId: string): string {
+  const timestamp = Date.now();
+  switch (messageType) {
+    case 'audio':
+      return `audio_${timestamp}_${messageId}.ogg`;
+    case 'image':
+      return `image_${timestamp}_${messageId}.jpg`;
+    case 'video':
+      return `video_${timestamp}_${messageId}.mp4`;
+    case 'document':
+      return `document_${timestamp}_${messageId}`;
+    case 'sticker':
+      return `sticker_${timestamp}_${messageId}.webp`;
+    default:
+      return `file_${timestamp}_${messageId}`;
+  }
+}
+
 export class WhatsAppController {
   public async createSession(req: AuthenticatedRequest, res: Response<ApiResponse>) {
     try {
@@ -677,6 +714,7 @@ export class WhatsAppController {
            m.is_from_me,
            m.timestamp,
            m.created_at,
+           m.media_url,
            c.name as contact_name,
            c.whatsapp_id,
            m.chat_hash
@@ -689,40 +727,50 @@ export class WhatsAppController {
       );
 
       // Formatear los mensajes para el frontend
-      const formattedMessages = messages.rows.map((msg: any) => ({
-        id: msg.whatsapp_message_id,
-        key: {
+      const formattedMessages = messages.rows.map((msg: any) => {
+        const hasMedia = msg.media_url && msg.media_url.trim() !== '';
+        const isMediaType = ['audio', 'image', 'video', 'document', 'sticker'].includes(msg.message_type);
+        
+        return {
           id: msg.whatsapp_message_id,
-          remoteJid: whatsappId, // Usar whatsapp_id para la comunicación con WhatsApp
-          fromMe: msg.is_from_me
-        },
-        message: {
-          conversation: msg.content
-        },
-        messageTimestamp: (() => {
-          try {
-            const date = new Date(msg.timestamp);
-            if (isNaN(date.getTime())) {
-              console.warn('Invalid timestamp in message:', msg.timestamp);
+          key: {
+            id: msg.whatsapp_message_id,
+            remoteJid: whatsappId, // Usar whatsapp_id para la comunicación con WhatsApp
+            fromMe: msg.is_from_me
+          },
+          message: {
+            conversation: msg.content
+          },
+          messageTimestamp: (() => {
+            try {
+              const date = new Date(msg.timestamp);
+              if (isNaN(date.getTime())) {
+                console.warn('Invalid timestamp in message:', msg.timestamp);
+                return Math.floor(Date.now() / 1000);
+              }
+              return Math.floor(date.getTime() / 1000);
+            } catch (error) {
+              console.error('Error processing message timestamp:', msg.timestamp, error);
               return Math.floor(Date.now() / 1000);
             }
-            return Math.floor(date.getTime() / 1000);
-          } catch (error) {
-            console.error('Error processing message timestamp:', msg.timestamp, error);
-            return Math.floor(Date.now() / 1000);
-          }
-        })(),
-        status: 'delivered', // Estado por defecto
-        fromMe: msg.is_from_me,
-        chatId: chatHash, // Usar chat_hash como ID del chat
-        whatsappId: whatsappId, // Mantener whatsapp_id para referencia
-        senderId: msg.is_from_me ? userId : whatsappId,
-        senderName: msg.is_from_me ? 'Tú' : (msg.contact_name || whatsappId.split('@')[0]),
-        body: msg.content,
-        type: msg.message_type,
-        hasMedia: false, // Por ahora sin media
-        media: undefined
-      }));
+          })(),
+          status: 'delivered', // Estado por defecto
+          fromMe: msg.is_from_me,
+          chatId: chatHash, // Usar chat_hash como ID del chat
+          whatsappId: whatsappId, // Mantener whatsapp_id para referencia
+          senderId: msg.is_from_me ? userId : whatsappId,
+          senderName: msg.is_from_me ? 'Tú' : (msg.contact_name || whatsappId.split('@')[0]),
+          body: msg.content,
+          type: msg.message_type,
+          hasMedia: hasMedia || isMediaType,
+          media: hasMedia ? {
+            url: msg.media_url,
+            mimetype: getMimeTypeFromMessageType(msg.message_type),
+            filename: generateFilenameFromMessageType(msg.message_type, msg.whatsapp_message_id)
+          } : undefined,
+          mediaUrl: msg.media_url
+        };
+      });
 
       return res.json({
         success: true,
@@ -1117,6 +1165,74 @@ export class WhatsAppController {
       return res.status(500).json({
         success: false,
         message: 'Error al obtener los datos del contacto/grupo'
+      });
+    }
+  }
+
+  // Servir archivos de media de WhatsApp
+  public async serveMedia(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const { messageId } = req.params;
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      if (!messageId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID del mensaje es requerido'
+        });
+      }
+
+      // Buscar el mensaje y su media_url
+      const message = await database.query(
+        `SELECT media_url, message_type, whatsapp_message_id 
+         FROM messages 
+         WHERE whatsapp_message_id = $1 AND user_id = $2`,
+        [messageId, userId]
+      );
+
+      if (message.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Mensaje no encontrado'
+        });
+      }
+
+      const mediaUrl = message.rows[0].media_url;
+      const messageType = message.rows[0].message_type;
+
+      if (!mediaUrl) {
+        return res.status(404).json({
+          success: false,
+          message: 'No hay archivo de media asociado a este mensaje'
+        });
+      }
+
+      // Establecer headers apropiados
+      const mimeType = getMimeTypeFromMessageType(messageType);
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${messageId}"`);
+      
+      // Si la URL es una URL externa (de WhatsApp), redirigir
+      if (mediaUrl.startsWith('http')) {
+        return res.redirect(mediaUrl);
+      } else {
+        // Si es una ruta local, servir el archivo
+        return res.sendFile(mediaUrl);
+      }
+
+    } catch (error) {
+      console.error('Serve media error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al servir el archivo de media',
+        error: error instanceof Error ? error.message : 'Error desconocido'
       });
     }
   }

@@ -1020,13 +1020,6 @@ export class ApiService {
     return this.delete(`/api/tags/contact/${contactId}/${tagId}`);
   }
 
-  async getConversationTags(conversationId: string, platform: string) {
-    return this.get(`/api/tags/conversation/${conversationId}/${platform}`);
-  }
-
-  async getContactTags(contactId: string) {
-    return this.get(`/api/tags/contact/${contactId}`);
-  }
 
   // Métodos para Notas de Contacto
   async getContactNotes(contactId: string) {

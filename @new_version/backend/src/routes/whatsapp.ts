@@ -30,6 +30,9 @@ router.get('/messages/:contactId', authenticate, whatsappController.getMessages.
 router.get('/chats', authenticate, whatsappController.getChats.bind(whatsappController));
 router.get('/chats/:chatId/messages', authenticate, whatsappController.getChatMessages.bind(whatsappController));
 
+// Media (con autenticación)
+router.get('/media/:messageId', authenticate, whatsappController.serveMedia.bind(whatsappController));
+
 // Contactos (con autenticación)
 router.get('/contacts', authenticate, whatsappController.getContacts.bind(whatsappController));
 router.post('/contacts', authenticate, whatsappController.createContact.bind(whatsappController));
