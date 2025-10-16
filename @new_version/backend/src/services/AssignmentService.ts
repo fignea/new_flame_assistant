@@ -6,10 +6,10 @@ export class AssignmentService {
    * Asignar un asistente a una conversación
    */
   static async assignAssistant(
-    assistantId: number,
+    assistantId: string,
     conversationId: string,
     platform: 'whatsapp' | 'web' | 'facebook' | 'instagram' | 'telegram',
-    userId: number
+    userId: string
   ): Promise<AssistantAssignment> {
     try {
       // Verificar que el asistente pertenece al usuario
@@ -57,7 +57,7 @@ export class AssignmentService {
   static async getAssignedAssistant(
     conversationId: string,
     platform: string,
-    userId: number
+    userId: string
   ): Promise<AssistantAssignment | null> {
     try {
       const assignment = await database.get(
@@ -81,7 +81,7 @@ export class AssignmentService {
   /**
    * Obtener todas las asignaciones de un usuario
    */
-  static async getUserAssignments(userId: number): Promise<AssistantAssignment[]> {
+  static async getUserAssignments(userId: string): Promise<AssistantAssignment[]> {
     try {
       const assignments = await database.all(
         `SELECT aa.*, a.name as assistant_name, a.is_active as assistant_active
@@ -105,7 +105,7 @@ export class AssignmentService {
   static async unassignAssistant(
     conversationId: string,
     platform: string,
-    userId: number
+    userId: string
   ): Promise<boolean> {
     try {
       const result = await database.run(
@@ -132,8 +132,8 @@ export class AssignmentService {
   static async autoAssignAssistant(
     conversationId: string,
     platform: string,
-    userId: number,
-    contactId?: number
+    userId: string,
+    contactId?: string
   ): Promise<AssistantAssignment | null> {
     try {
       // Buscar asistentes con auto_assign habilitado
@@ -169,7 +169,7 @@ export class AssignmentService {
   /**
    * Obtener estadísticas de asignaciones
    */
-  static async getAssignmentStats(userId: number): Promise<AssignmentStats> {
+  static async getAssignmentStats(userId: string): Promise<AssignmentStats> {
     try {
       // Obtener estadísticas básicas de asignaciones
       const stats = await database.get(
@@ -209,8 +209,8 @@ export class AssignmentService {
    * Obtener conversaciones por asistente
    */
   static async getConversationsByAssistant(
-    assistantId: number,
-    userId: number,
+    assistantId: string,
+    userId: string,
     limit: number = 50,
     offset: number = 0
   ): Promise<AssistantAssignment[]> {
@@ -239,7 +239,7 @@ export class AssignmentService {
   static async hasAssignedAssistant(
     conversationId: string,
     platform: string,
-    userId: number
+    userId: string
   ): Promise<boolean> {
     try {
       const assignment = await database.get(

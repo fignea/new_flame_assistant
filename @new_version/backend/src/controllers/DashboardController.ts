@@ -2,47 +2,6 @@ import { Response } from 'express';
 import { database } from '../config/database';
 import { AuthenticatedRequest, ApiResponse, DashboardStats } from '../types';
 
-interface DashboardStats {
-  assistants: {
-    total: number;
-    active: number;
-    inactive: number;
-  };
-  conversations: {
-    total: number;
-    today: number;
-    thisWeek: number;
-    thisMonth: number;
-  };
-  messages: {
-    total: number;
-    today: number;
-    thisWeek: number;
-    thisMonth: number;
-  };
-  contacts: {
-    total: number;
-    newToday: number;
-    newThisWeek: number;
-    newThisMonth: number;
-  };
-  templates: {
-    total: number;
-    active: number;
-    categories: number;
-  };
-  tags: {
-    total: number;
-    active: number;
-    conversations: number;
-    contacts: number;
-  };
-  assignments: {
-    total: number;
-    autoAssigned: number;
-    manualAssigned: number;
-  };
-}
 
 export class DashboardController {
   public async getStats(req: AuthenticatedRequest, res: Response<ApiResponse<DashboardStats>>) {

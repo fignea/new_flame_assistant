@@ -44,6 +44,24 @@ export type AssignmentType = 'automatic' | 'manual';
 export type InteractionType = 'message' | 'call' | 'meeting' | 'email' | 'note';
 
 // ========================================
+// TIPOS ADICIONALES
+// ========================================
+
+export interface AssignmentStats {
+  total_assignments: number;
+  active_assignments: number;
+  completed_assignments: number;
+  average_response_time: number;
+}
+
+export interface OpenAIConfig {
+  api_key: string;
+  model: string;
+  temperature: number;
+  max_tokens: number;
+}
+
+// ========================================
 // INTERFACES DE ENTIDADES PRINCIPALES
 // ========================================
 
