@@ -2,11 +2,11 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: whatsapp-manager-postgres
+    container_name: flame-assistant-postgres
     environment:
-      POSTGRES_DB: whatsapp_manager
-      POSTGRES_USER: whatsapp_user
-      POSTGRES_PASSWORD: whatsapp_password
+      POSTGRES_DB: flame_assistant
+      POSTGRES_USER: flame_user
+      POSTGRES_PASSWORD: flame_password
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -15,9 +15,9 @@ services:
       - "5432:5432"
     restart: unless-stopped
     networks:
-      - whatsapp-manager-network
+      - flame-assistant-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U whatsapp_user -d whatsapp_manager"]
+      test: ["CMD-SHELL", "pg_isready -U flame_user -d flame_assistant"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,14 +25,14 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: whatsapp-manager-redis
+    container_name: flame-assistant-redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
     networks:
-      - whatsapp-manager-network
+      - flame-assistant-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -45,29 +45,31 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: whatsapp-manager-backend
+    container_name: flame-assistant-backend
     ports:
       - "3001:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - JWT_SECRET=whatsapp-manager-super-secret-jwt-key-production-2024
+      - JWT_SECRET=flame-assistant-super-secret-jwt-key-production-2024
       - JWT_EXPIRES_IN=7d
       - CORS_ORIGIN=http://localhost
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=whatsapp_manager
-      - DB_USER=whatsapp_user
-      - DB_PASSWORD=whatsapp_password
+      - DB_NAME=flame_assistant
+      - DB_USER=flame_user
+      - DB_PASSWORD=flame_password
       - REDIS_URL=redis://redis:6379
       - REDIS_DB=0
       - WHATSAPP_SESSION_PATH=/app/sessions
       - WHATSAPP_QR_TIMEOUT=120000
       - WHATSAPP_CONNECT_TIMEOUT=60000
       - LOG_LEVEL=info
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       - backend_sessions:/app/sessions
       - backend_logs:/app/logs
+      - backend_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,7 +77,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - whatsapp-manager-network
+      - flame-assistant-network
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
@@ -83,11 +85,12 @@ services:
       retries: 3
       start_period: 60s
 
+  # Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: whatsapp-manager-frontend
+    container_name: flame-assistant-frontend
     ports:
       - "80:80"
     depends_on:
@@ -95,7 +98,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - whatsapp-manager-network
+      - flame-assistant-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -112,7 +115,9 @@ volumes:
     driver: local
   backend_logs:
     driver: local
+  backend_uploads:
+    driver: local
 
 networks:
-  whatsapp-manager-network:
+  flame-assistant-network:
     driver: bridge

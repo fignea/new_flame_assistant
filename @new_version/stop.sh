@@ -14,7 +14,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dev|--development)
             ENVIRONMENT="dev"
-            COMPOSE_FILE="docker-compose.yml"
+            COMPOSE_FILE="docker-compose.dev.yml"
             shift
             ;;
         -h|--help)
@@ -39,36 +39,40 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "🛑 Deteniendo WhatsApp Manager en modo $ENVIRONMENT..."
+echo "🛑 Deteniendo Flame Assistant en modo $ENVIRONMENT..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Verificar que Docker esté disponible
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Docker Compose no está disponible"
+# Verificar que Docker esté instalado
+if ! command -v docker &> /dev/null; then
+    echo "❌ Docker no está instalado."
     exit 1
 fi
 
-# Mostrar estado actual
-echo "📊 Estado actual de los contenedores:"
-docker-compose -f $COMPOSE_FILE ps
-
-echo ""
-echo "🛑 Deteniendo servicios..."
+if ! command -v docker-compose &> /dev/null; then
+    echo "❌ Docker Compose no está instalado."
+    exit 1
+fi
 
 # Detener contenedores
+echo "🛑 Deteniendo contenedores..."
 docker-compose -f $COMPOSE_FILE down
 
+# Verificar que se detuvieron correctamente
 if [ $? -eq 0 ]; then
-    echo "✅ Servicios detenidos exitosamente"
+    echo "✅ Servicios detenidos correctamente"
 else
-    echo "❌ Error deteniendo servicios"
+    echo "❌ Error al detener los servicios"
+    exit 1
 fi
 
 echo ""
-echo "📊 Comandos adicionales disponibles:"
-echo "   🗑️  Limpiar todo (imágenes + volúmenes): docker-compose -f $COMPOSE_FILE down --rmi all --volumes"
-echo "   🔄 Reiniciar servicios: ./start.sh --$ENVIRONMENT"
-echo "   📋 Ver logs: docker-compose -f $COMPOSE_FILE logs"
+echo "📊 Estado de los servicios:"
+docker-compose -f $COMPOSE_FILE ps
 echo ""
-echo "💾 Los datos persistentes se mantienen en: ./docker-data/"
+echo "🔄 Para reiniciar los servicios:"
+echo "   ./start.sh --$ENVIRONMENT"
+echo ""
+echo "🧹 Para limpiar completamente (eliminar datos):"
+echo "   ./clean.sh --$ENVIRONMENT"
+echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

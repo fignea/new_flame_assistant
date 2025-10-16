@@ -1,215 +1,30 @@
 import { apiConfig, getAuthHeaders, buildURL } from '../config/api';
-
-// Tipos de respuesta de la API
-export interface ApiResponse<T = any> {
-  success: boolean;
-  message?: string;
-  data?: T;
-  error?: string;
-  details?: any;
-}
-
-// Interfaz para Contact
-export interface Contact {
-  id: number;
-  user_id: number;
-  whatsapp_id: string;
-  name?: string;
-  phone_number?: string;
-  is_group: boolean;
-  is_blocked: boolean;
-  avatar_url?: string;
-  last_message_at?: string;
-  unread_count?: number;
-  assigned_assistant_id?: number;
-  priority?: 'low' | 'normal' | 'high' | 'urgent';
-  status?: 'active' | 'closed' | 'pending' | 'resolved';
-  tags?: string[];
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// Interfaz para ScheduledMessage
-export interface ScheduledMessage {
-  id: number;
-  user_id: number;
-  contact_id: number;
-  content: string;
-  message_type: string;
-  scheduled_time: string;
-  status: 'pending' | 'sent' | 'failed' | 'cancelled';
-  sent_at?: string;
-  error_message?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// Nuevas interfaces para funcionalidades avanzadas
-
-// Interfaz para Assistant
-export interface Assistant {
-  id: number;
-  user_id: number;
-  name: string;
-  description?: string;
-  prompt?: string;
-  is_active: boolean;
-  openai_api_key?: string;
-  model: string;
-  max_tokens: number;
-  temperature: number;
-  auto_assign: boolean;
-  response_delay: number;
-  created_at: string;
-  updated_at: string;
-}
-
-// Interfaz para Assignment
-export interface Assignment {
-  id: number;
-  assistant_id: number;
-  conversation_id: string;
-  platform: string;
-  assigned_at: string;
-  is_active: boolean;
-  assistant?: Assistant;
-}
-
-// Interfaz para ResponseTemplate
-export interface ResponseTemplate {
-  id: number;
-  assistant_id: number;
-  user_id: number;
-  name: string;
-  content: string;
-  category: 'greeting' | 'farewell' | 'question' | 'information' | 'escalation' | 'general';
-  trigger_keywords: string[];
-  conditions?: Record<string, any>;
-  is_active: boolean;
-  priority: number;
-  response_delay: number;
-  created_at: string;
-  updated_at: string;
-  assistant?: Assistant;
-}
-
-// Interfaz para Tag
-export interface Tag {
-  id: number;
-  user_id: number;
-  name: string;
-  color: string;
-  description?: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-// Interfaz para ConversationTag
-export interface ConversationTag {
-  id: number;
-  conversation_id: string;
-  platform: string;
-  tag_id: number;
-  created_at: string;
-  tag?: Tag;
-}
-
-// Interfaz para ContactTag
-export interface ContactTag {
-  id: number;
-  contact_id: number;
-  tag_id: number;
-  created_at: string;
-  tag?: Tag;
-}
-
-// Interfaz para InteractionHistory
-export interface InteractionHistory {
-  id: number;
-  contact_id: number;
-  interaction_type: 'message' | 'call' | 'email' | 'meeting' | 'note';
-  content: string;
-  metadata?: Record<string, any>;
-  created_at: string;
-}
-
-// Interfaz para ContactNote
-export interface ContactNote {
-  id: number;
-  contact_id: number;
-  user_id: number;
-  content: string;
-  is_important: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-// Interfaz para AssistantConfig
-export interface AssistantConfig {
-  id: number;
-  assistant_id: number;
-  config_key: string;
-  config_value: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// Interfaz para AutoResponseResult
-export interface AutoResponseResult {
-  should_respond: boolean;
-  response?: string;
-  template_id?: number;
-  confidence?: number;
-  reason?: string;
-}
-
-// Interfaz para estadísticas
-export interface AssignmentStats {
-  total_assignments: number;
-  active_assignments: number;
-  assignments_by_assistant: Record<string, number>;
-  assignments_by_platform: Record<string, number>;
-}
-
-export interface TemplateStats {
-  total_templates: number;
-  active_templates: number;
-  templates_by_category: Record<string, number>;
-  templates_by_assistant: Record<string, number>;
-}
-
-export interface TagStats {
-  total_tags: number;
-  active_tags: number;
-  tags_by_contact: Record<string, number>;
-  tags_by_conversation: Record<string, number>;
-}
-
-export interface AutoResponseStats {
-  total_processed: number;
-  successful_responses: number;
-  failed_responses: number;
-  average_response_time: number;
-  responses_by_assistant: Record<string, number>;
-}
-
-export interface PaginationInfo {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
-  nextPage: number | null;
-  prevPage: number | null;
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  pagination: PaginationInfo;
-}
+import { 
+  ApiResponse, 
+  PaginatedResponse, 
+  LoginRequest, 
+  RegisterRequest, 
+  AuthResponse,
+  User,
+  Tenant,
+  Contact,
+  Conversation,
+  Assistant,
+  Message,
+  ResponseTemplate,
+  Tag,
+  ScheduledMessage,
+  DashboardStats,
+  ContactFilters,
+  ConversationFilters,
+  MessageFilters,
+  CreateContactRequest,
+  CreateConversationRequest,
+  CreateAssistantRequest,
+  CreateResponseTemplateRequest,
+  CreateTagRequest,
+  CreateScheduledMessageRequest
+} from '../types';
 
 // Clase principal del servicio de API
 export class ApiService {
@@ -325,740 +140,444 @@ export class ApiService {
     });
   }
 
-  // Métodos específicos para autenticación
-  async login(credentials: { email: string; password: string }) {
+  // ========================================
+  // MÉTODOS DE AUTENTICACIÓN MULTI-TENANT
+  // ========================================
+
+  async login(credentials: LoginRequest): Promise<ApiResponse<AuthResponse>> {
     return this.post(apiConfig.endpoints.auth.login, credentials);
   }
 
-  async register(userData: { name: string; email: string; password: string }) {
-    return this.post(apiConfig.endpoints.auth.register, userData);
+  async register(data: RegisterRequest): Promise<ApiResponse<AuthResponse>> {
+    return this.post(apiConfig.endpoints.auth.register, data);
   }
 
-  async refreshToken(refreshToken: string) {
-    return this.post(apiConfig.endpoints.auth.refresh, { refreshToken });
+  async refreshToken(refreshToken: string): Promise<ApiResponse<{ access_token: string; expires_in: number }>> {
+    return this.post(apiConfig.endpoints.auth.refresh, { refresh_token: refreshToken });
   }
 
-  async logout() {
+  async logout(): Promise<ApiResponse> {
     return this.post(apiConfig.endpoints.auth.logout);
   }
 
-  async getProfile() {
+  async getProfile(): Promise<ApiResponse<{ user: User; tenant: Tenant }>> {
     return this.get(apiConfig.endpoints.auth.profile);
   }
 
-  async updateProfile(profileData: any) {
+  async updateProfile(profileData: Partial<User>): Promise<ApiResponse<{ user: User; tenant: Tenant }>> {
     return this.put(apiConfig.endpoints.auth.profile, profileData);
   }
 
-  async forgotPassword(email: string) {
-    return this.post(apiConfig.endpoints.auth.forgotPassword, { email });
+  // ========================================
+  // MÉTODOS DE TENANT
+  // ========================================
+
+  async getTenants(): Promise<ApiResponse<Tenant[]>> {
+    return this.get('/api/tenants');
   }
 
-  async resetPassword(token: string, newPassword: string) {
-    return this.post(apiConfig.endpoints.auth.resetPassword, { token, newPassword });
+  async getTenantBySlug(slug: string): Promise<ApiResponse<Tenant>> {
+    return this.get(`/api/tenants/slug/${slug}`);
   }
 
-  // Métodos para conversaciones
-  async getConversations(params?: {
-    status?: string;
-    platform?: string;
-    priority?: string;
-    assigned_assistant_id?: string;
-    search?: string;
-    page?: number;
-    limit?: number;
-  }) {
-    return this.get<PaginatedResponse<any>>(apiConfig.endpoints.conversations.list, params);
+  async createTenant(data: any): Promise<ApiResponse<Tenant>> {
+    return this.post('/api/tenants', data);
   }
 
-  async getConversation(id: string) {
-    return this.get(apiConfig.endpoints.conversations.get(id));
+  async updateTenant(id: string, data: any): Promise<ApiResponse<Tenant>> {
+    return this.put(`/api/tenants/${id}`, data);
   }
 
-  async createConversation(conversationData: any) {
-    return this.post(apiConfig.endpoints.conversations.create, conversationData);
+  // ========================================
+  // MÉTODOS DE USUARIOS
+  // ========================================
+
+  async getUsers(params?: { page?: number; limit?: number; role?: string }): Promise<ApiResponse<PaginatedResponse<User>>> {
+    return this.get('/api/users', params);
   }
 
-  async updateConversation(id: string, updateData: any) {
-    return this.put(apiConfig.endpoints.conversations.update(id), updateData);
+  async getUser(id: string): Promise<ApiResponse<User>> {
+    return this.get(`/api/users/${id}`);
   }
 
-  async deleteConversation(id: string) {
-    return this.delete(apiConfig.endpoints.conversations.delete(id));
+  async createUser(data: any): Promise<ApiResponse<User>> {
+    return this.post('/api/users', data);
   }
 
-  async getConversationMessages(conversationId: string, params?: {
-    page?: number;
-    limit?: number;
-    sender?: string;
-    type?: string;
-  }) {
-    return this.get<PaginatedResponse<any>>(
-      apiConfig.endpoints.conversations.messages(conversationId),
-      params
-    );
+  async updateUser(id: string, data: any): Promise<ApiResponse<User>> {
+    return this.put(`/api/users/${id}`, data);
   }
 
-  async sendConversationMessage(conversationId: string, messageData: {
-    content: string;
-    type?: string;
-    metadata?: any;
-  }) {
-    return this.post(apiConfig.endpoints.conversations.sendMessage(conversationId), messageData);
+  async deleteUser(id: string): Promise<ApiResponse> {
+    return this.delete(`/api/users/${id}`);
   }
 
-  async markConversationAsRead(conversationId: string) {
-    return this.put(apiConfig.endpoints.conversations.markRead(conversationId));
+  // ========================================
+  // MÉTODOS DE CONTACTOS
+  // ========================================
+
+  async getContacts(filters?: ContactFilters): Promise<ApiResponse<PaginatedResponse<Contact>>> {
+    return this.get('/api/contacts', filters);
   }
 
-  async getUnreadCount() {
-    return this.get(apiConfig.endpoints.conversations.unreadCount);
+  async getContact(id: string): Promise<ApiResponse<Contact>> {
+    return this.get(`/api/contacts/${id}`);
   }
 
-  async searchConversations(query: string, params?: any) {
-    return this.get<PaginatedResponse<any>>(apiConfig.endpoints.conversations.search, {
-      q: query,
-      ...params
-    });
+  async createContact(data: CreateContactRequest): Promise<ApiResponse<Contact>> {
+    return this.post('/api/contacts', data);
   }
 
-  // Métodos para asistentes
-  async getAssistants(params?: {
-    status?: string;
-    type?: string;
-    page?: number;
-    limit?: number;
-  }) {
-    return this.get<PaginatedResponse<any>>(apiConfig.endpoints.assistants.list, params);
+  async updateContact(id: string, data: Partial<Contact>): Promise<ApiResponse<Contact>> {
+    return this.put(`/api/contacts/${id}`, data);
   }
 
-  async getAssistant(id: string) {
-    return this.get(apiConfig.endpoints.assistants.get(id));
+  async deleteContact(id: string): Promise<ApiResponse> {
+    return this.delete(`/api/contacts/${id}`);
   }
 
-  async createAssistant(assistantData: any) {
-    return this.post(apiConfig.endpoints.assistants.create, assistantData);
+  async searchContacts(query: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<PaginatedResponse<Contact>>> {
+    return this.get('/api/contacts/search', { q: query, ...params });
   }
 
-  async updateAssistant(id: string, updateData: any) {
-    return this.put(apiConfig.endpoints.assistants.update(id), updateData);
+  async blockContact(id: string): Promise<ApiResponse<Contact>> {
+    return this.post(`/api/contacts/${id}/block`);
   }
 
-  async deleteAssistant(id: string) {
-    return this.delete(apiConfig.endpoints.assistants.delete(id));
+  async unblockContact(id: string): Promise<ApiResponse<Contact>> {
+    return this.post(`/api/contacts/${id}/unblock`);
   }
 
-  async trainAssistant(id: string, trainingData: any) {
-    return this.post(apiConfig.endpoints.assistants.train(id), trainingData);
+  // ========================================
+  // MÉTODOS DE CONVERSACIONES
+  // ========================================
+
+  async getConversations(filters?: ConversationFilters): Promise<ApiResponse<PaginatedResponse<Conversation>>> {
+    return this.get('/api/conversations', filters);
   }
 
-  async getAssistantStats(id: string) {
-    return this.get(apiConfig.endpoints.assistants.stats(id));
+  async getConversation(id: string): Promise<ApiResponse<Conversation>> {
+    return this.get(`/api/conversations/${id}`);
   }
 
-  async getAssistantsStats() {
-    return this.get('/api/assistants/stats');
+  async createConversation(data: CreateConversationRequest): Promise<ApiResponse<Conversation>> {
+    return this.post('/api/conversations', data);
   }
 
-  async getAssignmentsStats() {
-    return this.get('/api/assignments/stats');
+  async updateConversation(id: string, data: any): Promise<ApiResponse<Conversation>> {
+    return this.put(`/api/conversations/${id}`, data);
   }
 
-  async getDashboardStats() {
+  async deleteConversation(id: string): Promise<ApiResponse> {
+    return this.delete(`/api/conversations/${id}`);
+  }
+
+  async getConversationMessages(conversationId: string, filters?: MessageFilters): Promise<ApiResponse<PaginatedResponse<Message>>> {
+    return this.get(`/api/conversations/${conversationId}/messages`, filters);
+  }
+
+  async sendMessage(conversationId: string, data: { content: string; message_type?: string; metadata?: any }): Promise<ApiResponse<Message>> {
+    return this.post(`/api/conversations/${conversationId}/messages`, data);
+  }
+
+  async markConversationAsRead(conversationId: string): Promise<ApiResponse> {
+    return this.put(`/api/conversations/${conversationId}/read`);
+  }
+
+  async getUnreadCount(): Promise<ApiResponse<{ count: number }>> {
+    return this.get('/api/conversations/unread-count');
+  }
+
+  // ========================================
+  // MÉTODOS DE ASISTENTES
+  // ========================================
+
+  async getAssistants(params?: { page?: number; limit?: number; is_active?: boolean }): Promise<ApiResponse<PaginatedResponse<Assistant>>> {
+    return this.get('/api/assistants', params);
+  }
+
+  async getAssistant(id: string): Promise<ApiResponse<Assistant>> {
+    return this.get(`/api/assistants/${id}`);
+  }
+
+  async createAssistant(data: CreateAssistantRequest): Promise<ApiResponse<Assistant>> {
+    return this.post('/api/assistants', data);
+  }
+
+  async updateAssistant(id: string, data: any): Promise<ApiResponse<Assistant>> {
+    return this.put(`/api/assistants/${id}`, data);
+  }
+
+  async deleteAssistant(id: string): Promise<ApiResponse> {
+    return this.delete(`/api/assistants/${id}`);
+  }
+
+  async testAssistant(id: string, message: string): Promise<ApiResponse<{ response: string }>> {
+    return this.post(`/api/assistants/${id}/test`, { message });
+  }
+
+  async getAssistantStats(id: string): Promise<ApiResponse<any>> {
+    return this.get(`/api/assistants/${id}/stats`);
+  }
+
+  // ========================================
+  // MÉTODOS DE PLANTILLAS
+  // ========================================
+
+  async getTemplates(params?: { page?: number; limit?: number; assistant_id?: string; category?: string }): Promise<ApiResponse<PaginatedResponse<ResponseTemplate>>> {
+    return this.get('/api/templates', params);
+  }
+
+  async getTemplate(id: string): Promise<ApiResponse<ResponseTemplate>> {
+    return this.get(`/api/templates/${id}`);
+  }
+
+  async createTemplate(data: CreateResponseTemplateRequest): Promise<ApiResponse<ResponseTemplate>> {
+    return this.post('/api/templates', data);
+  }
+
+  async updateTemplate(id: string, data: any): Promise<ApiResponse<ResponseTemplate>> {
+    return this.put(`/api/templates/${id}`, data);
+  }
+
+  async deleteTemplate(id: string): Promise<ApiResponse> {
+    return this.delete(`/api/templates/${id}`);
+  }
+
+  async searchTemplates(query: string, params?: { assistant_id?: string }): Promise<ApiResponse<ResponseTemplate[]>> {
+    return this.get('/api/templates/search', { q: query, ...params });
+  }
+
+  // ========================================
+  // MÉTODOS DE ETIQUETAS
+  // ========================================
+
+  async getTags(params?: { page?: number; limit?: number; is_active?: boolean }): Promise<ApiResponse<PaginatedResponse<Tag>>> {
+    return this.get('/api/tags', params);
+  }
+
+  async getTag(id: string): Promise<ApiResponse<Tag>> {
+    return this.get(`/api/tags/${id}`);
+  }
+
+  async createTag(data: CreateTagRequest): Promise<ApiResponse<Tag>> {
+    return this.post('/api/tags', data);
+  }
+
+  async updateTag(id: string, data: any): Promise<ApiResponse<Tag>> {
+    return this.put(`/api/tags/${id}`, data);
+  }
+
+  async deleteTag(id: string): Promise<ApiResponse> {
+    return this.delete(`/api/tags/${id}`);
+  }
+
+  async tagConversation(tagId: string, conversationId: string): Promise<ApiResponse> {
+    return this.post(`/api/tags/${tagId}/conversations/${conversationId}`);
+  }
+
+  async untagConversation(tagId: string, conversationId: string): Promise<ApiResponse> {
+    return this.delete(`/api/tags/${tagId}/conversations/${conversationId}`);
+  }
+
+  async tagContact(tagId: string, contactId: string): Promise<ApiResponse> {
+    return this.post(`/api/tags/${tagId}/contacts/${contactId}`);
+  }
+
+  async untagContact(tagId: string, contactId: string): Promise<ApiResponse> {
+    return this.delete(`/api/tags/${tagId}/contacts/${contactId}`);
+  }
+
+  // ========================================
+  // MÉTODOS DE MENSAJES PROGRAMADOS
+  // ========================================
+
+  async getScheduledMessages(params?: { page?: number; limit?: number; status?: string }): Promise<ApiResponse<PaginatedResponse<ScheduledMessage>>> {
+    return this.get('/api/scheduled-messages', params);
+  }
+
+  async getScheduledMessage(id: string): Promise<ApiResponse<ScheduledMessage>> {
+    return this.get(`/api/scheduled-messages/${id}`);
+  }
+
+  async createScheduledMessage(data: CreateScheduledMessageRequest): Promise<ApiResponse<ScheduledMessage>> {
+    return this.post('/api/scheduled-messages', data);
+  }
+
+  async updateScheduledMessage(id: string, data: any): Promise<ApiResponse<ScheduledMessage>> {
+    return this.put(`/api/scheduled-messages/${id}`, data);
+  }
+
+  async deleteScheduledMessage(id: string): Promise<ApiResponse> {
+    return this.delete(`/api/scheduled-messages/${id}`);
+  }
+
+  async cancelScheduledMessage(id: string): Promise<ApiResponse> {
+    return this.post(`/api/scheduled-messages/${id}/cancel`);
+  }
+
+  // ========================================
+  // MÉTODOS DE DASHBOARD
+  // ========================================
+
+  async getDashboardStats(): Promise<ApiResponse<DashboardStats>> {
     return this.get('/api/dashboard/stats');
   }
 
-  async getSchedules(assistantId: string) {
-    return this.get(apiConfig.endpoints.assistants.schedules(assistantId));
+  async getRecentActivity(): Promise<ApiResponse<any[]>> {
+    return this.get('/api/dashboard/recent-activity');
   }
 
-  async createSchedule(assistantId: string, scheduleData: any) {
-    return this.post(apiConfig.endpoints.assistants.createSchedule(assistantId), scheduleData);
+  async getPerformanceMetrics(): Promise<ApiResponse<any>> {
+    return this.get('/api/dashboard/performance');
   }
 
-  async updateSchedule(assistantId: string, scheduleId: string, updateData: any) {
-    return this.put(
-      apiConfig.endpoints.assistants.updateSchedule(assistantId, scheduleId),
-      updateData
-    );
+  async getTenantInfo(): Promise<ApiResponse<any>> {
+    return this.get('/api/dashboard/tenant-info');
   }
 
-  async deleteSchedule(assistantId: string, scheduleId: string) {
-    return this.delete(apiConfig.endpoints.assistants.deleteSchedule(assistantId, scheduleId));
+  // ========================================
+  // MÉTODOS DE INTEGRACIONES
+  // ========================================
+
+  async getIntegrations(): Promise<ApiResponse<any[]>> {
+    return this.get('/api/integrations');
   }
 
-  async searchAssistants(query: string, params?: any) {
-    return this.get<PaginatedResponse<any>>(apiConfig.endpoints.assistants.search, {
-      q: query,
-      ...params
-    });
+  async createIntegration(data: any): Promise<ApiResponse<any>> {
+    return this.post('/api/integrations', data);
   }
 
-  // Métodos para integraciones
-  async getIntegrations() {
-    return this.get(apiConfig.endpoints.integrations.list);
+  async updateIntegration(id: string, data: any): Promise<ApiResponse<any>> {
+    return this.put(`/api/integrations/${id}`, data);
   }
 
-  // WhatsApp Web methods
-  async createWhatsAppSession() {
-    return this.post(apiConfig.endpoints.integrations.whatsapp.createSession);
+  async deleteIntegration(id: string): Promise<ApiResponse> {
+    return this.delete(`/api/integrations/${id}`);
   }
 
-  async getWhatsAppQR() {
-    return this.get(apiConfig.endpoints.integrations.whatsapp.getQR);
+  // ========================================
+  // MÉTODOS DE WHATSAPP
+  // ========================================
+
+  async createWhatsAppSession(): Promise<ApiResponse<any>> {
+    return this.post('/api/whatsapp/sessions');
   }
 
-  async getWhatsAppStatus() {
-    return this.get(apiConfig.endpoints.integrations.whatsapp.getStatus);
+  async getWhatsAppQR(): Promise<ApiResponse<{ qrCode: string }>> {
+    return this.get('/api/whatsapp/qr');
   }
 
-  async disconnectWhatsApp() {
-    return this.post(apiConfig.endpoints.integrations.whatsapp.disconnect);
+  async getWhatsAppStatus(): Promise<ApiResponse<any>> {
+    return this.get('/api/whatsapp/status');
   }
 
-  async sendWhatsAppMessage(to: string, message: string) {
-    return this.post(apiConfig.endpoints.integrations.whatsapp.sendMessage, {
-      to,
-      message
-    });
+  async disconnectWhatsApp(): Promise<ApiResponse> {
+    return this.post('/api/whatsapp/disconnect');
   }
 
-  async getWhatsAppChatsLegacy() {
-    return this.get(apiConfig.endpoints.integrations.whatsapp.getChats);
+  async sendWhatsAppMessage(to: string, message: string): Promise<ApiResponse<any>> {
+    return this.post('/api/whatsapp/send', { to, message });
   }
 
-  async getWhatsAppMessagesLegacy(chatId: string, limit?: number) {
-    return this.get(apiConfig.endpoints.integrations.whatsapp.getMessages(chatId), {
-      limit
-    });
-  }
+  // ========================================
+  // MÉTODOS DE MEDIA
+  // ========================================
 
-  // Métodos para gestión de mensajes WhatsApp
-  async sendMessage(data: {
-    contactId: string;
-    content: string;
-    messageType?: string;
-  }) {
-    return this.post('/api/whatsapp/send', {
-      contactId: data.contactId,
-      content: data.content,
-      messageType: data.messageType || 'text'
-    });
-  }
-
-  async sendMediaMessage(to: string, file: File, caption?: string, mediaType?: string) {
+  async uploadMedia(file: File, type?: string): Promise<ApiResponse<{ url: string; id: string }>> {
     const formData = new FormData();
-    formData.append('media', file);
-    formData.append('to', to);
-    if (caption) formData.append('caption', caption);
-    if (mediaType) formData.append('mediaType', mediaType);
+    formData.append('file', file);
+    if (type) formData.append('type', type);
 
-    return this.request('/api/messages/send-media', {
+    return this.request('/api/media/upload', {
       method: 'POST',
       body: formData,
       headers: {
         ...this.getHeaders(),
-        // No incluir Content-Type para FormData, el navegador lo establecerá automáticamente
+        // No incluir Content-Type para FormData
       }
     });
   }
 
-  async getWhatsAppChatsNew(params?: { limit?: number; offset?: number }) {
-    return this.get('/api/whatsapp/chats', params);
+  async getMedia(id: string): Promise<ApiResponse<any>> {
+    return this.get(`/api/media/${id}`);
   }
 
-  async getWhatsAppMessagesNew(chatId: string, params?: { limit?: number; offset?: number }) {
-    return this.get(`/api/whatsapp/chats/${chatId}/messages`, params);
+  async deleteMedia(id: string): Promise<ApiResponse> {
+    return this.delete(`/api/media/${id}`);
   }
 
-  async markAsRead(chatId: string, messageIds?: string[]) {
-    return this.post(`/api/messages/chats/${chatId}/mark-read`, {
-      messageIds
-    });
-  }
-
-  async getRecentMessages(limit?: number) {
-    return this.get('/api/messages/recent', { limit });
-  }
-
-  async searchMessages(query: string, params?: { chatId?: string; limit?: number }) {
-    return this.get('/api/messages/search', {
-      query,
-      ...params
-    });
-  }
-
-  async getMessageStats() {
-    return this.get('/api/messages/stats');
-  }
-
-  async setupMessageWebhook(webhookUrl: string, events?: string[]) {
-    return this.post('/api/messages/webhook', {
-      webhookUrl,
-      events: events || ['message', 'messageUpdate']
-    });
-  }
-
-  // Métodos para gestión de contactos
-  async getContacts(params?: {
-    page?: number;
-    limit?: number;
-    search?: string;
-  }) {
-    return this.get<PaginatedResponse<Contact>>('/api/whatsapp/contacts', params);
-  }
-
-  async getContact(id: string) {
-    return this.get<Contact>(`/api/whatsapp/contacts/${id}`);
-  }
-
-  async searchContacts(query: string, params?: {
-    page?: number;
-    limit?: number;
-  }) {
-    return this.get<PaginatedResponse<Contact>>('/api/whatsapp/contacts', {
-      search: query,
-      ...params
-    });
-  }
-
-  async updateContact(id: string, data: Partial<Contact>) {
-    return this.put<Contact>(`/api/whatsapp/contacts/${id}`, data);
-  }
-
-  async blockContact(id: string) {
-    return this.post<Contact>(`/api/whatsapp/contacts/${id}/block`);
-  }
-
-  async unblockContact(id: string) {
-    return this.post<Contact>(`/api/whatsapp/contacts/${id}/unblock`);
-  }
-
-  async deleteContact(id: string) {
-    return this.delete(`/api/whatsapp/contacts/${id}`);
-  }
-
-  async getContactData(whatsappId: string) {
-    return this.get<Contact>(`/api/whatsapp/contacts/data/${encodeURIComponent(whatsappId)}`);
-  }
-
-  async createContact(data: {
-    name: string;
-    phone_number?: string;
-    whatsapp_id?: string;
-    is_group?: boolean;
-  }) {
-    return this.post<Contact>('/api/whatsapp/contacts', data);
-  }
-
-  // Métodos para programación
-  async getScheduledMessages(params?: {
-    page?: number;
-    limit?: number;
-    status?: string;
-    search?: string;
-  }) {
-    return this.get<PaginatedResponse<any>>('/api/scheduled', params);
-  }
-
-  async getScheduledMessage(id: string) {
-    return this.get(`/api/scheduled/${id}`);
-  }
-
-  async createScheduledMessage(data: {
-    contactId: number;
-    content: string;
-    messageType?: string;
-    scheduledTime: string;
-  }) {
-    return this.post('/api/scheduled', data);
-  }
-
-  async updateScheduledMessage(id: string, data: {
-    content?: string;
-    messageType?: string;
-    scheduledTime?: string;
-  }) {
-    return this.put(`/api/scheduled/${id}`, data);
-  }
-
-  async deleteScheduledMessage(id: string) {
-    return this.delete(`/api/scheduled/${id}`);
-  }
-
-  async cancelScheduledMessage(id: string) {
-    return this.post(`/api/scheduled/${id}/cancel`);
-  }
-
-  // Métodos para Web Chat
-  async getWebChatConversations(params?: {
-    status?: string;
-    assigned_to?: number;
-    limit?: number;
-    offset?: number;
-  }) {
-    return this.get('/api/integrations/web/conversations', params);
-  }
-
-  async getWebChatConversation(conversationId: string) {
-    return this.get(`/api/integrations/web/conversations/${conversationId}`);
-  }
-
-  async createWebChatConversation(data: {
-    visitor: {
-      session_id: string;
-      name?: string;
-      email?: string;
-      phone?: string;
-      ip_address?: string;
-      user_agent?: string;
-      location?: string;
-    };
-    initial_message?: string;
-  }) {
-    return this.post('/api/integrations/web/conversations', data);
-  }
-
-  async updateWebChatConversation(conversationId: string, data: {
-    status?: 'active' | 'closed' | 'pending' | 'resolved';
-    assigned_to?: number;
-    priority?: 'low' | 'normal' | 'high' | 'urgent';
-    tags?: string[];
-    metadata?: Record<string, any>;
-  }) {
-    return this.put(`/api/integrations/web/conversations/${conversationId}`, data);
-  }
-
-  async getWebChatMessages(conversationId: string, params?: {
-    limit?: number;
-    offset?: number;
-  }) {
-    return this.get(`/api/integrations/web/conversations/public/${conversationId}/messages`, params);
-  }
-
-  async sendWebChatMessage(data: {
-    conversation_id: number;
-    content: string;
-    message_type?: 'text' | 'image' | 'video' | 'audio' | 'file' | 'emoji';
-    metadata?: Record<string, any>;
-  }) {
-    return this.post('/api/integrations/web/agent-messages', data);
-  }
-
-  async markWebChatMessagesAsRead(conversationId: string) {
-    return this.post(`/api/integrations/web/conversations/${conversationId}/read`);
-  }
-
-  async getWebChatStats() {
-    return this.get('/api/integrations/web/stats');
-  }
-
-  async getWebChatWidgetScript(domain?: string) {
-    return this.get('/api/integrations/web/widget-script', { domain });
-  }
-
-  // ===== NUEVOS MÉTODOS PARA FUNCIONALIDADES AVANZADAS =====
+  // ========================================
+  // MÉTODOS DE ASIGNACIONES
+  // ========================================
 
-  // Métodos para Asignaciones
-  async assignAssistant(data: {
-    assistant_id: number;
-    conversation_id: string;
-    platform: string;
-  }) {
-    return this.post<Assignment>('/api/assignments', data);
+  async assignAssistant(data: { assistant_id: string; conversation_id: string; platform: string }): Promise<ApiResponse<any>> {
+    return this.post('/api/assignments', data);
   }
 
-  async getUserAssignments() {
-    return this.get<Assignment[]>('/api/assignments');
+  async unassignAssistant(conversationId: string, platform: string): Promise<ApiResponse> {
+    return this.delete(`/api/assignments/conversations/${conversationId}/${platform}`);
   }
 
-  async getAssignedAssistant(conversationId: string, platform: string) {
-    return this.get<Assignment>(`/api/assignments/conversation/${conversationId}/${platform}`);
+  async getAssignedAssistant(conversationId: string, platform: string): Promise<ApiResponse<any>> {
+    return this.get(`/api/assignments/conversations/${conversationId}/${platform}`);
   }
 
-  async unassignAssistant(conversationId: string, platform: string) {
-    return this.delete(`/api/assignments/conversation/${conversationId}/${platform}`);
+  async getAssignments(params?: { page?: number; limit?: number }): Promise<ApiResponse<PaginatedResponse<any>>> {
+    return this.get('/api/assignments', params);
   }
 
-  async autoAssignAssistant(data: {
-    conversation_id: string;
-    platform: string;
-    contact_id?: number;
-  }) {
-    return this.post<Assignment>('/api/assignments/auto-assign', data);
-  }
-
-  async getAssignmentStats() {
-    return this.get<AssignmentStats>('/api/assignments/stats');
-  }
-
-  async getConversationsByAssistant(assistantId: string, params?: {
-    limit?: number;
-    offset?: number;
-  }) {
-    return this.get<Assignment[]>(`/api/assignments/assistant/${assistantId}`, params);
-  }
-
-  async hasAssignedAssistant(conversationId: string, platform: string) {
-    return this.get<{ has_assignment: boolean }>(`/api/assignments/check/${conversationId}/${platform}`);
-  }
-
-  // Métodos para Plantillas de Respuestas
-  async createTemplate(data: {
-    name: string;
-    content: string;
-    assistant_id: number;
-    category?: 'greeting' | 'farewell' | 'question' | 'information' | 'escalation' | 'general';
-    trigger_keywords?: string[];
-    priority?: number;
-    response_delay?: number;
-    is_active?: boolean;
-  }) {
-    return this.post<ResponseTemplate>('/api/templates', data);
-  }
-
-  async getUserTemplates(params?: {
-    assistant_id?: number;
-    category?: string;
-  }) {
-    return this.get<ResponseTemplate[]>('/api/templates', params);
-  }
-
-  async getTemplateById(id: string) {
-    return this.get<ResponseTemplate>(`/api/templates/${id}`);
-  }
-
-  async updateTemplate(id: string, data: Partial<ResponseTemplate>) {
-    return this.put<ResponseTemplate>(`/api/templates/${id}`, data);
-  }
-
-  async deleteTemplate(id: string) {
-    return this.delete(`/api/templates/${id}`);
-  }
-
-  async searchTemplatesByKeywords(data: {
-    keywords: string[];
-    assistant_id?: number;
-  }) {
-    return this.post<ResponseTemplate[]>('/api/templates/search', data);
-  }
-
-  async getTemplatesByCategory(category: string, params?: {
-    assistant_id?: number;
-  }) {
-    return this.get<ResponseTemplate[]>(`/api/templates/category/${category}`, params);
-  }
-
-  async duplicateTemplate(id: string, newName: string) {
-    return this.post<ResponseTemplate>(`/api/templates/${id}/duplicate`, { new_name: newName });
-  }
-
-  async getTemplateStats() {
-    return this.get<TemplateStats>('/api/templates/stats');
-  }
-
-  async getTemplatesStats() {
-    return this.get<TemplateStats>('/api/templates/stats');
-  }
-
-  // Métodos para Etiquetas
-  async createTag(data: {
-    name: string;
-    color: string;
-    description?: string;
-    is_active?: boolean;
-  }) {
-    return this.post<Tag>('/api/tags', data);
-  }
-
-  async getUserTags(params?: {
-    active_only?: boolean;
-  }) {
-    return this.get<Tag[]>('/api/tags', params);
-  }
-
-  async getTagById(id: string) {
-    return this.get<Tag>(`/api/tags/${id}`);
-  }
-
-  async updateTag(id: string, data: Partial<Tag>) {
-    return this.put<Tag>(`/api/tags/${id}`, data);
-  }
-
-  async deleteTag(id: string) {
-    return this.delete(`/api/tags/${id}`);
-  }
-
-  async tagConversation(tagId: string, data: {
-    conversation_id: string;
-    platform: string;
-  }) {
-    return this.post<ConversationTag>(`/api/tags/${tagId}/conversation`, data);
-  }
-
-  async tagContact(tagId: string, data: {
-    contact_id: number;
-  }) {
-    return this.post<ContactTag>(`/api/tags/${tagId}/contact`, data);
-  }
-
-  async getConversationTags(conversationId: string, platform: string) {
-    return this.get<Tag[]>(`/api/tags/conversation/${conversationId}/${platform}`);
-  }
-
-  async getContactTags(contactId: string) {
-    return this.get<Tag[]>(`/api/tags/contact/${contactId}`);
-  }
-
-  async untagConversation(tagId: string, conversationId: string, platform: string) {
-    return this.delete(`/api/tags/${tagId}/conversation/${conversationId}/${platform}`);
-  }
-
-  async untagContact(tagId: string, contactId: string) {
-    return this.delete(`/api/tags/${tagId}/contact/${contactId}`);
-  }
-
-  async getConversationsByTag(tagId: string, params?: {
-    platform?: string;
-  }) {
-    return this.get<any[]>(`/api/tags/${tagId}/conversations`, params);
-  }
-
-  async getContactsByTag(tagId: string) {
-    return this.get<Contact[]>(`/api/tags/${tagId}/contacts`);
-  }
-
-  async getTags() {
-    return this.get<Tag[]>('/api/tags');
-  }
-
-  async getTagStats() {
-    return this.get<TagStats>('/api/tags/stats');
-  }
-
-  async getTagsStats() {
-    return this.get<TagStats>('/api/tags/stats');
-  }
+  // ========================================
+  // MÉTODOS DE RESPUESTAS AUTOMÁTICAS
+  // ========================================
 
-  // Métodos para Respuestas Automáticas
-  async processIncomingMessage(data: {
-    message: {
-      id: string;
-      chat_id: string;
-      content: string;
-      sender: string;
-      timestamp: string;
-    };
-  }) {
-    return this.post<AutoResponseResult>('/api/auto-response/process', data);
+  async processIncomingMessage(data: { message: any }): Promise<ApiResponse<any>> {
+    return this.post('/api/auto-response/process', data);
   }
 
-  async sendAutoResponse(data: {
-    chat_id: string;
-    response: string;
-    assistant_id?: number;
-    template_id?: number;
-  }) {
+  async sendAutoResponse(data: { chat_id: string; response: string; assistant_id?: string; template_id?: string }): Promise<ApiResponse> {
     return this.post('/api/auto-response/send', data);
   }
 
-  async processWebMessage(data: {
-    conversation_id: string;
-    message_content: string;
-  }) {
-    return this.post<AutoResponseResult>('/api/auto-response/process-web', data);
+  async shouldAutoRespond(conversationId: string, platform: string): Promise<ApiResponse<{ should_respond: boolean }>> {
+    return this.get(`/api/auto-response/should-respond/${conversationId}/${platform}`);
   }
 
-  async shouldAutoRespond(conversationId: string, platform: string) {
-    return this.get<{ should_respond: boolean }>(`/api/auto-response/should-respond/${conversationId}/${platform}`);
+  // ========================================
+  // MÉTODOS DE CONFIGURACIÓN
+  // ========================================
+
+  async getSystemInfo(): Promise<ApiResponse<any>> {
+    return this.get('/api/config/system-info');
   }
 
-  async getAutoResponseStats() {
-    return this.get<AutoResponseStats>('/api/auto-response/stats');
+  async getDatabaseStatus(): Promise<ApiResponse<any>> {
+    return this.get('/api/config/database-status');
   }
 
-  // Métodos adicionales para Asistentes
-  async getAvailableModels(apiKey: string) {
-    return this.get<string[]>(`/api/assistants/models?api_key=${encodeURIComponent(apiKey)}`);
+  async changePassword(data: { currentPassword: string; newPassword: string }): Promise<ApiResponse> {
+    return this.put('/api/config/change-password', data);
   }
 
-  async validateApiKey(data: {
-    api_key: string;
-  }) {
-    return this.post<{ valid: boolean }>('/api/assistants/validate-key', data);
+  // ========================================
+  // MÉTODOS LEGACY (COMPATIBILIDAD)
+  // ========================================
+
+  // Mantener métodos legacy para compatibilidad
+  async getWhatsAppChatsLegacy(params?: { limit?: number; offset?: number }): Promise<ApiResponse<any[]>> {
+    return this.get('/api/whatsapp/chats', params);
   }
 
-  async getUsageInfo(assistantId: string) {
-    return this.get<{
-      total_usage: number;
-      total_granted: number;
-      total_available: number;
-    }>(`/api/assistants/${assistantId}/usage`);
+  async getWhatsAppMessagesLegacy(chatId: string, params?: { limit?: number; offset?: number }): Promise<ApiResponse<any[]>> {
+    return this.get(`/api/whatsapp/chats/${chatId}/messages`, params);
   }
 
-  // Métodos para gestión de tags en conversaciones
-  async addConversationTag(conversationId: string, tagId: number, platform: string) {
-    return this.post('/api/tags/conversation', {
-      conversation_id: conversationId,
-      tag_id: tagId,
-      platform: platform
-    });
+  async sendMessageLegacy(data: { contactId: string; content: string; messageType?: string }): Promise<ApiResponse<any>> {
+    return this.post('/api/whatsapp/send', data);
   }
 
-  async removeConversationTag(conversationId: string, tagId: number, platform: string) {
-    return this.delete(`/api/tags/conversation/${conversationId}/${tagId}/${platform}`);
-  }
-
-  async addContactTag(contactId: string, tagId: number) {
-    return this.post('/api/tags/contact', {
-      contact_id: contactId,
-      tag_id: tagId
-    });
-  }
-
-  async removeContactTag(contactId: string, tagId: number) {
-    return this.delete(`/api/tags/contact/${contactId}/${tagId}`);
-  }
-
-
-  // Métodos para Notas de Contacto
-  async getContactNotes(contactId: string) {
-    return this.get<ContactNote[]>(`/api/contacts/${contactId}/notes`);
-  }
-
-  async createContactNote(contactId: string, data: {
-    content: string;
-    is_important?: boolean;
-  }) {
-    return this.post<ContactNote>(`/api/contacts/${contactId}/notes`, data);
-  }
-
-  async updateContactNote(contactId: string, noteId: string, data: {
-    content?: string;
-    is_important?: boolean;
-  }) {
-    return this.put<ContactNote>(`/api/contacts/${contactId}/notes/${noteId}`, data);
-  }
-
-  async deleteContactNote(contactId: string, noteId: string) {
-    return this.delete(`/api/contacts/${contactId}/notes/${noteId}`);
-  }
-
-  // Métodos para Historial de Interacciones
-  async getContactInteractionHistory(contactId: string, params?: {
-    limit?: number;
-    offset?: number;
-    type?: string;
-  }) {
-    return this.get<InteractionHistory[]>(`/api/contacts/${contactId}/interactions`, params);
-  }
-
-  async createInteractionHistory(contactId: string, data: {
-    interaction_type: 'message' | 'call' | 'email' | 'meeting' | 'note';
-    content: string;
-    metadata?: Record<string, any>;
-  }) {
-    return this.post<InteractionHistory>(`/api/contacts/${contactId}/interactions`, data);
+  async scheduleMessageLegacy(data: { contactId: string; content: string; messageType?: string; scheduledTime: string }): Promise<ApiResponse<any>> {
+    return this.post('/api/scheduled', data);
   }
 }
 

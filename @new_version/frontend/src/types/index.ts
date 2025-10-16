@@ -1,27 +1,6 @@
-import { Request } from 'express';
-
 // ========================================
-// INTERFACES MULTI-TENANT
+// TIPOS MULTI-TENANT PARA FRONTEND
 // ========================================
-
-// Usuario autenticado en request con contexto multi-tenant
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    tenant_id: string;
-    email: string;
-    name: string;
-    role: UserRole;
-    permissions: Record<string, any>;
-  };
-  tenant?: {
-    id: string;
-    slug: string;
-    name: string;
-    plan_type: PlanType;
-    limits: TenantLimits;
-  };
-}
 
 // ========================================
 // ENUMS Y TIPOS
@@ -75,7 +54,6 @@ export interface User {
   id: string;
   tenant_id: string;
   email: string;
-  password_hash: string;
   name: string;
   role: UserRole;
   permissions: Record<string, any>;
@@ -258,182 +236,6 @@ export interface ScheduledMessage {
 }
 
 // ========================================
-// INTERFACES DE SEGURIDAD Y AUDITORÍA
-// ========================================
-
-export interface AuditLog {
-  id: string;
-  tenant_id: string;
-  user_id?: string;
-  action: string;
-  resource_type: string;
-  resource_id?: string;
-  old_values?: Record<string, any>;
-  new_values?: Record<string, any>;
-  ip_address?: string;
-  user_agent?: string;
-  metadata: Record<string, any>;
-  created_at: string;
-  user?: User;
-}
-
-export interface ApiKey {
-  id: string;
-  tenant_id: string;
-  user_id: string;
-  name: string;
-  key_hash: string;
-  permissions: Record<string, any>;
-  last_used_at?: string;
-  expires_at?: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-  user?: User;
-}
-
-export interface Webhook {
-  id: string;
-  tenant_id: string;
-  name: string;
-  url: string;
-  events: string[];
-  secret?: string;
-  is_active: boolean;
-  retry_count: number;
-  timeout_seconds: number;
-  last_triggered_at?: string;
-  success_count: number;
-  failure_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-// ========================================
-// INTERFACES DE ANALYTICS
-// ========================================
-
-export interface AnalyticsEvent {
-  id: string;
-  tenant_id: string;
-  event_type: string;
-  event_data: Record<string, any>;
-  user_id?: string;
-  conversation_id?: string;
-  contact_id?: string;
-  created_at: string;
-  user?: User;
-  conversation?: Conversation;
-  contact?: Contact;
-}
-
-export interface PerformanceMetric {
-  id: string;
-  tenant_id: string;
-  metric_name: string;
-  metric_value: number;
-  metric_unit?: string;
-  dimensions: Record<string, any>;
-  recorded_at: string;
-}
-
-// ========================================
-// INTERFACES DE RELACIONES
-// ========================================
-
-export interface ConversationTag {
-  conversation_id: string;
-  tag_id: string;
-  created_at: string;
-  tag?: Tag;
-}
-
-export interface ContactTag {
-  contact_id: string;
-  tag_id: string;
-  created_at: string;
-  tag?: Tag;
-  contact?: Contact;
-}
-
-export interface AssistantAssignment {
-  id: string;
-  tenant_id: string;
-  assistant_id: string;
-  conversation_id: string;
-  assigned_at: string;
-  is_active: boolean;
-  assignment_type: AssignmentType;
-  created_at: string;
-  updated_at: string;
-  assistant?: Assistant;
-  conversation?: Conversation;
-}
-
-export interface MediaFile {
-  id: string;
-  tenant_id: string;
-  original_name: string;
-  file_name: string;
-  file_path: string;
-  file_type: string;
-  file_size: number;
-  mime_type: string;
-  width?: number;
-  height?: number;
-  duration?: number;
-  thumbnail_path?: string;
-  is_compressed: boolean;
-  compression_ratio?: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ContactNote {
-  id: string;
-  tenant_id: string;
-  contact_id: string;
-  user_id: string;
-  content: string;
-  is_private: boolean;
-  created_at: string;
-  updated_at: string;
-  contact?: Contact;
-  user?: User;
-}
-
-// ========================================
-// INTERFACES DE VISTAS MATERIALIZADAS
-// ========================================
-
-export interface DashboardStats {
-  tenant_id: string;
-  tenant_name: string;
-  plan_type: PlanType;
-  tenant_status: TenantStatus;
-  total_users: number;
-  total_contacts: number;
-  total_conversations: number;
-  total_messages: number;
-  active_conversations: number;
-  messages_today: number;
-  avg_resolution_time?: number;
-  avg_satisfaction_score?: number;
-}
-
-export interface AssistantMetrics {
-  tenant_id: string;
-  assistant_id: string;
-  assistant_name: string;
-  is_active: boolean;
-  total_conversations: number;
-  total_messages: number;
-  auto_responses: number;
-  avg_response_time?: number;
-  avg_satisfaction?: number;
-}
-
-// ========================================
 // INTERFACES DE REQUEST/RESPONSE
 // ========================================
 
@@ -487,18 +289,6 @@ export interface CreateUserRequest {
 }
 
 export interface UpdateUserRequest extends Partial<CreateUserRequest> {
-  id: string;
-}
-
-export interface CreateIntegrationRequest {
-  type: IntegrationType;
-  name: string;
-  config: Record<string, any>;
-  credentials?: Record<string, any>;
-  webhook_url?: string;
-}
-
-export interface UpdateIntegrationRequest extends Partial<CreateIntegrationRequest> {
   id: string;
 }
 
@@ -691,6 +481,48 @@ export interface MessageFilters extends PaginationParams {
 // INTERFACES DE ESTADÍSTICAS
 // ========================================
 
+export interface DashboardStats {
+  assistants: {
+    total: number;
+    active: number;
+    inactive: number;
+  };
+  conversations: {
+    total: number;
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+  messages: {
+    total: number;
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+  contacts: {
+    total: number;
+    newToday: number;
+    newThisWeek: number;
+    newThisMonth: number;
+  };
+  templates: {
+    total: number;
+    active: number;
+    categories: number;
+  };
+  tags: {
+    total: number;
+    active: number;
+    conversations: number;
+    contacts: number;
+  };
+  assignments: {
+    total: number;
+    autoAssigned: number;
+    manualAssigned: number;
+  };
+}
+
 export interface TenantStats {
   total_users: number;
   active_users: number;
@@ -728,6 +560,29 @@ export interface TagStats {
     tag_name: string;
     count: number;
   }>;
+}
+
+// ========================================
+// INTERFACES DE CONTEXTO
+// ========================================
+
+export interface AppContextType {
+  user: User | null;
+  tenant: Tenant | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: (credentials: LoginRequest) => Promise<void>;
+  register: (data: RegisterRequest) => Promise<void>;
+  logout: () => void;
+  refreshToken: () => Promise<void>;
+  updateUser: (user: Partial<User>) => void;
+  updateTenant: (tenant: Partial<Tenant>) => void;
+}
+
+export interface ThemeContextType {
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
+  setTheme: (theme: 'light' | 'dark') => void;
 }
 
 // ========================================
@@ -769,7 +624,7 @@ export interface SocketEvents {
   'assistant:created': (assistant: Assistant) => void;
   'assistant:updated': (assistant: Assistant) => void;
   'assistant:deleted': (assistantId: string) => void;
-  'assistant:assigned': (assignment: AssistantAssignment) => void;
+  'assistant:assigned': (assignment: any) => void;
   'assistant:unassigned': (conversationId: string, assistantId: string) => void;
   'assistant:response:generated': (conversationId: string, response: string, assistantId: string) => void;
   'assistant:response:sent': (conversationId: string, messageId: string, assistantId: string) => void;
@@ -778,74 +633,6 @@ export interface SocketEvents {
   // General events
   'notification': (notification: { type: 'info' | 'success' | 'warning' | 'error'; message: string; data?: any }) => void;
   'error': (error: { message: string; code?: string; details?: any }) => void;
-}
-
-// ========================================
-// INTERFACES DE CONFIGURACIÓN
-// ========================================
-
-export interface TenantConfig {
-  timezone: string;
-  language: string;
-  date_format: string;
-  time_format: string;
-  currency: string;
-  features: string[];
-  integrations: Record<string, any>;
-  notifications: Record<string, any>;
-  security: Record<string, any>;
-}
-
-export interface AssistantConfig {
-  response_delay_seconds: number;
-  max_conversation_length: number;
-  auto_assign_keywords: string[];
-  working_hours: {
-    start: string;
-    end: string;
-    timezone: string;
-  };
-  business_hours: {
-    enabled: boolean;
-    timezone: string;
-    schedule: Array<{
-      day: string;
-      start: string;
-      end: string;
-    }>;
-  };
-  fallback_message: string;
-  max_retries: number;
-  retry_delay: number;
-}
-
-// ========================================
-// INTERFACES DE MIGRACIÓN
-// ========================================
-
-export interface MigrationData {
-  tenants: Tenant[];
-  users: User[];
-  contacts: Contact[];
-  conversations: Conversation[];
-  messages: Message[];
-  assistants: Assistant[];
-  templates: ResponseTemplate[];
-  tags: Tag[];
-  scheduled_messages: ScheduledMessage[];
-}
-
-export interface MigrationStats {
-  tenants_created: number;
-  users_created: number;
-  contacts_created: number;
-  conversations_created: number;
-  messages_created: number;
-  assistants_created: number;
-  templates_created: number;
-  tags_created: number;
-  scheduled_messages_created: number;
-  errors: string[];
 }
 
 // ========================================

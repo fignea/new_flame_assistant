@@ -1,15 +1,15 @@
 import { Response } from 'express';
-import { AuthenticatedRequest, ApiResponse, CreateAssistantRequest, UpdateAssistantRequest } from '../types';
+import { AuthenticatedRequest, ApiResponse, CreateAssistantRequest, UpdateAssistantRequest, Assistant } from '../types';
 import { database } from '../config/database';
 import { OpenAIService } from '../services/OpenAIService';
 
 export class AssistantsController {
-  public async create(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+  public async create(req: AuthenticatedRequest, res: Response<ApiResponse<Assistant>>) {
     try {
-      const userId = req.user?.id;
+      const tenantId = req.user?.tenant_id;
       const assistantData: CreateAssistantRequest = req.body;
       
-      if (!userId) {
+      if (!tenantId) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no autenticado'
@@ -24,8 +24,8 @@ export class AssistantsController {
       }
 
       // Validar API key de OpenAI si se proporciona
-      if (assistantData.openai_api_key) {
-        const isValidKey = await OpenAIService.validateApiKey(assistantData.openai_api_key);
+      if (assistantData.api_key) {
+        const isValidKey = await OpenAIService.validateApiKey(assistantData.api_key);
         if (!isValidKey) {
           return res.status(400).json({
             success: false,
@@ -34,32 +34,45 @@ export class AssistantsController {
         }
       }
 
-      // Crear asistente con nueva estructura
-      await database.run(
-        `INSERT INTO assistants 
-         (user_id, name, description, prompt, is_active, openai_api_key, model, 
-          max_tokens, temperature, auto_assign, response_delay, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [
-          userId, 
-          assistantData.name, 
-          assistantData.description || null,
-          assistantData.prompt || null,
-          assistantData.is_active !== undefined ? assistantData.is_active : true,
-          assistantData.openai_api_key || null,
-          assistantData.model || 'gpt-3.5-turbo',
-          assistantData.max_tokens || 150,
-          assistantData.temperature || 0.7,
-          assistantData.auto_assign !== undefined ? assistantData.auto_assign : true,
-          assistantData.response_delay || 0
-        ]
-      );
+      // Encriptar API key si se proporciona
+      let encryptedApiKey = null;
+      if (assistantData.api_key) {
+        // Aquí se debería usar una función de encriptación real
+        encryptedApiKey = assistantData.api_key; // Por ahora sin encriptar
+      }
 
-      // Obtener el asistente creado
+      // Crear asistente
+      const assistantId = await database.run(`
+        INSERT INTO assistants (
+          tenant_id, name, description, prompt, is_active, ai_provider, model,
+          api_key_encrypted, max_tokens, temperature, auto_assign, response_delay,
+          working_hours, business_hours, fallback_message, config, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
+        RETURNING id
+      `, [
+        tenantId,
+        assistantData.name,
+        assistantData.description || null,
+        assistantData.prompt || null,
+        assistantData.is_active !== false,
+        assistantData.ai_provider || 'openai',
+        assistantData.model || 'gpt-3.5-turbo',
+        encryptedApiKey,
+        assistantData.max_tokens || 150,
+        assistantData.temperature || 0.7,
+        assistantData.auto_assign !== false,
+        assistantData.response_delay || 0,
+        JSON.stringify(assistantData.working_hours || {}),
+        JSON.stringify(assistantData.business_hours || {}),
+        assistantData.fallback_message || null,
+        JSON.stringify(assistantData.config || {})
+      ]);
+
+      // Obtener asistente creado
       const assistant = await database.get(
-        'SELECT * FROM assistants WHERE user_id = $1 AND name = $2 ORDER BY created_at DESC LIMIT 1',
-        [userId, assistantData.name]
-      );
+        'SELECT * FROM assistants WHERE id = $1',
+        [assistantId]
+      ) as Assistant;
 
       return res.status(201).json({
         success: true,
@@ -67,77 +80,51 @@ export class AssistantsController {
         message: 'Asistente creado exitosamente'
       });
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Create assistant error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al crear el asistente',
-        error: error.message
+        message: 'Error interno del servidor'
       });
     }
   }
 
-  public async getAll(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+  public async getAll(req: AuthenticatedRequest, res: Response<ApiResponse<Assistant[]>>) {
     try {
-      const userId = req.user?.id;
-      const { page = 1, limit = 10, is_active } = req.query;
+      const tenantId = req.user?.tenant_id;
       
-      if (!userId) {
+      if (!tenantId) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no autenticado'
         });
       }
 
-      let whereClause = 'WHERE user_id = $1';
-      const params: any[] = [userId];
-      let paramIndex = 2;
-
-      if (is_active !== undefined) {
-        whereClause += ` AND is_active = $${paramIndex}`;
-        params.push(is_active === 'true');
-        paramIndex++;
-      }
-
-      // Obtener total de asistentes
-      const countQuery = `SELECT COUNT(*) as total FROM assistants ${whereClause}`;
-      const countResult = await database.get(countQuery, params);
-      const total = countResult?.total || 0;
-
-      // Obtener asistentes con paginación
-      const offset = (Number(page) - 1) * Number(limit);
-      const assistantsQuery = `SELECT * FROM assistants ${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-      const assistants = await database.all(assistantsQuery, [...params, Number(limit), offset]);
+      const assistants = await database.all(
+        'SELECT * FROM assistants WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC',
+        [tenantId]
+      ) as Assistant[];
 
       return res.json({
         success: true,
-        data: {
-          data: assistants,
-          pagination: {
-            page: Number(page),
-            limit: Number(limit),
-            total,
-            pages: Math.ceil(total / Number(limit))
-          }
-        }
+        data: assistants
       });
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Get assistants error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al obtener los asistentes',
-        error: error.message
+        message: 'Error obteniendo asistentes'
       });
     }
   }
 
-  public async getById(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+  public async getById(req: AuthenticatedRequest, res: Response<ApiResponse<Assistant>>) {
     try {
-      const userId = req.user?.id;
+      const tenantId = req.user?.tenant_id;
       const { id } = req.params;
       
-      if (!userId) {
+      if (!tenantId) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no autenticado'
@@ -145,9 +132,9 @@ export class AssistantsController {
       }
 
       const assistant = await database.get(
-        'SELECT * FROM assistants WHERE id = $1 AND user_id = $2',
-        [id, userId]
-      );
+        'SELECT * FROM assistants WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
+        [id, tenantId]
+      ) as Assistant;
 
       if (!assistant) {
         return res.status(404).json({
@@ -161,33 +148,32 @@ export class AssistantsController {
         data: assistant
       });
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Get assistant error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al obtener el asistente',
-        error: error.message
+        message: 'Error obteniendo asistente'
       });
     }
   }
 
-  public async update(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+  public async update(req: AuthenticatedRequest, res: Response<ApiResponse<Assistant>>) {
     try {
-      const userId = req.user?.id;
+      const tenantId = req.user?.tenant_id;
       const { id } = req.params;
-      const updates: UpdateAssistantRequest = req.body;
+      const updateData: UpdateAssistantRequest = req.body;
       
-      if (!userId) {
+      if (!tenantId) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no autenticado'
         });
       }
 
-      // Verificar que el asistente existe y pertenece al usuario
+      // Verificar que el asistente existe y pertenece al tenant
       const existingAssistant = await database.get(
-        'SELECT * FROM assistants WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        'SELECT id FROM assistants WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
+        [id, tenantId]
       );
 
       if (!existingAssistant) {
@@ -197,9 +183,9 @@ export class AssistantsController {
         });
       }
 
-      // Validar API key de OpenAI si se proporciona
-      if (updates.openai_api_key) {
-        const isValidKey = await OpenAIService.validateApiKey(updates.openai_api_key);
+      // Validar API key si se proporciona
+      if (updateData.api_key) {
+        const isValidKey = await OpenAIService.validateApiKey(updateData.api_key);
         if (!isValidKey) {
           return res.status(400).json({
             success: false,
@@ -208,50 +194,84 @@ export class AssistantsController {
         }
       }
 
-      // Construir query de actualización
-      const updateFields: string[] = [];
-      const params: any[] = [];
-      let paramIndex = 1;
+      // Preparar campos para actualizar
+      const updateFields = [];
+      const updateValues = [];
+      let paramCount = 1;
 
-      if (updates.name !== undefined) {
-        updateFields.push(`name = $${paramIndex++}`);
-        params.push(updates.name);
+      if (updateData.name !== undefined) {
+        updateFields.push(`name = $${paramCount++}`);
+        updateValues.push(updateData.name);
       }
-      if (updates.description !== undefined) {
-        updateFields.push(`description = $${paramIndex++}`);
-        params.push(updates.description);
+
+      if (updateData.description !== undefined) {
+        updateFields.push(`description = $${paramCount++}`);
+        updateValues.push(updateData.description);
       }
-      if (updates.prompt !== undefined) {
-        updateFields.push(`prompt = $${paramIndex++}`);
-        params.push(updates.prompt);
+
+      if (updateData.prompt !== undefined) {
+        updateFields.push(`prompt = $${paramCount++}`);
+        updateValues.push(updateData.prompt);
       }
-      if (updates.is_active !== undefined) {
-        updateFields.push(`is_active = $${paramIndex++}`);
-        params.push(updates.is_active);
+
+      if (updateData.is_active !== undefined) {
+        updateFields.push(`is_active = $${paramCount++}`);
+        updateValues.push(updateData.is_active);
       }
-      if (updates.openai_api_key !== undefined) {
-        updateFields.push(`openai_api_key = $${paramIndex++}`);
-        params.push(updates.openai_api_key);
+
+      if (updateData.ai_provider !== undefined) {
+        updateFields.push(`ai_provider = $${paramCount++}`);
+        updateValues.push(updateData.ai_provider);
       }
-      if (updates.model !== undefined) {
-        updateFields.push(`model = $${paramIndex++}`);
-        params.push(updates.model);
+
+      if (updateData.model !== undefined) {
+        updateFields.push(`model = $${paramCount++}`);
+        updateValues.push(updateData.model);
       }
-      if (updates.max_tokens !== undefined) {
-        updateFields.push(`max_tokens = $${paramIndex++}`);
-        params.push(updates.max_tokens);
+
+      if (updateData.api_key !== undefined) {
+        updateFields.push(`api_key_encrypted = $${paramCount++}`);
+        updateValues.push(updateData.api_key); // Por ahora sin encriptar
       }
-      if (updates.temperature !== undefined) {
-        updateFields.push(`temperature = $${paramIndex++}`);
-        params.push(updates.temperature);
+
+      if (updateData.max_tokens !== undefined) {
+        updateFields.push(`max_tokens = $${paramCount++}`);
+        updateValues.push(updateData.max_tokens);
       }
-      if (updates.auto_assign !== undefined) {
-        updateFields.push(`auto_assign = $${paramIndex++}`);
-        params.push(updates.auto_assign);
+
+      if (updateData.temperature !== undefined) {
+        updateFields.push(`temperature = $${paramCount++}`);
+        updateValues.push(updateData.temperature);
       }
-      if (updates.response_delay !== undefined) {
-        updateFields.push(`response_delay = $${paramIndex++}`);
-        params.push(updates.response_delay);
+
+      if (updateData.auto_assign !== undefined) {
+        updateFields.push(`auto_assign = $${paramCount++}`);
+        updateValues.push(updateData.auto_assign);
+      }
+
+      if (updateData.response_delay !== undefined) {
+        updateFields.push(`response_delay = $${paramCount++}`);
+        updateValues.push(updateData.response_delay);
+      }
+
+      if (updateData.working_hours !== undefined) {
+        updateFields.push(`working_hours = $${paramCount++}`);
+        updateValues.push(JSON.stringify(updateData.working_hours));
+      }
+
+      if (updateData.business_hours !== undefined) {
+        updateFields.push(`business_hours = $${paramCount++}`);
+        updateValues.push(JSON.stringify(updateData.business_hours));
+      }
+
+      if (updateData.fallback_message !== undefined) {
+        updateFields.push(`fallback_message = $${paramCount++}`);
+        updateValues.push(updateData.fallback_message);
+      }
+
+      if (updateData.config !== undefined) {
+        updateFields.push(`config = $${paramCount++}`);
+        updateValues.push(JSON.stringify(updateData.config));
       }
 
       if (updateFields.length === 0) {
@@ -261,52 +281,49 @@ export class AssistantsController {
         });
       }
 
-      updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-      params.push(id, userId);
+      updateFields.push(`updated_at = NOW()`);
+      updateValues.push(id, tenantId);
 
-      await database.run(
-        `UPDATE assistants SET ${updateFields.join(', ')} WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}`,
-        params
-      );
+      const query = `
+        UPDATE assistants 
+        SET ${updateFields.join(', ')}
+        WHERE id = $${paramCount++} AND tenant_id = $${paramCount++}
+        RETURNING *
+      `;
 
-      // Obtener el asistente actualizado
-      const updatedAssistant = await database.get(
-        'SELECT * FROM assistants WHERE id = $1 AND user_id = $2',
-        [id, userId]
-      );
+      const assistant = await database.get(query, updateValues) as Assistant;
 
       return res.json({
         success: true,
-        data: updatedAssistant,
+        data: assistant,
         message: 'Asistente actualizado exitosamente'
       });
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Update assistant error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al actualizar el asistente',
-        error: error.message
+        message: 'Error interno del servidor'
       });
     }
   }
 
   public async delete(req: AuthenticatedRequest, res: Response<ApiResponse>) {
     try {
-      const userId = req.user?.id;
+      const tenantId = req.user?.tenant_id;
       const { id } = req.params;
       
-      if (!userId) {
+      if (!tenantId) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no autenticado'
         });
       }
 
-      // Verificar que el asistente existe y pertenece al usuario
+      // Verificar que el asistente existe y pertenece al tenant
       const existingAssistant = await database.get(
-        'SELECT * FROM assistants WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        'SELECT id FROM assistants WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
+        [id, tenantId]
       );
 
       if (!existingAssistant) {
@@ -316,10 +333,10 @@ export class AssistantsController {
         });
       }
 
-      // Eliminar asistente
+      // Soft delete
       await database.run(
-        'DELETE FROM assistants WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        'UPDATE assistants SET deleted_at = NOW() WHERE id = $1 AND tenant_id = $2',
+        [id, tenantId]
       );
 
       return res.json({
@@ -327,213 +344,97 @@ export class AssistantsController {
         message: 'Asistente eliminado exitosamente'
       });
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Delete assistant error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error al eliminar el asistente',
-        error: error.message
+        message: 'Error interno del servidor'
       });
     }
   }
 
-  public async toggleStatus(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+  public async testAssistant(req: AuthenticatedRequest, res: Response<ApiResponse<{ response: string }>>) {
     try {
-      const userId = req.user?.id;
+      const tenantId = req.user?.tenant_id;
       const { id } = req.params;
+      const { message } = req.body;
       
-      if (!userId) {
+      if (!tenantId) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no autenticado'
         });
       }
 
-      // Verificar que el asistente existe y pertenece al usuario
-      const existingAssistant = await database.get(
-        'SELECT * FROM assistants WHERE id = $1 AND user_id = $2',
-        [id, userId]
-      );
-
-      if (!existingAssistant) {
-        return res.status(404).json({
-          success: false,
-          message: 'Asistente no encontrado'
-        });
-      }
-
-      // Cambiar estado
-      const newStatus = !existingAssistant.is_active;
-      
-      await database.run(
-        'UPDATE assistants SET is_active = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3',
-        [newStatus, id, userId]
-      );
-
-      return res.json({
-        success: true,
-        data: { is_active: newStatus },
-        message: `Asistente ${newStatus ? 'activado' : 'desactivado'} exitosamente`
-      });
-
-    } catch (error: any) {
-      console.error('Toggle assistant status error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Error al cambiar el estado del asistente',
-        error: error.message
-      });
-    }
-  }
-
-  public async getStats(req: AuthenticatedRequest, res: Response<ApiResponse>) {
-    try {
-      const userId = req.user?.id;
-      const { id } = req.params;
-      
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
-
-      // Verificar que el asistente existe y pertenece al usuario
-      const existingAssistant = await database.get(
-        'SELECT * FROM assistants WHERE id = $1 AND user_id = $2',
-        [id, userId]
-      );
-
-      if (!existingAssistant) {
-        return res.status(404).json({
-          success: false,
-          message: 'Asistente no encontrado'
-        });
-      }
-
-      // Obtener estadísticas del asistente
-      const stats = await database.get(
-        `SELECT 
-           COUNT(DISTINCT aa.conversation_id) as total_conversations,
-           COUNT(DISTINCT CASE WHEN aa.is_active = true THEN aa.conversation_id END) as active_conversations,
-           COUNT(m.id) as total_messages,
-           COUNT(CASE WHEN m.is_auto_response = true THEN 1 END) as auto_responses,
-           COUNT(CASE WHEN m.is_auto_response = false AND m.is_from_me = true THEN 1 END) as manual_responses
-         FROM assistants a
-         LEFT JOIN assistant_assignments aa ON a.id = aa.assistant_id
-         LEFT JOIN messages m ON aa.conversation_id = m.chat_id AND m.assistant_id = a.id
-         WHERE a.id = $1 AND a.user_id = $2`,
-        [id, userId]
-      );
-
-      return res.json({
-        success: true,
-        data: {
-          assistant_id: parseInt(id),
-          total_conversations: stats?.total_conversations || 0,
-          active_conversations: stats?.active_conversations || 0,
-          total_messages: stats?.total_messages || 0,
-          auto_responses: stats?.auto_responses || 0,
-          manual_responses: stats?.manual_responses || 0,
-          average_response_time: 0, // TODO: Implementar cálculo de tiempo de respuesta
-          satisfaction_score: null // TODO: Implementar sistema de satisfacción
-        }
-      });
-
-    } catch (error: any) {
-      console.error('Get assistant stats error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Error al obtener las estadísticas del asistente',
-        error: error.message
-      });
-    }
-  }
-
-  /**
-   * Obtener modelos disponibles de OpenAI
-   * GET /api/assistants/models
-   */
-  public async getAvailableModels(req: AuthenticatedRequest, res: Response<ApiResponse>) {
-    try {
-      const { api_key } = req.query;
-      
-      if (!api_key) {
+      if (!message) {
         return res.status(400).json({
           success: false,
-          message: 'API key de OpenAI es requerida'
+          message: 'Mensaje de prueba requerido'
         });
       }
 
-      const models = await OpenAIService.getAvailableModels(api_key as string);
-
-      return res.json({
-        success: true,
-        data: models
-      });
-
-    } catch (error: any) {
-      console.error('Get available models error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Error al obtener los modelos disponibles',
-        error: error.message
-      });
-    }
-  }
-
-  /**
-   * Validar API key de OpenAI
-   * POST /api/assistants/validate-key
-   */
-  public async validateApiKey(req: AuthenticatedRequest, res: Response<ApiResponse>) {
-    try {
-      const { api_key } = req.body;
-      
-      if (!api_key) {
-        return res.status(400).json({
-          success: false,
-          message: 'API key de OpenAI es requerida'
-        });
-      }
-
-      const isValid = await OpenAIService.validateApiKey(api_key);
-
-      return res.json({
-        success: true,
-        data: { valid: isValid }
-      });
-
-    } catch (error: any) {
-      console.error('Validate API key error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Error al validar la API key',
-        error: error.message
-      });
-    }
-  }
-
-  /**
-   * Obtener información de uso de OpenAI
-   * GET /api/assistants/usage
-   */
-  public async getUsageInfo(req: AuthenticatedRequest, res: Response<ApiResponse>) {
-    try {
-      const { id } = req.params;
-      const userId = req.user?.id;
-      
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
-
-      // Obtener el asistente
+      // Obtener asistente
       const assistant = await database.get(
-        'SELECT * FROM assistants WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        'SELECT * FROM assistants WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
+        [id, tenantId]
+      ) as Assistant;
+
+      if (!assistant) {
+        return res.status(404).json({
+          success: false,
+          message: 'Asistente no encontrado'
+        });
+      }
+
+      if (!assistant.is_active) {
+        return res.status(400).json({
+          success: false,
+          message: 'El asistente está inactivo'
+        });
+      }
+
+      // Generar respuesta usando OpenAI
+      const response = await OpenAIService.generateResponse(
+        message,
+        assistant.prompt || 'Eres un asistente virtual útil.',
+        {
+          model: assistant.model,
+          max_tokens: assistant.max_tokens,
+          temperature: assistant.temperature
+        },
+        assistant.api_key_encrypted || process.env.OPENAI_API_KEY
+      );
+
+      return res.json({
+        success: true,
+        data: { response }
+      });
+
+    } catch (error) {
+      console.error('Test assistant error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error probando asistente'
+      });
+    }
+  }
+
+  public async getStats(req: AuthenticatedRequest, res: Response<ApiResponse<any>>) {
+    try {
+      const tenantId = req.user?.tenant_id;
+      const { id } = req.params;
+      
+      if (!tenantId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      // Verificar que el asistente existe
+      const assistant = await database.get(
+        'SELECT id FROM assistants WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
+        [id, tenantId]
       );
 
       if (!assistant) {
@@ -543,65 +444,31 @@ export class AssistantsController {
         });
       }
 
-      if (!assistant.openai_api_key) {
-        return res.status(400).json({
-          success: false,
-          message: 'El asistente no tiene API key de OpenAI configurada'
-        });
-      }
-
-      const usageInfo = await OpenAIService.getUsageInfo(assistant.openai_api_key);
-
-      return res.json({
-        success: true,
-        data: usageInfo
-      });
-
-    } catch (error: any) {
-      console.error('Get usage info error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Error al obtener la información de uso',
-        error: error.message
-      });
-    }
-  }
-
-  public async getAllStats(req: AuthenticatedRequest, res: Response<ApiResponse>) {
-    try {
-      const userId = req.user?.id;
-      
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
-
-      // Obtener estadísticas generales de asistentes
-      const stats = await database.get(
-        `SELECT 
-           COUNT(*) as total,
-           COUNT(CASE WHEN is_active = true THEN 1 END) as active,
-           COUNT(CASE WHEN is_active = false THEN 1 END) as inactive,
-           COUNT(CASE WHEN auto_assign = true THEN 1 END) as auto_assign_enabled
-         FROM assistants 
-         WHERE user_id = $1`,
-        [userId]
-      );
+      // Obtener estadísticas del asistente
+      const stats = await database.get(`
+        SELECT 
+          COUNT(DISTINCT c.id) as total_conversations,
+          COUNT(DISTINCT CASE WHEN c.status = 'active' THEN c.id END) as active_conversations,
+          COUNT(DISTINCT m.id) as total_messages,
+          COUNT(DISTINCT CASE WHEN m.is_auto_response = true THEN m.id END) as auto_responses,
+          AVG(c.resolution_time) as avg_response_time,
+          AVG(c.satisfaction_score) as avg_satisfaction
+        FROM conversations c
+        LEFT JOIN messages m ON c.id = m.conversation_id
+        WHERE c.assistant_id = $1 AND c.tenant_id = $2
+      `, [id, tenantId]);
 
       return res.json({
         success: true,
         data: stats
       });
+
     } catch (error) {
-      console.error('Error getting assistants stats:', error);
+      console.error('Assistant stats error:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error interno del servidor'
+        message: 'Error obteniendo estadísticas del asistente'
       });
     }
   }
 }
-
-export const assistantsController = new AssistantsController();

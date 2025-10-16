@@ -12,9 +12,9 @@ import path from 'path';
 dotenv.config();
 
 // Importar configuraciones
-import { database } from './config/database';
+import { initializeDatabase, closeDatabase, database } from './config/database';
 import { redisConfig } from './config/redis';
-import { logger, logRequest } from './utils/logger';
+import { logger } from './utils/logger';
 
 // Importar rutas
 import authRoutes from './routes/auth';
@@ -40,20 +40,20 @@ import { setSocketIO } from './controllers/WebController';
 import jwt from 'jsonwebtoken';
 import { JwtPayload } from './middleware/auth';
 
-class WhatsAppManagerServer {
+class FlameAssistantServer {
   private app: express.Application;
   private server: any;
   private io: SocketIOServer;
-  private userSockets: Map<number, string> = new Map(); // userId -> socketId
+  private userSockets: Map<string, string> = new Map(); // userId -> socketId
 
   constructor() {
-    console.log('🔧 Initializing Flame AIServer...');
+    console.log('🔧 Initializing Flame Assistant Server...');
     this.app = express();
     this.server = createServer(this.app);
     this.io = new SocketIOServer(this.server, {
       cors: {
         origin: [
-          process.env.CORS_ORIGIN || "http://localhost:5173",
+          process.env.CORS_ORIGIN || "http://localhost:3000",
           "http://localhost:80",
           "http://localhost",
           "http://127.0.0.1:80",
@@ -100,7 +100,7 @@ class WhatsAppManagerServer {
 
     // CORS
     this.app.use(cors({
-      origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+      origin: process.env.CORS_ORIGIN || "http://localhost:3000",
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -127,7 +127,7 @@ class WhatsAppManagerServer {
     this.app.get('/health', async (req, res) => {
       try {
         const [dbStatus, redisStatus] = await Promise.all([
-          database.checkConnection(),
+          checkDatabaseConnection(),
           redisConfig.checkConnection()
         ]);
         
@@ -146,7 +146,7 @@ class WhatsAppManagerServer {
             scheduler: schedulerStats
           },
           memory: process.memoryUsage(),
-          version: '1.0.0'
+          version: '2.0.0'
         };
 
         const statusCode = (dbStatus && redisStatus) ? 200 : 503;
@@ -216,8 +216,8 @@ class WhatsAppManagerServer {
     // Root endpoint
     this.app.get('/', (req, res) => {
       res.json({
-        message: '🔥 Flame AIAPI',
-        version: '1.0.0',
+        message: '🔥 Flame Assistant API',
+        version: '2.0.0',
         status: 'running',
         timestamp: new Date().toISOString(),
         docs: '/api/docs'
@@ -277,24 +277,34 @@ class WhatsAppManagerServer {
         }
 
         const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
-        console.log('🔍 Token decoded:', { userId: decoded.userId });
+        console.log('🔍 Token decoded:', { userId: decoded.userId, tenantId: decoded.tenantId });
         
-        // Verificar usuario
-        const user = await database.get(
-          'SELECT id, email, name FROM users WHERE id = $1',
-          [decoded.userId]
-        );
+        // Verificar usuario con contexto multi-tenant
+        const user = await database.get(`
+          SELECT u.id, u.tenant_id, u.email, u.name, u.role, u.is_active,
+                 t.slug as tenant_slug, t.name as tenant_name, t.status as tenant_status
+          FROM users u
+          JOIN tenants t ON u.tenant_id = t.id
+          WHERE u.id = $1 AND u.is_active = TRUE AND t.deleted_at IS NULL
+        `, [decoded.userId]);
 
         if (!user) {
           console.log('❌ User not found:', decoded.userId);
           return next(new Error('Usuario no válido'));
         }
 
-        console.log('✅ User authenticated:', { id: user.id, email: user.email });
+        if (user.tenant_status !== 'active') {
+          console.log('❌ Tenant not active:', user.tenant_id);
+          return next(new Error('Tenant inactivo'));
+        }
+
+        console.log('✅ User authenticated:', { id: user.id, email: user.email, tenant: user.tenant_slug });
 
         // Agregar información del usuario al socket
         (socket as any).userId = user.id;
+        (socket as any).tenantId = user.tenant_id;
         (socket as any).userEmail = user.email;
+        (socket as any).userRole = user.role;
         
         next();
       } catch (error) {
@@ -306,15 +316,18 @@ class WhatsAppManagerServer {
     // Eventos de conexión
     this.io.on('connection', (socket) => {
       const userId = (socket as any).userId;
+      const tenantId = (socket as any).tenantId;
       const userEmail = (socket as any).userEmail;
       
-      console.log(`🔌 User ${userEmail} (${userId}) connected: ${socket.id}`);
+      console.log(`🔌 User ${userEmail} (${userId}) from tenant ${tenantId} connected: ${socket.id}`);
       
       // Registrar socket del usuario
       this.userSockets.set(userId, socket.id);
 
       // Unirse a sala personal
       socket.join(`user:${userId}`);
+      // Unirse a sala del tenant
+      socket.join(`tenant:${tenantId}`);
 
       // Eventos del socket
       socket.on('disconnect', () => {
@@ -365,26 +378,27 @@ class WhatsAppManagerServer {
     // Eventos del chat web
     this.io.on('connection', (socket) => {
       const userId = (socket as any).userId;
+      const tenantId = (socket as any).tenantId;
       
-      // Unirse a sala de chat web
-      socket.join(`web:${userId}`);
+      // Unirse a sala de chat web del tenant
+      socket.join(`web:${tenantId}`);
 
       // Eventos específicos del chat web
-      socket.on('web:join:conversation', (conversationId: number) => {
+      socket.on('web:join:conversation', (conversationId: string) => {
         socket.join(`web:conversation:${conversationId}`);
         console.log(`👤 User ${userId} joined web conversation ${conversationId}`);
       });
 
-      socket.on('web:leave:conversation', (conversationId: number) => {
+      socket.on('web:leave:conversation', (conversationId: string) => {
         socket.leave(`web:conversation:${conversationId}`);
         console.log(`👤 User ${userId} left web conversation ${conversationId}`);
       });
 
-      socket.on('web:typing:start', (data: { conversationId: number, visitorId: number }) => {
+      socket.on('web:typing:start', (data: { conversationId: string, visitorId: string }) => {
         socket.to(`web:conversation:${data.conversationId}`).emit('web:typing:start', data);
       });
 
-      socket.on('web:typing:stop', (data: { conversationId: number, visitorId: number }) => {
+      socket.on('web:typing:stop', (data: { conversationId: string, visitorId: string }) => {
         socket.to(`web:conversation:${data.conversationId}`).emit('web:typing:stop', data);
       });
 
@@ -410,11 +424,8 @@ class WhatsAppManagerServer {
       await redisConfig.connect();
       logger.info('✅ Redis conectado');
 
-      // Verificar conexión a PostgreSQL
-      const dbConnected = await database.checkConnection();
-      if (!dbConnected) {
-        throw new Error('No se pudo conectar a PostgreSQL');
-      }
+      // Inicializar base de datos
+      await initializeDatabase();
       logger.info('✅ PostgreSQL conectado');
 
       // Inicializar directorios de multimedia
@@ -422,13 +433,9 @@ class WhatsAppManagerServer {
       await MediaService.initializeDirectories();
       logger.info('✅ Directorios de multimedia inicializados');
 
-      // Inicializar tablas
-      await database.initializeTables();
-      logger.info('✅ Tablas de base de datos inicializadas');
-
       this.server.listen(port, host, () => {
         console.log(`
-🚀 Flame AIServer Started
+🚀 Flame Assistant Server Started
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📍 Server: http://${host}:${port}
 🏥 Health: http://${host}:${port}/health  
@@ -438,6 +445,7 @@ class WhatsAppManagerServer {
 📱 WhatsApp: Ready
 📅 Scheduler: Active
 🔌 Socket.IO: Ready
+🏢 Multi-tenant: Enabled
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🔑 Default Login:
@@ -464,7 +472,7 @@ class WhatsAppManagerServer {
 
       try {
         // Cerrar conexiones
-        await database.close();
+        await closeDatabase();
         logger.info('🗃️ PostgreSQL connection closed');
         
         await redisConfig.disconnect();
@@ -498,8 +506,18 @@ class WhatsAppManagerServer {
   }
 }
 
+// Función auxiliar para verificar conexión a la base de datos
+async function checkDatabaseConnection(): Promise<boolean> {
+  try {
+    const result = await database.query('SELECT 1');
+    return !!result;
+  } catch (error) {
+    return false;
+  }
+}
+
 // Crear y iniciar servidor
-const server = new WhatsAppManagerServer();
+const server = new FlameAssistantServer();
 
 if (require.main === module) {
   server.start();

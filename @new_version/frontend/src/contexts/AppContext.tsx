@@ -1,24 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiService } from '../services/api.service';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  avatar_url?: string;
-}
-
-interface AppContextType {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  updateProfile: (data: Partial<User>) => Promise<void>;
-  refreshToken: () => Promise<void>;
-}
+import { User, Tenant, LoginRequest, RegisterRequest, AppContextType } from '../types';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -36,11 +18,12 @@ interface AppProviderProps {
 
 export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const isAuthenticated = !!user;
+  const isAuthenticated = !!user && !!tenant;
 
-  // Cargar usuario al inicializar
+  // Cargar usuario y tenant al inicializar
   useEffect(() => {
     const initializeAuth = async () => {
       try {
@@ -48,14 +31,17 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         if (token) {
           apiService.setToken(token);
           const response = await apiService.getProfile();
-          if (response.success && response.data && response.data.user) {
+          if (response.success && response.data) {
             setUser(response.data.user);
+            setTenant(response.data.tenant);
           }
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        setUser(null);
+        setTenant(null);
       } finally {
         setIsLoading(false);
       }
@@ -64,23 +50,24 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     initializeAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (credentials: LoginRequest) => {
     try {
       setIsLoading(true);
-      const response = await apiService.login({ email, password });
+      const response = await apiService.login(credentials);
       
       if (response.success && response.data) {
-        const { user: userData, accessToken, refreshToken } = response.data;
+        const { user: userData, tenant: tenantData, access_token, refresh_token } = response.data;
         
         // Guardar tokens
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
+        localStorage.setItem('accessToken', access_token);
+        localStorage.setItem('refreshToken', refresh_token);
         
         // Configurar token en el servicio
-        apiService.setToken(accessToken);
+        apiService.setToken(access_token);
         
         // Actualizar estado
         setUser(userData);
+        setTenant(tenantData);
       } else {
         throw new Error(response.message || 'Error al iniciar sesión');
       }
@@ -92,23 +79,24 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     }
   };
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = async (data: RegisterRequest) => {
     try {
       setIsLoading(true);
-      const response = await apiService.register({ name, email, password });
+      const response = await apiService.register(data);
       
       if (response.success && response.data) {
-        const { user: userData, accessToken, refreshToken } = response.data;
+        const { user: userData, tenant: tenantData, access_token, refresh_token } = response.data;
         
         // Guardar tokens
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
+        localStorage.setItem('accessToken', access_token);
+        localStorage.setItem('refreshToken', refresh_token);
         
         // Configurar token en el servicio
-        apiService.setToken(accessToken);
+        apiService.setToken(access_token);
         
         // Actualizar estado
         setUser(userData);
+        setTenant(tenantData);
       } else {
         throw new Error(response.message || 'Error al registrarse');
       }
@@ -133,36 +121,19 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       localStorage.removeItem('refreshToken');
       apiService.setToken(null);
       setUser(null);
+      setTenant(null);
     }
   };
 
-  const updateProfile = async (data: Partial<User>) => {
-    try {
-      setIsLoading(true);
-      const response = await apiService.updateProfile(data);
-      
-      if (response.success && response.data) {
-        const { user: userData, accessToken, refreshToken } = response.data;
-        
-        // Actualizar tokens si se proporcionaron nuevos
-        if (accessToken) {
-          localStorage.setItem('accessToken', accessToken);
-          apiService.setToken(accessToken);
-        }
-        if (refreshToken) {
-          localStorage.setItem('refreshToken', refreshToken);
-        }
-        
-        // Actualizar estado
-        setUser(userData);
-      } else {
-        throw new Error(response.message || 'Error al actualizar perfil');
-      }
-    } catch (error) {
-      console.error('Update profile error:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
+  const updateUser = (userData: Partial<User>) => {
+    if (user) {
+      setUser({ ...user, ...userData });
+    }
+  };
+
+  const updateTenant = (tenantData: Partial<Tenant>) => {
+    if (tenant) {
+      setTenant({ ...tenant, ...tenantData });
     }
   };
 
@@ -176,9 +147,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       const response = await apiService.refreshToken(refreshTokenValue);
       
       if (response.success && response.data) {
-        const { accessToken } = response.data;
-        localStorage.setItem('accessToken', accessToken);
-        apiService.setToken(accessToken);
+        const { access_token } = response.data;
+        localStorage.setItem('accessToken', access_token);
+        apiService.setToken(access_token);
       } else {
         throw new Error('Failed to refresh token');
       }
@@ -192,13 +163,15 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
   const value: AppContextType = {
     user,
+    tenant,
     isAuthenticated,
     isLoading,
     login,
     register,
     logout,
-    updateProfile,
-    refreshToken
+    refreshToken,
+    updateUser,
+    updateTenant
   };
 
   return (

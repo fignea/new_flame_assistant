@@ -2,12 +2,20 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { database } from '../config/database';
 import { generateToken } from '../middleware/auth';
-import { LoginRequest, RegisterRequest, User, ApiResponse } from '../types';
+import { 
+  LoginRequest, 
+  RegisterRequest, 
+  User, 
+  Tenant, 
+  ApiResponse, 
+  AuthResponse,
+  CreateTenantRequest 
+} from '../types';
 
 export class AuthController {
-  public async login(req: Request<{}, ApiResponse, LoginRequest>, res: Response<ApiResponse>) {
+  public async login(req: Request<{}, ApiResponse<AuthResponse>, LoginRequest>, res: Response<ApiResponse<AuthResponse>>) {
     try {
-      const { email, password } = req.body;
+      const { email, password, tenant_slug } = req.body;
 
       // Validar datos de entrada
       if (!email || !password) {
@@ -17,11 +25,24 @@ export class AuthController {
         });
       }
 
-      // Buscar usuario
-      const user = await database.get(
-        'SELECT * FROM users WHERE email = $1',
-        [email.toLowerCase()]
-      ) as User;
+      // Buscar usuario con información del tenant
+      let query = `
+        SELECT 
+          u.id, u.tenant_id, u.email, u.password_hash, u.name, u.role, u.permissions, u.is_active,
+          t.id as tenant_id, t.slug, t.name as tenant_name, t.plan_type, t.limits, t.status as tenant_status
+        FROM users u
+        JOIN tenants t ON u.tenant_id = t.id
+        WHERE u.email = $1 AND u.is_active = TRUE AND t.deleted_at IS NULL
+      `;
+      const params = [email.toLowerCase()];
+
+      // Si se proporciona tenant_slug, filtrar por tenant
+      if (tenant_slug) {
+        query += ' AND t.slug = $2';
+        params.push(tenant_slug);
+      }
+
+      const user = await database.get(query, params) as any;
 
       if (!user) {
         return res.status(401).json({
@@ -30,8 +51,16 @@ export class AuthController {
         });
       }
 
+      // Verificar que el tenant esté activo
+      if (user.tenant_status !== 'active') {
+        return res.status(403).json({
+          success: false,
+          message: 'Tenant suspendido o inactivo'
+        });
+      }
+
       // Verificar contraseña
-      const isValidPassword = await bcrypt.compare(password, user.password);
+      const isValidPassword = await bcrypt.compare(password, user.password_hash);
       
       if (!isValidPassword) {
         return res.status(401).json({
@@ -40,18 +69,54 @@ export class AuthController {
         });
       }
 
+      // Actualizar último login
+      await database.run(
+        'UPDATE users SET last_login_at = NOW() WHERE id = $1',
+        [user.id]
+      );
+
       // Generar token
-      const token = generateToken(user);
+      const userData: User = {
+        id: user.id,
+        tenant_id: user.tenant_id,
+        email: user.email,
+        password_hash: user.password_hash,
+        name: user.name,
+        role: user.role,
+        permissions: user.permissions || {},
+        profile: {},
+        preferences: {},
+        is_active: user.is_active,
+        created_at: '',
+        updated_at: ''
+      };
+
+      const tenantData: Tenant = {
+        id: user.tenant_id,
+        slug: user.slug,
+        name: user.tenant_name,
+        plan_type: user.plan_type,
+        status: user.tenant_status,
+        settings: {},
+        billing_info: {},
+        limits: user.limits || {},
+        created_at: '',
+        updated_at: ''
+      };
+
+      const token = generateToken(userData, tenantData);
 
       // Respuesta exitosa (sin incluir la contraseña)
-      const { password: _, ...userWithoutPassword } = user;
+      const { password_hash: _, ...userWithoutPassword } = userData;
       
       return res.json({
         success: true,
         data: {
           user: userWithoutPassword,
-          accessToken: token,
-          refreshToken: token // Por ahora usamos el mismo token
+          tenant: tenantData,
+          access_token: token,
+          refresh_token: token, // Por ahora usamos el mismo token
+          expires_in: 7 * 24 * 60 * 60 // 7 días en segundos
         },
         message: 'Inicio de sesión exitoso'
       });
@@ -65,9 +130,9 @@ export class AuthController {
     }
   }
 
-  public async register(req: Request<{}, ApiResponse, RegisterRequest>, res: Response<ApiResponse>) {
+  public async register(req: Request<{}, ApiResponse<AuthResponse>, RegisterRequest>, res: Response<ApiResponse<AuthResponse>>) {
     try {
-      const { email, password, name } = req.body;
+      const { email, password, name, tenant_slug, role = 'agent' } = req.body;
 
       // Validar datos de entrada
       if (!email || !password || !name) {
@@ -77,50 +142,97 @@ export class AuthController {
         });
       }
 
-      if (password.length < 6) {
-        return res.status(400).json({
-          success: false,
-          message: 'La contraseña debe tener al menos 6 caracteres'
-        });
+      // Buscar tenant por slug
+      let tenant: any;
+      if (tenant_slug) {
+        tenant = await database.get(
+          'SELECT * FROM tenants WHERE slug = $1 AND deleted_at IS NULL',
+          [tenant_slug]
+        );
+        
+        if (!tenant) {
+          return res.status(404).json({
+            success: false,
+            message: 'Tenant no encontrado'
+          });
+        }
+
+        if (tenant.status !== 'active') {
+          return res.status(403).json({
+            success: false,
+            message: 'Tenant no está activo'
+          });
+        }
+      } else {
+        // Si no se proporciona tenant, crear uno nuevo
+        const tenantData: CreateTenantRequest = {
+          name: `${name}'s Organization`,
+          plan_type: 'starter',
+          settings: { timezone: 'America/Mexico_City', language: 'es' },
+          limits: { max_users: 10, max_contacts: 1000, max_conversations: 5000 }
+        };
+
+        const tenantId = await this.createTenant(tenantData);
+        tenant = await database.get('SELECT * FROM tenants WHERE id = $1', [tenantId]);
       }
 
-      // Verificar si el usuario ya existe
+      // Verificar si el usuario ya existe en este tenant
       const existingUser = await database.get(
-        'SELECT id FROM users WHERE email = $1',
-        [email.toLowerCase()]
+        'SELECT id FROM users WHERE email = $1 AND tenant_id = $2',
+        [email.toLowerCase(), tenant.id]
       );
 
       if (existingUser) {
         return res.status(409).json({
           success: false,
-          message: 'El usuario ya existe'
+          message: 'El usuario ya existe en este tenant'
         });
       }
 
-      // Hash de la contraseña
-      const hashedPassword = await bcrypt.hash(password, 10);
+      // Verificar límites del tenant
+      const userCount = await database.get(
+        'SELECT COUNT(*) as count FROM users WHERE tenant_id = $1 AND deleted_at IS NULL',
+        [tenant.id]
+      ) as any;
+
+      if (userCount.count >= tenant.limits.max_users) {
+        return res.status(403).json({
+          success: false,
+          message: 'Límite de usuarios alcanzado para este tenant'
+        });
+      }
+
+      // Encriptar contraseña
+      const saltRounds = 10;
+      const passwordHash = await bcrypt.hash(password, saltRounds);
 
       // Crear usuario
-      const result = await database.query(
-        'INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING id',
-        [email.toLowerCase(), hashedPassword, name]
-      );
+      const userId = await database.run(`
+        INSERT INTO users (tenant_id, email, password_hash, name, role, is_active, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, TRUE, NOW(), NOW())
+        RETURNING id
+      `, [tenant.id, email.toLowerCase(), passwordHash, name, role]);
 
-      // Obtener el usuario creado
+      // Obtener usuario creado
       const newUser = await database.get(
-        'SELECT id, email, name, created_at FROM users WHERE id = $1',
-        [result.rows[0].id]
+        'SELECT id, tenant_id, email, name, role, permissions, is_active, created_at, updated_at FROM users WHERE id = $1',
+        [userId]
       ) as User;
 
       // Generar token
-      const token = generateToken(newUser);
+      const token = generateToken(newUser, tenant);
 
+      // Respuesta exitosa
+      const { password_hash: _, ...userWithoutPassword } = newUser;
+      
       return res.status(201).json({
         success: true,
         data: {
-          user: newUser,
-          accessToken: token,
-          refreshToken: token // Por ahora usamos el mismo token
+          user: userWithoutPassword,
+          tenant: tenant,
+          access_token: token,
+          refresh_token: token,
+          expires_in: 7 * 24 * 60 * 60
         },
         message: 'Usuario registrado exitosamente'
       });
@@ -134,37 +246,154 @@ export class AuthController {
     }
   }
 
-  public async getProfile(req: Request, res: Response<ApiResponse>) {
+  public async createTenant(tenantData: CreateTenantRequest): Promise<string> {
     try {
-      const userId = (req as any).user?.id;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
+      // Generar slug único
+      const baseSlug = tenantData.name.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      
+      let slug = baseSlug;
+      let counter = 0;
+      
+      while (await this.tenantSlugExists(slug)) {
+        counter++;
+        slug = `${baseSlug}-${counter}`;
       }
 
-      const user = await database.get(
-        'SELECT id, email, name, created_at, updated_at FROM users WHERE id = $1',
-        [userId]
-      ) as User;
+      // Crear tenant
+      const tenantId = await database.run(`
+        INSERT INTO tenants (slug, name, domain, plan_type, status, settings, billing_info, limits, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, NOW(), NOW())
+        RETURNING id
+      `, [
+        slug,
+        tenantData.name,
+        tenantData.domain || null,
+        tenantData.plan_type || 'starter',
+        JSON.stringify(tenantData.settings || {}),
+        JSON.stringify(tenantData.billing_info || {}),
+        JSON.stringify(tenantData.limits || {})
+      ]);
 
-      if (!user) {
+      return tenantId;
+    } catch (error) {
+      console.error('Error creating tenant:', error);
+      throw error;
+    }
+  }
+
+  private async tenantSlugExists(slug: string): Promise<boolean> {
+    const result = await database.get(
+      'SELECT id FROM tenants WHERE slug = $1',
+      [slug]
+    );
+    return !!result;
+  }
+
+  public async getTenants(req: Request, res: Response<ApiResponse<Tenant[]>>) {
+    try {
+      const tenants = await database.all(
+        'SELECT * FROM tenants WHERE deleted_at IS NULL ORDER BY created_at DESC'
+      ) as Tenant[];
+
+      return res.json({
+        success: true,
+        data: tenants
+      });
+    } catch (error) {
+      console.error('Get tenants error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error obteniendo tenants'
+      });
+    }
+  }
+
+  public async getTenantBySlug(req: Request, res: Response<ApiResponse<Tenant>>) {
+    try {
+      const { slug } = req.params;
+
+      const tenant = await database.get(
+        'SELECT * FROM tenants WHERE slug = $1 AND deleted_at IS NULL',
+        [slug]
+      ) as Tenant;
+
+      if (!tenant) {
         return res.status(404).json({
           success: false,
-          message: 'Usuario no encontrado'
+          message: 'Tenant no encontrado'
         });
       }
 
       return res.json({
         success: true,
-        data: { user },
-        message: 'Perfil obtenido exitosamente'
+        data: tenant
       });
-
     } catch (error) {
-      console.error('Get profile error:', error);
+      console.error('Get tenant error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error obteniendo tenant'
+      });
+    }
+  }
+
+  public async refreshToken(req: Request, res: Response<ApiResponse<{ access_token: string; expires_in: number }>>) {
+    try {
+      const { refresh_token } = req.body;
+
+      if (!refresh_token) {
+        return res.status(400).json({
+          success: false,
+          message: 'Refresh token requerido'
+        });
+      }
+
+      // Verificar refresh token (por ahora usamos el mismo token)
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret) {
+        return res.status(500).json({
+          success: false,
+          message: 'Error de configuración del servidor'
+        });
+      }
+
+      try {
+        const decoded = jwt.verify(refresh_token, jwtSecret) as any;
+        
+        // Obtener usuario actualizado
+        const user = await database.get(`
+          SELECT u.*, t.* FROM users u
+          JOIN tenants t ON u.tenant_id = t.id
+          WHERE u.id = $1 AND u.is_active = TRUE AND t.deleted_at IS NULL
+        `, [decoded.userId]) as any;
+
+        if (!user) {
+          return res.status(401).json({
+            success: false,
+            message: 'Usuario no válido'
+          });
+        }
+
+        // Generar nuevo token
+        const newToken = generateToken(user, user);
+
+        return res.json({
+          success: true,
+          data: {
+            access_token: newToken,
+            expires_in: 7 * 24 * 60 * 60
+          }
+        });
+      } catch (jwtError) {
+        return res.status(401).json({
+          success: false,
+          message: 'Refresh token inválido'
+        });
+      }
+    } catch (error) {
+      console.error('Refresh token error:', error);
       return res.status(500).json({
         success: false,
         message: 'Error interno del servidor'
@@ -172,86 +401,16 @@ export class AuthController {
     }
   }
 
-  public async updateProfile(req: Request, res: Response<ApiResponse>) {
+  public async logout(req: Request, res: Response<ApiResponse>) {
     try {
-      const userId = (req as any).user?.id;
-      const { name, currentPassword, newPassword } = req.body;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no autenticado'
-        });
-      }
-
-      // Obtener usuario actual
-      const user = await database.get(
-        'SELECT * FROM users WHERE id = $1',
-        [userId]
-      ) as User;
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuario no encontrado'
-        });
-      }
-
-      // Actualizar nombre si se proporciona
-      if (name && name !== user.name) {
-        await database.run(
-          'UPDATE users SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-          [name, userId]
-        );
-      }
-
-      // Actualizar contraseña si se proporciona
-      if (newPassword) {
-        if (!currentPassword) {
-          return res.status(400).json({
-            success: false,
-            message: 'Contraseña actual requerida para cambiar la contraseña'
-          });
-        }
-
-        const isValidCurrentPassword = await bcrypt.compare(currentPassword, user.password);
-        
-        if (!isValidCurrentPassword) {
-          return res.status(400).json({
-            success: false,
-            message: 'Contraseña actual incorrecta'
-          });
-        }
-
-        if (newPassword.length < 6) {
-          return res.status(400).json({
-            success: false,
-            message: 'La nueva contraseña debe tener al menos 6 caracteres'
-          });
-        }
-
-        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-        
-        await database.run(
-          'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-          [hashedNewPassword, userId]
-        );
-      }
-
-      // Obtener usuario actualizado
-      const updatedUser = await database.get(
-        'SELECT id, email, name, created_at, updated_at FROM users WHERE id = $1',
-        [userId]
-      ) as User;
-
+      // Por ahora solo devolvemos éxito
+      // En el futuro se puede implementar blacklist de tokens
       return res.json({
         success: true,
-        data: { user: updatedUser },
-        message: 'Perfil actualizado exitosamente'
+        message: 'Sesión cerrada exitosamente'
       });
-
     } catch (error) {
-      console.error('Update profile error:', error);
+      console.error('Logout error:', error);
       return res.status(500).json({
         success: false,
         message: 'Error interno del servidor'
@@ -259,5 +418,3 @@ export class AuthController {
     }
   }
 }
-
-export const authController = new AuthController();
