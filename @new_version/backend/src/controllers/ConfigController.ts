@@ -79,16 +79,16 @@ export class ConfigController {
       const params: any[] = [];
 
       if (name) {
-        updates.push('name = ?');
+        updates.push(`name = $${params.length + 1}`);
         params.push(name);
       }
       if (email) {
-        updates.push('email = ?');
+        updates.push(`email = $${params.length + 1}`);
         params.push(email);
       }
 
       updates.push('updated_at = CURRENT_TIMESTAMP');
-      params.push(userId);
+      params.push(userId, req.tenant?.id);
 
       await database.run(
         `UPDATE users SET ${updates.join(', ')} WHERE id = $${params.length - 1} AND tenant_id = $${params.length}`,
@@ -171,8 +171,8 @@ export class ConfigController {
 
       // Actualizar contraseña
       await database.run(
-        'UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        [hashedPassword, userId]
+        'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND tenant_id = $3',
+        [hashedPassword, userId, req.tenant?.id]
       );
 
       return res.json({
