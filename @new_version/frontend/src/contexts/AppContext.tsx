@@ -30,11 +30,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         const token = localStorage.getItem('accessToken');
         if (token) {
           apiService.setToken(token);
-          const response = await apiService.getProfile();
-          if (response.success && response.data) {
-            setUser(response.data.user);
-            setTenant(response.data.tenant);
-          }
+          // Comentar temporalmente la llamada a getProfile para debug
+          // const response = await apiService.getProfile();
+          // if (response.success && response.data) {
+          //   setUser(response.data.user);
+          //   setTenant(response.data.tenant);
+          // }
         }
       } catch (error) {
         console.error('Error initializing auth:', error);

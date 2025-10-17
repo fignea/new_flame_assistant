@@ -4,14 +4,14 @@ import { logger } from '../utils/logger';
 // Configuración de la base de datos
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
+      port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || 'flame_assistant',
   user: process.env.DB_USER || 'flame_user',
   password: process.env.DB_PASSWORD || 'flame_password',
   max: 20, // Máximo número de clientes en el pool
   idleTimeoutMillis: 30000, // Tiempo de inactividad antes de cerrar un cliente
   connectionTimeoutMillis: 2000, // Tiempo de espera para conectar
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: false
 };
 
 // Pool de conexiones
@@ -35,11 +35,11 @@ export const initializeDatabase = async (): Promise<void> => {
     //   ALTER DATABASE ${dbConfig.database} SET app.current_tenant_id = NULL;
     //   ALTER DATABASE ${dbConfig.database} SET app.current_user_id = NULL;
     // `);
-    
-  } catch (error) {
+
+    } catch (error) {
     logger.error('❌ Error conectando a la base de datos:', error);
-    throw error;
-  }
+      throw error;
+    }
 };
 
 // Obtener cliente del pool
@@ -87,9 +87,9 @@ export const transaction = async <T>(callback: (client: PoolClient) => Promise<T
     const result = await callback(client);
     await client.query('COMMIT');
     return result;
-  } catch (error) {
+    } catch (error) {
     await client.query('ROLLBACK');
-    throw error;
+      throw error;
   } finally {
     client.release();
   }

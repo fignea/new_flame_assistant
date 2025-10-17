@@ -88,7 +88,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    command: npm run dev
 
   # Frontend (Development)
   frontend:
@@ -117,7 +116,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
-    command: npm run dev
 
 volumes:
   postgres_dev_data:
