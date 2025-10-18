@@ -18,23 +18,23 @@ import { logger } from './utils/logger';
 
 // Importar rutas
 import authRoutes from './routes/auth';
-import whatsappRoutes from './routes/whatsapp';
+// import whatsappRoutes from './routes/whatsapp';
 import scheduledRoutes from './routes/scheduled';
-import integrationsRoutes from './routes/integrations';
+// import integrationsRoutes from './routes/integrations';
 import assistantsRoutes from './routes/assistants';
 import configRoutes from './routes/config';
-import messagesRoutes from './routes/messages';
+// import messagesRoutes from './routes/messages';
 import assignmentsRoutes from './routes/assignments';
-import templatesRoutes from './routes/templates';
-import tagsRoutes from './routes/tags';
-import autoResponseRoutes from './routes/auto-response';
-import mediaRoutes from './routes/media';
+// import templatesRoutes from './routes/templates';
+// import tagsRoutes from './routes/tags';
+// import autoResponseRoutes from './routes/auto-response';
+// import mediaRoutes from './routes/media';
 import dashboardRoutes from './routes/dashboard';
 
 // Importar servicios
 import { whatsappService } from './services/WhatsAppService';
-import { scheduledMessagesService } from './services/ScheduledMessagesService';
-import { setSocketIO } from './controllers/WebController';
+// import { scheduledMessagesService } from './services/ScheduledMessagesService';
+// import { setSocketIO } from './controllers/WebController';
 
 // Importar middleware de autenticación para sockets
 import jwt from 'jsonwebtoken';
@@ -80,7 +80,7 @@ class FlameAssistantServer {
     console.log('🔧 Setting up Web Chat events...');
     this.setupWebChatEvents();
     console.log('🔧 Setting up Web Controller Socket.IO...');
-    setSocketIO(this.io);
+    // setSocketIO(this.io);
     console.log('✅ Server initialization complete');
   }
 
@@ -132,7 +132,7 @@ class FlameAssistantServer {
         ]);
         
         const whatsappStats = whatsappService.getStats();
-        const schedulerStats = scheduledMessagesService.getStats();
+        // const schedulerStats = scheduledMessagesService.getStats();
         
         const health = {
           status: 'OK',
@@ -143,7 +143,7 @@ class FlameAssistantServer {
             database: dbStatus ? 'connected' : 'disconnected',
             redis: redisStatus ? 'connected' : 'disconnected',
             whatsapp: whatsappStats,
-            scheduler: schedulerStats
+            // scheduler: schedulerStats
           },
           memory: process.memoryUsage(),
           version: '2.0.0'
@@ -200,17 +200,17 @@ class FlameAssistantServer {
 
     // API routes
     this.app.use('/api/auth', authRoutes);
-    this.app.use('/api/whatsapp', whatsappRoutes);
+    // this.app.use('/api/whatsapp', whatsappRoutes);
     this.app.use('/api/scheduled', scheduledRoutes);
-    this.app.use('/api/integrations', integrationsRoutes);
+    // this.app.use('/api/integrations', integrationsRoutes);
     this.app.use('/api/assistants', assistantsRoutes);
     this.app.use('/api/config', configRoutes);
-    this.app.use('/api/messages', messagesRoutes);
+    // this.app.use('/api/messages', messagesRoutes);
     this.app.use('/api/assignments', assignmentsRoutes);
-    this.app.use('/api/templates', templatesRoutes);
-    this.app.use('/api/tags', tagsRoutes);
-    this.app.use('/api/auto-response', autoResponseRoutes);
-    this.app.use('/api/media', mediaRoutes);
+    // this.app.use('/api/templates', templatesRoutes);
+    // this.app.use('/api/tags', tagsRoutes);
+    // this.app.use('/api/auto-response', autoResponseRoutes);
+    // this.app.use('/api/media', mediaRoutes);
     this.app.use('/api/dashboard', dashboardRoutes);
 
     // Root endpoint

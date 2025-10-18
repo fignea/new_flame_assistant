@@ -34,11 +34,11 @@ export class OpenAIService {
     };
   }> {
     try {
-      if (!this.apiKey && !assistant.openai_api_key) {
+      if (!this.apiKey && !assistant.api_key_encrypted) {
         throw new Error('API key de OpenAI no configurada');
       }
 
-      const apiKey = assistant.openai_api_key || this.apiKey!;
+      const apiKey = assistant.api_key_encrypted || this.apiKey!;
       const model = assistant.model || 'gpt-3.5-turbo';
       const maxTokens = assistant.max_tokens || 150;
       const temperature = assistant.temperature || 0.7;
@@ -95,11 +95,11 @@ export class OpenAIService {
     onChunk: (chunk: string) => void
   ): Promise<void> {
     try {
-      if (!this.apiKey && !assistant.openai_api_key) {
+      if (!this.apiKey && !assistant.api_key_encrypted) {
         throw new Error('API key de OpenAI no configurada');
       }
 
-      const apiKey = assistant.openai_api_key || this.apiKey!;
+      const apiKey = assistant.api_key_encrypted || this.apiKey!;
       const model = assistant.model || 'gpt-3.5-turbo';
       const maxTokens = assistant.max_tokens || 150;
       const temperature = assistant.temperature || 0.7;
@@ -324,12 +324,8 @@ export class OpenAIService {
    * Configurar el servicio con configuración completa
    */
   static configure(config: OpenAIConfig): void {
-    if (config.apiKey) {
-      this.setApiKey(config.apiKey);
-    }
-    
-    if (config.baseURL) {
-      this.setBaseURL(config.baseURL);
+    if (config.api_key) {
+      this.setApiKey(config.api_key);
     }
   }
 }

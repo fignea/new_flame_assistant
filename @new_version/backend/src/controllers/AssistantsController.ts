@@ -394,15 +394,10 @@ export class AssistantsController {
       }
 
       // Generar respuesta usando OpenAI
-      const response = await OpenAIService.generateResponse(
+      const { response } = await OpenAIService.generateResponse(
         message,
-        assistant.prompt || 'Eres un asistente virtual útil.',
-        {
-          model: assistant.model,
-          max_tokens: assistant.max_tokens,
-          temperature: assistant.temperature
-        },
-        assistant.api_key_encrypted || process.env.OPENAI_API_KEY
+        assistant,
+        [] // conversationHistory vacío para el test
       );
 
       return res.json({

@@ -10,7 +10,7 @@ export class AutoResponseService {
    */
   static async processIncomingMessage(
     message: Message,
-    userId: number
+    userId: string
   ): Promise<{
     shouldRespond: boolean;
     response?: string;
@@ -20,7 +20,7 @@ export class AutoResponseService {
     try {
       // 1. Verificar si hay un asistente asignado a esta conversación
       const assignment = await AssignmentService.getAssignedAssistant(
-        message.chat_id,
+        message.conversation_id,
         'whatsapp', // Por ahora solo WhatsApp, se puede expandir
         userId
       );
@@ -89,8 +89,8 @@ export class AutoResponseService {
    */
   private static async findMatchingTemplates(
     messageContent: string,
-    assistantId: number,
-    userId: number
+    assistantId: string,
+    userId: string
   ): Promise<ResponseTemplate[]> {
     try {
       // Convertir mensaje a palabras clave
@@ -146,7 +146,7 @@ export class AutoResponseService {
 
     // Variables disponibles
     const variables = {
-      '{nombre_cliente}': message.contact_id ? 'Cliente' : 'Usuario', // Se puede mejorar obteniendo el nombre real
+      '{nombre_cliente}': message.sender_id ? 'Cliente' : 'Usuario', // Se puede mejorar obteniendo el nombre real
       '{fecha}': new Date().toLocaleDateString('es-ES'),
       '{hora}': new Date().toLocaleTimeString('es-ES'),
       '{empresa}': 'Nuestra empresa', // Se puede hacer configurable
@@ -167,12 +167,12 @@ export class AutoResponseService {
   private static async generateAIResponse(
     message: Message,
     assistant: Assistant,
-    userId: number
+    userId: string
   ): Promise<string> {
     try {
       // Obtener historial de conversación reciente
       const conversationHistory = await this.getConversationHistory(
-        message.chat_id,
+        message.conversation_id,
         userId,
         10 // Últimos 10 mensajes
       );
@@ -198,7 +198,7 @@ export class AutoResponseService {
    */
   private static async getConversationHistory(
     chatId: string,
-    userId: number,
+    userId: string,
     limit: number = 10
   ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
     try {
@@ -229,9 +229,9 @@ export class AutoResponseService {
   static async sendAutoResponse(
     chatId: string,
     response: string,
-    userId: number,
+    userId: string,
     assistantId?: number,
-    templateId?: number
+    templateId?: string
   ): Promise<boolean> {
     try {
       // Aquí se integraría con el servicio de WhatsApp para enviar el mensaje
@@ -261,9 +261,9 @@ export class AutoResponseService {
    * Procesar mensaje web entrante
    */
   static async processWebMessage(
-    conversationId: number,
+    conversationId: string,
     messageContent: string,
-    userId: number
+    userId: string
   ): Promise<{
     shouldRespond: boolean;
     response?: string;
@@ -308,7 +308,21 @@ export class AutoResponseService {
         templateUsed = template;
       } else {
         response = await this.generateAIResponse(
-          { content: messageContent, chat_id: conversationId.toString() } as Message,
+          { 
+            id: '',
+            tenant_id: '',
+            conversation_id: conversationId,
+            external_message_id: '',
+            sender_type: 'user',
+            content: messageContent,
+            message_type: 'text',
+            media_metadata: {},
+            is_from_me: false,
+            is_auto_response: false,
+            status: 'sent',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          } as Message,
           assistant,
           userId
         );
@@ -332,7 +346,7 @@ export class AutoResponseService {
   static async shouldAutoRespond(
     conversationId: string,
     platform: string,
-    userId: number
+    userId: string
   ): Promise<boolean> {
     try {
       const assignment = await AssignmentService.getAssignedAssistant(

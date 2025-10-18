@@ -15,6 +15,12 @@ export class DashboardController {
         });
       }
 
+      // Obtener información del tenant
+      const tenant = await database.get(
+        'SELECT name, plan_type, status FROM tenants WHERE id = $1',
+        [tenantId]
+      );
+
       // Obtener estadísticas de asistentes
       const assistantsStats = await database.get(
         `SELECT 
@@ -106,45 +112,18 @@ export class DashboardController {
       );
 
       const stats: DashboardStats = {
-        assistants: {
-          total: assistantsStats?.total || 0,
-          active: assistantsStats?.active || 0,
-          inactive: assistantsStats?.inactive || 0
-        },
-        conversations: {
-          total: conversationsStats?.total || 0,
-          today: conversationsStats?.today || 0,
-          thisWeek: conversationsStats?.thisWeek || 0,
-          thisMonth: conversationsStats?.thisMonth || 0
-        },
-        messages: {
-          total: messagesStats?.total || 0,
-          today: messagesStats?.today || 0,
-          thisWeek: messagesStats?.thisWeek || 0,
-          thisMonth: messagesStats?.thisMonth || 0
-        },
-        contacts: {
-          total: contactsStats?.total || 0,
-          newToday: contactsStats?.newToday || 0,
-          newThisWeek: contactsStats?.newThisWeek || 0,
-          newThisMonth: contactsStats?.newThisMonth || 0
-        },
-        templates: {
-          total: templatesStats?.total || 0,
-          active: templatesStats?.active || 0,
-          categories: templatesStats?.categories || 0
-        },
-        tags: {
-          total: tagsStats?.total || 0,
-          active: tagsStats?.active || 0,
-          conversations: conversationTagsStats?.conversations || 0,
-          contacts: contactTagsStats?.contacts || 0
-        },
-        assignments: {
-          total: assignmentsStats?.total || 0,
-          autoAssigned: assignmentsStats?.autoAssigned || 0,
-          manualAssigned: assignmentsStats?.manualAssigned || 0
-        }
+        tenant_id: tenantId,
+        tenant_name: tenant?.name || 'Unknown',
+        plan_type: tenant?.plan_type || 'starter',
+        tenant_status: tenant?.status || 'active',
+        total_users: 1, // Por ahora hardcodeado, se puede implementar después
+        total_contacts: contactsStats?.total || 0,
+        total_conversations: conversationsStats?.total || 0,
+        total_messages: messagesStats?.total || 0,
+        active_conversations: conversationsStats?.active || 0,
+        messages_today: messagesStats?.today || 0,
+        avg_resolution_time: conversationsStats?.avg_resolution_time,
+        avg_satisfaction_score: conversationsStats?.avg_satisfaction_score
       };
 
       return res.json({

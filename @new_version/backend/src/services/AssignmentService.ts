@@ -188,9 +188,8 @@ export class AssignmentService {
       return {
         total_assignments: parseInt(stats?.total_assignments) || 0,
         active_assignments: parseInt(stats?.active_assignments) || 0,
-        whatsapp_assignments: parseInt(stats?.whatsapp_assignments) || 0,
-        web_assignments: parseInt(stats?.web_assignments) || 0,
-        today_assignments: parseInt(stats?.today_assignments) || 0
+        completed_assignments: parseInt(stats?.completed_assignments) || 0,
+        average_response_time: parseFloat(stats?.average_response_time) || 0
       };
     } catch (error) {
       console.error('Error obteniendo estadísticas de asignaciones:', error);
@@ -198,9 +197,8 @@ export class AssignmentService {
       return {
         total_assignments: 0,
         active_assignments: 0,
-        whatsapp_assignments: 0,
-        web_assignments: 0,
-        today_assignments: 0
+        completed_assignments: 0,
+        average_response_time: 0
       };
     }
   }
