@@ -153,31 +153,7 @@ CREATE TABLE contacts (
     UNIQUE(tenant_id, platform, external_id)
 );
 
--- 5. CONVERSATIONS (Conversaciones)
-CREATE TABLE conversations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-    platform VARCHAR(50) NOT NULL,
-    external_conversation_id VARCHAR(255) NOT NULL,
-    title VARCHAR(255),
-    status VARCHAR(20) DEFAULT 'active',
-    priority VARCHAR(20) DEFAULT 'normal',
-    assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
-    assistant_id UUID REFERENCES assistants(id) ON DELETE SET NULL,
-    tags TEXT[] DEFAULT '{}',
-    metadata JSONB DEFAULT '{}',
-    last_message_at TIMESTAMP WITH TIME ZONE,
-    first_response_at TIMESTAMP WITH TIME ZONE,
-    resolution_time INTEGER,
-    satisfaction_score INTEGER,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
-    UNIQUE(tenant_id, platform, external_conversation_id)
-);
-
--- 6. ASSISTANTS (Asistentes de IA)
+-- 5. ASSISTANTS (Asistentes de IA)
 CREATE TABLE assistants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -201,7 +177,50 @@ CREATE TABLE assistants (
     deleted_at TIMESTAMP WITH TIME ZONE
 );
 
--- 7. MESSAGES (Mensajes)
+-- 6. CONVERSATIONS (Conversaciones)
+CREATE TABLE conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    platform VARCHAR(50) NOT NULL,
+    external_conversation_id VARCHAR(255) NOT NULL,
+    title VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'active',
+    priority VARCHAR(20) DEFAULT 'normal',
+    assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
+    assistant_id UUID REFERENCES assistants(id) ON DELETE SET NULL,
+    tags TEXT[] DEFAULT '{}',
+    metadata JSONB DEFAULT '{}',
+    last_message_at TIMESTAMP WITH TIME ZONE,
+    first_response_at TIMESTAMP WITH TIME ZONE,
+    resolution_time INTEGER,
+    satisfaction_score INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(tenant_id, platform, external_conversation_id)
+);
+
+-- 7. RESPONSE_TEMPLATES (Plantillas de Respuesta)
+CREATE TABLE response_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    assistant_id UUID REFERENCES assistants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    category VARCHAR(100) DEFAULT 'general',
+    trigger_keywords TEXT[] DEFAULT '{}',
+    conditions JSONB DEFAULT '{}',
+    priority INTEGER DEFAULT 0,
+    response_delay INTEGER DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    usage_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+-- 8. MESSAGES (Mensajes)
 CREATE TABLE messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -224,26 +243,7 @@ CREATE TABLE messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    UNIQUE(tenant_id, platform, external_message_id)
-);
-
--- 8. RESPONSE_TEMPLATES (Plantillas de Respuesta)
-CREATE TABLE response_templates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    assistant_id UUID REFERENCES assistants(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    content TEXT NOT NULL,
-    category VARCHAR(100) DEFAULT 'general',
-    trigger_keywords TEXT[] DEFAULT '{}',
-    conditions JSONB DEFAULT '{}',
-    priority INTEGER DEFAULT 0,
-    response_delay INTEGER DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    usage_count INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    deleted_at TIMESTAMP WITH TIME ZONE
+    UNIQUE(tenant_id, external_message_id)
 );
 
 -- 9. TAGS (Etiquetas)
@@ -262,7 +262,7 @@ CREATE TABLE tags (
     UNIQUE(tenant_id, name)
 );
 
--- 10. SCHEDULED_MESSAGES (Mensajes Programados)
+-- 11. SCHEDULED_MESSAGES (Mensajes Programados)
 CREATE TABLE scheduled_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -283,7 +283,7 @@ CREATE TABLE scheduled_messages (
 -- TABLAS DE SEGURIDAD Y AUDITORÍA
 -- ========================================
 
--- 11. AUDIT_LOGS (Logs de Auditoría)
+-- 12. AUDIT_LOGS (Logs de Auditoría)
 CREATE TABLE audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -299,7 +299,7 @@ CREATE TABLE audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 12. API_KEYS (Claves de API)
+-- 13. API_KEYS (Claves de API)
 CREATE TABLE api_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -314,7 +314,7 @@ CREATE TABLE api_keys (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 13. WEBHOOKS (Webhooks)
+-- 14. WEBHOOKS (Webhooks)
 CREATE TABLE webhooks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -336,34 +336,36 @@ CREATE TABLE webhooks (
 -- TABLAS DE ANALYTICS Y REPORTES
 -- ========================================
 
--- 14. ANALYTICS_EVENTS (Eventos de Analytics)
+-- 15. ANALYTICS_EVENTS (Eventos de Analytics)
 CREATE TABLE analytics_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     event_type VARCHAR(100) NOT NULL,
     event_data JSONB NOT NULL,
     user_id UUID REFERENCES users(id),
     conversation_id UUID REFERENCES conversations(id),
     contact_id UUID REFERENCES contacts(id),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (id, created_at)
 ) PARTITION BY RANGE (created_at);
 
--- 15. PERFORMANCE_METRICS (Métricas de Rendimiento)
+-- 16. PERFORMANCE_METRICS (Métricas de Rendimiento)
 CREATE TABLE performance_metrics (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     metric_name VARCHAR(100) NOT NULL,
     metric_value DECIMAL(15,4) NOT NULL,
     metric_unit VARCHAR(20),
     dimensions JSONB DEFAULT '{}',
-    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (id, recorded_at)
 ) PARTITION BY RANGE (recorded_at);
 
 -- ========================================
 -- TABLAS DE RELACIONES
 -- ========================================
 
--- 16. CONVERSATION_TAGS (Etiquetas de Conversaciones)
+-- 17. CONVERSATION_TAGS (Etiquetas de Conversaciones)
 CREATE TABLE conversation_tags (
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
@@ -371,7 +373,7 @@ CREATE TABLE conversation_tags (
     PRIMARY KEY (conversation_id, tag_id)
 );
 
--- 17. CONTACT_TAGS (Etiquetas de Contactos)
+-- 18. CONTACT_TAGS (Etiquetas de Contactos)
 CREATE TABLE contact_tags (
     contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
     tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
@@ -379,7 +381,7 @@ CREATE TABLE contact_tags (
     PRIMARY KEY (contact_id, tag_id)
 );
 
--- 18. ASSISTANT_ASSIGNMENTS (Asignaciones de Asistentes)
+-- 19. ASSISTANT_ASSIGNMENTS (Asignaciones de Asistentes)
 CREATE TABLE assistant_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -392,7 +394,7 @@ CREATE TABLE assistant_assignments (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 19. MEDIA_FILES (Archivos Multimedia)
+-- 20. MEDIA_FILES (Archivos Multimedia)
 CREATE TABLE media_files (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -412,7 +414,7 @@ CREATE TABLE media_files (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 20. CONTACT_NOTES (Notas de Contactos)
+-- 21. CONTACT_NOTES (Notas de Contactos)
 CREATE TABLE contact_notes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -577,87 +579,87 @@ ALTER TABLE contact_notes ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de RLS para aislamiento por tenant
 CREATE POLICY tenant_isolation ON tenants
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY user_tenant_isolation ON users
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY integration_tenant_isolation ON integrations
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY contact_tenant_isolation ON contacts
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY conversation_tenant_isolation ON conversations
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY assistant_tenant_isolation ON assistants
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY message_tenant_isolation ON messages
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY template_tenant_isolation ON response_templates
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY tag_tenant_isolation ON tags
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY scheduled_message_tenant_isolation ON scheduled_messages
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY audit_log_tenant_isolation ON audit_logs
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY api_key_tenant_isolation ON api_keys
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY webhook_tenant_isolation ON webhooks
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY analytics_event_tenant_isolation ON analytics_events
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY performance_metric_tenant_isolation ON performance_metrics
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY conversation_tag_tenant_isolation ON conversation_tags
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (conversation_id IN (
         SELECT id FROM conversations WHERE tenant_id = current_setting('app.current_tenant_id')::UUID
     ));
 
 CREATE POLICY contact_tag_tenant_isolation ON contact_tags
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (contact_id IN (
         SELECT id FROM contacts WHERE tenant_id = current_setting('app.current_tenant_id')::UUID
     ));
 
 CREATE POLICY assistant_assignment_tenant_isolation ON assistant_assignments
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY media_file_tenant_isolation ON media_files
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 CREATE POLICY contact_note_tenant_isolation ON contact_notes
-    FOR ALL TO authenticated
+    FOR ALL TO PUBLIC
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 -- ========================================
