@@ -770,8 +770,6 @@ export const InboxPage: React.FC = () => {
   const allConversations = [
     ...(Array.isArray(conversations) ? conversations.map(conv => ({
       ...conv,
-      isWhatsApp: false,
-      isWeb: false,
       whatsappChat: null,
       webConversation: null
     })) : []),
@@ -856,6 +854,7 @@ export const InboxPage: React.FC = () => {
       webConversation: conv
     })) : [])
   ];
+
 
   const filteredConversations = allConversations.filter(conversation => {
     const matchesSearch = conversation.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
