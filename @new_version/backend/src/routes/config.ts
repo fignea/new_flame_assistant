@@ -13,5 +13,6 @@ router.put('/profile', configController.updateProfile);
 router.put('/password', configController.changePassword);
 router.get('/system-info', configController.getSystemInfo);
 router.get('/database-status', configController.getDatabaseStatus);
+router.post('/populate-demo-data', configController.populateDemoData);
 
 export default router;

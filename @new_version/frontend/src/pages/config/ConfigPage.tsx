@@ -39,6 +39,7 @@ export const ConfigPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [populatingDemo, setPopulatingDemo] = useState(false);
   
   // Estados del formulario de perfil
   const [profileForm, setProfileForm] = useState({
@@ -150,6 +151,30 @@ export const ConfigPage: React.FC = () => {
     loadDatabaseStatus();
   };
 
+  // Función para poblar datos de demo
+  const handlePopulateDemoData = async () => {
+    if (!confirm('¿Estás seguro de que quieres poblar la base de datos con datos de demostración? Esto agregará contactos, conversaciones y mensajes de ejemplo.')) {
+      return;
+    }
+
+    try {
+      setPopulatingDemo(true);
+      const response = await apiService.post('/api/config/populate-demo-data', {});
+      if (response.success) {
+        showSuccess('Datos poblados', 'Los datos de demostración se han agregado exitosamente');
+        loadSystemInfo();
+        loadDatabaseStatus();
+      } else {
+        showError('Error', response.message || 'No se pudieron poblar los datos de demo');
+      }
+    } catch (error) {
+      console.error('Error populating demo data:', error);
+      showError('Error', 'No se pudieron poblar los datos de demo');
+    } finally {
+      setPopulatingDemo(false);
+    }
+  };
+
   const tabs = [
     { id: 'profile', name: 'Perfil', icon: User },
     { id: 'tenant', name: 'Organización', icon: Building2 },
@@ -157,6 +182,11 @@ export const ConfigPage: React.FC = () => {
     { id: 'database', name: 'Base de Datos', icon: Database },
     { id: 'system', name: 'Sistema', icon: Settings },
   ];
+  
+  // Agregar tab de Demo solo para tenant flame
+  if (tenant?.slug === 'flame') {
+    tabs.push({ id: 'demo', name: 'Demo Data', icon: Activity });
+  }
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -703,6 +733,120 @@ export const ConfigPage: React.FC = () => {
                 </div>
               </>
             )}
+          </div>
+        );
+      
+      case 'demo':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Datos de Demostración</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Pobla la base de datos con datos de ejemplo para probar la aplicación
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-6 rounded-xl border border-purple-200 dark:border-purple-800">
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center">
+                    <Database className="w-6 h-6 text-white" />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    Poblar Base de Datos con Datos Demo
+                  </h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    Esta función agregará datos de ejemplo a tu base de datos, incluyendo:
+                  </p>
+                  <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400 mb-6">
+                    <li className="flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <span>2 usuarios adicionales (agentes)</span>
+                    </li>
+                    <li className="flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <span>5 contactos de ejemplo</span>
+                    </li>
+                    <li className="flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <span>3 conversaciones activas</span>
+                    </li>
+                    <li className="flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <span>~10 mensajes de conversación</span>
+                    </li>
+                    <li className="flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <span>2 mensajes programados</span>
+                    </li>
+                  </ul>
+                  
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg mb-4">
+                    <div className="flex items-start space-x-2">
+                      <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                        <strong>Nota importante:</strong> Los datos existentes no se eliminarán. 
+                        Esta función solo agrega nuevos datos de ejemplo. 
+                        Si algunos datos ya existen, se omitirán automáticamente.
+                      </div>
+                    </div>
+                  </div>
+
+                  {tenant?.slug === 'flame' ? (
+                    <button
+                      onClick={handlePopulateDemoData}
+                      disabled={populatingDemo}
+                      className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
+                    >
+                      {populatingDemo ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>Poblando datos...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Database className="w-5 h-5" />
+                          <span>Poblar Datos de Demostración</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg">
+                      <p className="text-sm text-red-800 dark:text-red-200">
+                        Esta función solo está disponible para la organización FLAME (demo).
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Información adicional */}
+            <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+              <h4 className="font-medium text-gray-900 dark:text-white mb-4">Credenciales de Usuarios Demo</h4>
+              <div className="space-y-3">
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Agente 1</p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                    📧 Email: <code className="bg-blue-100 dark:bg-blue-800 px-2 py-0.5 rounded">agente1@flame.com</code>
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    🔑 Contraseña: <code className="bg-blue-100 dark:bg-blue-800 px-2 py-0.5 rounded">flame123</code>
+                  </p>
+                </div>
+                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                  <p className="text-sm font-medium text-purple-900 dark:text-purple-100">Agente 2</p>
+                  <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
+                    📧 Email: <code className="bg-purple-100 dark:bg-purple-800 px-2 py-0.5 rounded">agente2@flame.com</code>
+                  </p>
+                  <p className="text-xs text-purple-700 dark:text-purple-300">
+                    🔑 Contraseña: <code className="bg-purple-100 dark:bg-purple-800 px-2 py-0.5 rounded">flame123</code>
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         );
       

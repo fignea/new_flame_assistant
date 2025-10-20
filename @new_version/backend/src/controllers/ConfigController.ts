@@ -354,6 +354,73 @@ export class ConfigController {
       });
     }
   }
+
+  public async populateDemoData(req: AuthenticatedRequest, res: Response<ApiResponse>) {
+    try {
+      const userId = req.user?.id;
+      const tenantSlug = req.tenant?.slug;
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      // Solo permitir para el tenant 'flame'
+      if (tenantSlug !== 'flame') {
+        return res.status(403).json({
+          success: false,
+          message: 'Esta función solo está disponible para la organización FLAME (demo)'
+        });
+      }
+
+      // Verificar que el usuario sea owner o admin
+      if (req.user?.role !== 'owner' && req.user?.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Solo los propietarios y administradores pueden poblar datos de demo'
+        });
+      }
+
+      // Leer y ejecutar el script SQL
+      const fs = require('fs');
+      const path = require('path');
+      const scriptPath = path.join(process.cwd(), 'scripts', 'populate-demo-data.sql');
+      
+      if (!fs.existsSync(scriptPath)) {
+        return res.status(404).json({
+          success: false,
+          message: 'Script de demo no encontrado'
+        });
+      }
+
+      const sqlScript = fs.readFileSync(scriptPath, 'utf8');
+      
+      // Ejecutar el script
+      await database.query(sqlScript);
+
+      return res.json({
+        success: true,
+        message: 'Datos de demostración poblados exitosamente',
+        data: {
+          populated: true,
+          tenant: tenantSlug
+        }
+      });
+
+    } catch (error) {
+      console.error('Populate demo data error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al poblar datos de demostración',
+        data: {
+          error: error instanceof Error ? error.message : 'Error desconocido'
+        }
+      });
+    }
+  }
 }
 
 export const configController = new ConfigController();
+
