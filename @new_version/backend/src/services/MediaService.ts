@@ -6,8 +6,8 @@ import * as crypto from 'crypto';
 import sharp from 'sharp';
 
 export interface MediaFile {
-  id: number;
-  user_id: number;
+  id: string;
+  tenant_id: string;
   original_name: string;
   file_name: string;
   file_path: string;
@@ -161,13 +161,13 @@ export class MediaService {
   }
 
   // Crear archivo multimedia en la base de datos
-  static async createMediaFile(userId: number, mediaData: CreateMediaFileRequest): Promise<MediaFile> {
+  static async createMediaFile(tenantId: string, mediaData: CreateMediaFileRequest): Promise<MediaFile> {
     try {
       const result = await database.run(
-        `INSERT INTO media_files (user_id, original_name, file_name, file_path, file_type, file_size, mime_type, width, height, duration, thumbnail_path, is_compressed, compression_ratio, created_at, updated_at) 
+        `INSERT INTO media_files (tenant_id, original_name, file_name, file_path, file_type, file_size, mime_type, width, height, duration, thumbnail_path, is_compressed, compression_ratio, created_at, updated_at) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id`,
         [
-          userId,
+          tenantId,
           mediaData.original_name,
           mediaData.file_name,
           mediaData.file_path,
@@ -196,11 +196,11 @@ export class MediaService {
   }
 
   // Obtener archivo multimedia por ID
-  static async getMediaFileById(id: number, userId: number): Promise<MediaFile | null> {
+  static async getMediaFileById(id: string, tenantId: string): Promise<MediaFile | null> {
     try {
       const result = await database.all(
-        'SELECT * FROM media_files WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        'SELECT * FROM media_files WHERE id = $1 AND tenant_id = $2',
+        [id, tenantId]
       );
       return result.length > 0 ? result[0] as MediaFile : null;
     } catch (error) {
@@ -210,10 +210,10 @@ export class MediaService {
   }
 
   // Obtener archivos multimedia del usuario
-  static async getUserMediaFiles(userId: number, fileType?: string, limit: number = 50, offset: number = 0): Promise<MediaFile[]> {
+  static async getUserMediaFiles(tenantId: string, fileType?: string, limit: number = 50, offset: number = 0): Promise<MediaFile[]> {
     try {
-      let query = 'SELECT * FROM media_files WHERE user_id = $1';
-      let params: any[] = [userId];
+      let query = 'SELECT * FROM media_files WHERE tenant_id = $1';
+      let params: any[] = [tenantId];
 
       if (fileType) {
         query += ' AND file_type = $2';
@@ -234,9 +234,9 @@ export class MediaService {
   }
 
   // Eliminar archivo multimedia
-  static async deleteMediaFile(id: number, userId: number): Promise<boolean> {
+  static async deleteMediaFile(id: string, tenantId: string): Promise<boolean> {
     try {
-      const mediaFile = await this.getMediaFileById(id, userId);
+      const mediaFile = await this.getMediaFileById(id, tenantId);
       if (!mediaFile) {
         return false;
       }
@@ -253,8 +253,8 @@ export class MediaService {
 
       // Eliminar de la base de datos
       await database.run(
-        'DELETE FROM media_files WHERE id = $1 AND user_id = $2',
-        [id, userId]
+        'DELETE FROM media_files WHERE id = $1 AND tenant_id = $2',
+        [id, tenantId]
       );
 
       return true;
@@ -265,21 +265,21 @@ export class MediaService {
   }
 
   // Obtener estadísticas de archivos multimedia
-  static async getMediaStats(userId: number): Promise<{
+  static async getMediaStats(tenantId: string): Promise<{
     total_files: number;
     total_size: number;
     files_by_type: { [key: string]: number };
     size_by_type: { [key: string]: number };
   }> {
     try {
-      console.log('Getting media stats for user:', userId);
+      console.log('Getting media stats for tenant:', tenantId);
       const stats = await database.all(
         `SELECT 
            COUNT(*)::integer as total_files,
            COALESCE(SUM(file_size), 0)::bigint as total_size
          FROM media_files 
-         WHERE user_id = $1`,
-        [userId]
+         WHERE tenant_id = $1`,
+        [tenantId]
       );
       console.log('Stats query result:', stats);
 
@@ -289,9 +289,9 @@ export class MediaService {
            COUNT(*)::integer as count,
            COALESCE(SUM(file_size), 0)::bigint as size
          FROM media_files 
-         WHERE user_id = $1
+         WHERE tenant_id = $1
          GROUP BY file_type`,
-        [userId]
+        [tenantId]
       );
 
       const filesByType: { [key: string]: number } = {};

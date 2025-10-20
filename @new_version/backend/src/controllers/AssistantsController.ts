@@ -313,6 +313,71 @@ export class AssistantsController {
       });
     }
   }
+
+  public async getStats(req: AuthenticatedRequest, res: Response<ApiResponse<any>>) {
+    try {
+      const tenantId = req.user?.tenant_id;
+      
+      if (!tenantId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      // Obtener estadísticas generales de asistentes
+      const totalAssistants = await database.get(`
+        SELECT COUNT(*) as total
+        FROM assistants 
+        WHERE tenant_id = $1 AND deleted_at IS NULL
+      `, [tenantId]) as any;
+
+      const activeAssistants = await database.get(`
+        SELECT COUNT(*) as total
+        FROM assistants 
+        WHERE tenant_id = $1 AND is_active = true AND deleted_at IS NULL
+      `, [tenantId]) as any;
+
+      const inactiveAssistants = await database.get(`
+        SELECT COUNT(*) as total
+        FROM assistants 
+        WHERE tenant_id = $1 AND is_active = false AND deleted_at IS NULL
+      `, [tenantId]) as any;
+
+      // Obtener estadísticas de uso (conversaciones asignadas)
+      const conversationsStats = await database.get(`
+        SELECT 
+          COUNT(*) as total_conversations,
+          COUNT(CASE WHEN c.status = 'active' THEN 1 END) as active_conversations,
+          COUNT(CASE WHEN c.status = 'closed' THEN 1 END) as closed_conversations
+        FROM conversations c
+        WHERE c.tenant_id = $1 AND c.assigned_to IS NOT NULL
+      `, [tenantId]) as any;
+
+      const stats = {
+        total: parseInt(totalAssistants.total) || 0,
+        active: parseInt(activeAssistants.total) || 0,
+        inactive: parseInt(inactiveAssistants.total) || 0,
+        conversations: {
+          total: parseInt(conversationsStats.total_conversations) || 0,
+          active: parseInt(conversationsStats.active_conversations) || 0,
+          closed: parseInt(conversationsStats.closed_conversations) || 0
+        }
+      };
+
+      return res.json({
+        success: true,
+        data: stats
+      });
+
+    } catch (error) {
+      console.error('Error obteniendo estadísticas de asistentes:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error obteniendo estadísticas de asistentes'
+      });
+    }
+  }
 }
 
 export const assistantsController = new AssistantsController();

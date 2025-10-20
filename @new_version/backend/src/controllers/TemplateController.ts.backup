@@ -9,8 +9,9 @@ export class TemplateController {
    */
   static async createTemplate(req: AuthenticatedRequest, res: Response) {
     try {
-      const userId = req.user!.id;
+      const parseInt(userId) = req.user!.id;
       const templateData = req.body;
+
 
       if (!templateData.name || !templateData.content) {
         return res.status(400).json({
@@ -19,62 +20,67 @@ export class TemplateController {
         });
       }
 
-      const template = await TemplateService.createTemplate(templateData, req.tenant?.id || '');
+      // Si no se proporciona assistant_id, usar null para templates generales
+      if (!templateData.assistant_id) {
+        templateData.assistant_id = null;
+      }
+
+      const template = await TemplateService.createTemplate(templateData, parseInt(userId));
 
       res.status(201).json({
         success: true,
         data: template,
         message: 'Plantilla creada exitosamente'
       });
-    } catch (error) {
-      console.error('Error creating template:', error);
+    } catch (error: any) {
+      console.error('Error creando plantilla:', error);
       res.status(500).json({
         success: false,
-        error: 'Error interno del servidor'
+        error: error.message || 'Error interno del servidor'
       });
     }
   }
 
   /**
-   * Obtener plantillas del usuario
+   * Obtener todas las plantillas del usuario
    * GET /api/templates
    */
   static async getUserTemplates(req: AuthenticatedRequest, res: Response) {
     try {
-      const userId = req.user!.id;
+      const parseInt(userId) = req.user!.id;
       const { assistant_id, category } = req.query;
 
       const templates = await TemplateService.getUserTemplates(
-        req.tenant?.id || '',
+        parseInt(userId),
         assistant_id ? parseInt(assistant_id as string) : undefined,
-        category as any || undefined
+        category as any
       );
 
       res.json({
         success: true,
         data: templates
       });
-    } catch (error) {
-      console.error('Error getting user templates:', error);
+    } catch (error: any) {
+      console.error('Error obteniendo plantillas del usuario:', error);
       res.status(500).json({
         success: false,
-        error: 'Error interno del servidor'
+        error: error.message || 'Error interno del servidor'
       });
     }
   }
 
   /**
-   * Obtener plantilla por ID
+   * Obtener una plantilla por ID
    * GET /api/templates/:id
    */
   static async getTemplateById(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
+      const parseInt(userId) = req.user!.id;
 
       const template = await TemplateService.getTemplateById(
         parseInt(id),
-        req.tenant?.id || ''
+        parseInt(userId)
       );
 
       if (!template) {
@@ -88,29 +94,29 @@ export class TemplateController {
         success: true,
         data: template
       });
-    } catch (error) {
-      console.error('Error getting template by ID:', error);
+    } catch (error: any) {
+      console.error('Error obteniendo plantilla por ID:', error);
       res.status(500).json({
         success: false,
-        error: 'Error interno del servidor'
+        error: error.message || 'Error interno del servidor'
       });
     }
   }
 
   /**
-   * Actualizar plantilla
+   * Actualizar una plantilla
    * PUT /api/templates/:id
    */
   static async updateTemplate(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
-      const updateData = req.body;
+      const parseInt(userId) = req.user!.id;
+      const updates = req.body;
 
       const template = await TemplateService.updateTemplate(
         parseInt(id),
-        updateData,
-        req.tenant?.id || ''
+        updates,
+        parseInt(userId)
       );
 
       if (!template) {
@@ -125,27 +131,27 @@ export class TemplateController {
         data: template,
         message: 'Plantilla actualizada exitosamente'
       });
-    } catch (error) {
-      console.error('Error updating template:', error);
+    } catch (error: any) {
+      console.error('Error actualizando plantilla:', error);
       res.status(500).json({
         success: false,
-        error: 'Error interno del servidor'
+        error: error.message || 'Error interno del servidor'
       });
     }
   }
 
   /**
-   * Eliminar plantilla
+   * Eliminar una plantilla
    * DELETE /api/templates/:id
    */
   static async deleteTemplate(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
+      const parseInt(userId) = req.user!.id;
 
       const success = await TemplateService.deleteTemplate(
         parseInt(id),
-        req.tenant?.id || ''
+        parseInt(userId)
       );
 
       if (!success) {
@@ -159,11 +165,11 @@ export class TemplateController {
         success: true,
         message: 'Plantilla eliminada exitosamente'
       });
-    } catch (error) {
-      console.error('Error deleting template:', error);
+    } catch (error: any) {
+      console.error('Error eliminando plantilla:', error);
       res.status(500).json({
         success: false,
-        error: 'Error interno del servidor'
+        error: error.message || 'Error interno del servidor'
       });
     }
   }
@@ -174,30 +180,31 @@ export class TemplateController {
    */
   static async searchTemplatesByKeywords(req: AuthenticatedRequest, res: Response) {
     try {
-      const userId = req.user!.id;
-      const { keywords } = req.body;
+      const { keywords, assistant_id } = req.body;
+      const parseInt(userId) = req.user!.id;
 
       if (!keywords || !Array.isArray(keywords)) {
         return res.status(400).json({
           success: false,
-          error: 'Keywords es requerido y debe ser un array'
+          error: 'keywords debe ser un array de strings'
         });
       }
 
       const templates = await TemplateService.findTemplatesByKeywords(
         keywords,
-        req.tenant?.id || ''
+        parseInt(userId),
+        assistant_id
       );
 
       res.json({
         success: true,
         data: templates
       });
-    } catch (error) {
-      console.error('Error searching templates:', error);
+    } catch (error: any) {
+      console.error('Error buscando plantillas por palabras clave:', error);
       res.status(500).json({
         success: false,
-        error: 'Error interno del servidor'
+        error: error.message || 'Error interno del servidor'
       });
     }
   }
@@ -209,40 +216,49 @@ export class TemplateController {
   static async getTemplatesByCategory(req: AuthenticatedRequest, res: Response) {
     try {
       const { category } = req.params;
-      const userId = req.user!.id;
+      const { assistant_id } = req.query;
+      const parseInt(userId) = req.user!.id;
 
       const templates = await TemplateService.getTemplatesByCategory(
         category as any,
-        req.tenant?.id || '',
-        undefined
+        parseInt(userId),
+        assistant_id ? parseInt(assistant_id as string) : undefined
       );
 
       res.json({
         success: true,
         data: templates
       });
-    } catch (error) {
-      console.error('Error getting templates by category:', error);
+    } catch (error: any) {
+      console.error('Error obteniendo plantillas por categoría:', error);
       res.status(500).json({
         success: false,
-        error: 'Error interno del servidor'
+        error: error.message || 'Error interno del servidor'
       });
     }
   }
 
   /**
-   * Duplicar plantilla
+   * Duplicar una plantilla
    * POST /api/templates/:id/duplicate
    */
   static async duplicateTemplate(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
-      const userId = req.user!.id;
+      const { new_name } = req.body;
+      const parseInt(userId) = req.user!.id;
+
+      if (!new_name) {
+        return res.status(400).json({
+          success: false,
+          error: 'Falta el campo requerido: new_name'
+        });
+      }
 
       const template = await TemplateService.duplicateTemplate(
         parseInt(id),
-        `Copia de ${id}`,
-        req.tenant?.id || ''
+        new_name,
+        parseInt(userId)
       );
 
       if (!template) {
@@ -257,11 +273,11 @@ export class TemplateController {
         data: template,
         message: 'Plantilla duplicada exitosamente'
       });
-    } catch (error) {
-      console.error('Error duplicating template:', error);
+    } catch (error: any) {
+      console.error('Error duplicando plantilla:', error);
       res.status(500).json({
         success: false,
-        error: 'Error interno del servidor'
+        error: error.message || 'Error interno del servidor'
       });
     }
   }
@@ -272,18 +288,18 @@ export class TemplateController {
    */
   static async getTemplateStats(req: AuthenticatedRequest, res: Response) {
     try {
-      const userId = req.user!.id;
-      const stats = await TemplateService.getTemplateStats(req.tenant?.id || '');
+      const parseInt(userId) = req.user!.id;
+      const stats = await TemplateService.getTemplateStats(parseInt(userId));
 
       res.json({
         success: true,
         data: stats
       });
-    } catch (error) {
-      console.error('Error getting template stats:', error);
+    } catch (error: any) {
+      console.error('Error obteniendo estadísticas de plantillas:', error);
       res.status(500).json({
         success: false,
-        error: 'Error interno del servidor'
+        error: error.message || 'Error interno del servidor'
       });
     }
   }

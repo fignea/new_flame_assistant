@@ -332,6 +332,10 @@ export class ApiService {
     return this.get(`/api/assistants/${id}/stats`);
   }
 
+  async getAssistantsStats(): Promise<ApiResponse<any>> {
+    return this.get('/api/assistants/stats');
+  }
+
   async searchAssistants(query: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<PaginatedResponse<Assistant>>> {
     return this.get('/api/assistants/search', { q: query, ...params });
   }

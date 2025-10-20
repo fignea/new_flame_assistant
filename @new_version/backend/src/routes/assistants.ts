@@ -10,6 +10,9 @@ router.use(authenticate);
 // GET /api/assistants - Obtener todos los asistentes
 router.get('/', assistantsController.getAll.bind(assistantsController));
 
+// GET /api/assistants/stats - Obtener estadísticas de asistentes
+router.get('/stats', assistantsController.getStats.bind(assistantsController));
+
 // GET /api/assistants/:id - Obtener asistente por ID
 router.get('/:id', assistantsController.getById.bind(assistantsController));
 
