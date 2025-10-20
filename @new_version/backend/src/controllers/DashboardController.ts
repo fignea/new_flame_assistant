@@ -29,6 +29,8 @@ export class DashboardController {
           active_conversations,
           conversations_today,
           messages_today,
+          total_assistants,
+          active_assistants,
           avg_resolution_time,
           avg_satisfaction_score
         FROM dashboard_stats 
@@ -46,9 +48,9 @@ export class DashboardController {
       // Transformar los datos para que coincidan con la estructura esperada por el frontend
       const transformedStats = {
         assistants: {
-          total: 0, // Se calculará por separado
-          active: 0,
-          inactive: 0
+          total: parseInt(stats.total_assistants) || 0,
+          active: parseInt(stats.active_assistants) || 0,
+          inactive: (parseInt(stats.total_assistants) || 0) - (parseInt(stats.active_assistants) || 0)
         },
         conversations: {
           total: parseInt(stats.total_conversations) || 0,

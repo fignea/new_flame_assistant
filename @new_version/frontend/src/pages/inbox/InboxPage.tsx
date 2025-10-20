@@ -192,6 +192,7 @@ export const InboxPage: React.FC = () => {
   const [webChatEnabled, setWebChatEnabled] = useState(true);
   const [availableTags, setAvailableTags] = useState<any[]>([]);
   const [availableAssistants, setAvailableAssistants] = useState<any[]>([]);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
 
   // Configurar Socket.IO para recibir mensajes en tiempo real
   const { isConnected: wsConnected, joinUserRoom, leaveUserRoom, reconnectWithNewToken } = useSocketIO({
@@ -419,6 +420,11 @@ export const InboxPage: React.FC = () => {
     }
   }, [webChatEnabled, statusFilter]);
 
+  // Cargar conversaciones normales al montar el componente y cuando cambien los filtros
+  useEffect(() => {
+    loadNormalConversations();
+  }, [statusFilter, platformFilter, priorityFilter, tagFilter, assistantFilter, unreadOnly, searchQuery]);
+
   // Cargar etiquetas y asistentes disponibles
   useEffect(() => {
     const loadFiltersData = async () => {
@@ -507,6 +513,50 @@ export const InboxPage: React.FC = () => {
       console.error('Error loading web conversations:', error);
     } finally {
       setIsLoadingWeb(false);
+    }
+  };
+
+  // Cargar conversaciones normales
+  const loadNormalConversations = async () => {
+    try {
+      setIsLoadingConversations(true);
+      const response = await apiService.getConversations({
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        platform: platformFilter === 'all' ? undefined : platformFilter,
+        priority: priorityFilter === 'all' ? undefined : priorityFilter,
+        assigned_to: assistantFilter === 'all' ? undefined : assistantFilter,
+        tags: tagFilter === 'all' ? undefined : [tagFilter],
+        unread_only: unreadOnly,
+        search: searchQuery || undefined,
+        limit: 50
+      });
+      
+      if (response.success && response.data) {
+        // Convertir las conversaciones del backend al formato esperado por el frontend
+        const formattedConversations = response.data.map((conv: any) => ({
+          id: conv.id,
+          contactName: conv.contact_name || 'Sin nombre',
+          contactPhone: conv.contact_phone || '',
+          contactEmail: conv.contact_email || '',
+          platform: conv.platform || 'whatsapp',
+          status: conv.status || 'active',
+          priority: conv.priority || 'normal',
+          assignedAssistant: conv.assistant_name || conv.assigned_user_name || null,
+          lastMessage: 'Último mensaje', // Se puede mejorar cargando el último mensaje
+          lastMessageTime: conv.last_message_at || conv.created_at,
+          unreadCount: 0, // Se puede calcular basado en mensajes no leídos
+          tags: conv.tags || [],
+          messages: [], // Se cargarán cuando se seleccione la conversación
+          isWhatsApp: conv.platform === 'whatsapp',
+          isWeb: conv.platform === 'web_chat'
+        }));
+        
+        setConversations(formattedConversations);
+      }
+    } catch (error) {
+      console.error('Error loading normal conversations:', error);
+    } finally {
+      setIsLoadingConversations(false);
     }
   };
 
@@ -711,433 +761,9 @@ export const InboxPage: React.FC = () => {
     }
   };
 
-  const [conversations, setConversations] = useState<Conversation[]>([
-    {
-      id: '1',
-      contactName: 'María González',
-      contactPhone: '+34 612 345 678',
-      contactEmail: 'maria.gonzalez@email.com',
-      platform: 'whatsapp',
-      status: 'active',
-      priority: 'high',
-      assignedAssistant: 'Asistente de Ventas',
-      lastMessage: 'Hola, me interesa saber más sobre sus productos',
-      lastMessageTime: new Date().toISOString(),
-      unreadCount: 3,
-      tags: ['ventas', 'productos', 'urgente'],
-      messages: [
-        {
-          id: '1',
-          content: 'Hola, me interesa saber más sobre sus productos',
-          sender: 'user',
-          timestamp: '2024-01-20T14:25:00Z',
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '2',
-          content: '¡Hola María! Me da mucho gusto saber de tu interés en nuestros productos. ¿Hay algún producto específico que te interese?',
-          sender: 'assistant',
-          timestamp: '2024-01-20T14:26:00Z',
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '3',
-          content: 'Sí, me interesan especialmente los productos de tecnología',
-          sender: 'user',
-          timestamp: '2024-01-20T14:28:00Z',
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '4',
-          content: 'Perfecto, tenemos una excelente línea de productos tecnológicos. ¿Te gustaría que te envíe nuestro catálogo?',
-          sender: 'assistant',
-          timestamp: '2024-01-20T14:30:00Z',
-          type: 'text',
-          status: 'delivered'
-        }
-      ],
-      createdAt: '2024-01-20T14:25:00Z',
-      updatedAt: '2024-01-20T14:30:00Z'
-    },
-    {
-      id: '2',
-      contactName: 'Carlos Ruiz',
-      contactPhone: '+34 698 765 432',
-      platform: 'whatsapp',
-      status: 'pending',
-      priority: 'medium',
-      assignedAssistant: 'Soporte Técnico',
-      lastMessage: 'Tengo un problema con mi pedido',
-      lastMessageTime: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Ayer
-      unreadCount: 1,
-      tags: ['soporte', 'pedido', 'problema'],
-      messages: [
-        {
-          id: '5',
-          content: 'Tengo un problema con mi pedido',
-          sender: 'user',
-          timestamp: '2024-01-20T13:40:00Z',
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '6',
-          content: 'Hola Carlos, lamento escuchar que tienes un problema con tu pedido. ¿Podrías contarme más detalles?',
-          sender: 'assistant',
-          timestamp: '2024-01-20T13:45:00Z',
-          type: 'text',
-          status: 'delivered'
-        }
-      ],
-      createdAt: '2024-01-20T13:40:00Z',
-      updatedAt: '2024-01-20T13:45:00Z'
-    },
-    {
-      id: '3',
-      contactName: 'Ana Martín',
-      contactPhone: '+34 611 222 333',
-      platform: 'facebook',
-      status: 'resolved',
-      priority: 'low',
-      assignedAssistant: 'Asistente de Ventas',
-      lastMessage: 'Gracias por la ayuda',
-      lastMessageTime: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // Hace 3 días
-      unreadCount: 0,
-      tags: ['resuelto', 'agradecimiento'],
-      messages: [
-        {
-          id: '7',
-          content: '¿Cuáles son sus horarios de atención?',
-          sender: 'user',
-          timestamp: '2024-01-19T16:15:00Z',
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '8',
-          content: 'Nuestros horarios de atención son de lunes a viernes de 9:00 AM a 6:00 PM',
-          sender: 'assistant',
-          timestamp: '2024-01-19T16:18:00Z',
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '9',
-          content: 'Gracias por la ayuda',
-          sender: 'user',
-          timestamp: '2024-01-19T16:20:00Z',
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: '2024-01-19T16:15:00Z',
-      updatedAt: '2024-01-19T16:20:00Z'
-    },
-    {
-      id: '4',
-      contactName: 'Roberto Silva',
-      contactPhone: '+34 655 123 456',
-      platform: 'whatsapp',
-      status: 'active',
-      priority: 'urgent',
-      assignedAssistant: 'Soporte Técnico',
-      lastMessage: 'URGENTE: Mi sistema no funciona',
-      lastMessageTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // Hace 2 horas
-      unreadCount: 5,
-      tags: ['urgente', 'sistema', 'fallo'],
-      messages: [
-        {
-          id: '10',
-          content: 'URGENTE: Mi sistema no funciona',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      id: '5',
-      contactName: 'Laura Fernández',
-      contactPhone: '+34 611 999 888',
-      contactEmail: 'laura.fernandez@email.com',
-      platform: 'facebook',
-      status: 'pending',
-      priority: 'medium',
-      assignedAssistant: 'Asistente de Ventas',
-      lastMessage: '¿Tienen descuentos para estudiantes?',
-      lastMessageTime: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), // Hace 4 horas
-      unreadCount: 2,
-      tags: ['descuentos', 'estudiantes', 'precio'],
-      messages: [
-        {
-          id: '11',
-          content: '¿Tienen descuentos para estudiantes?',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      id: '6',
-      contactName: 'Miguel Torres',
-      contactPhone: '+34 633 444 555',
-      platform: 'whatsapp',
-      status: 'resolved',
-      priority: 'low',
-      assignedAssistant: 'Asistente de Ventas',
-      lastMessage: 'Perfecto, muchas gracias',
-      lastMessageTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // Hace 2 días
-      unreadCount: 0,
-      tags: ['resuelto', 'agradecimiento'],
-      messages: [
-        {
-          id: '12',
-          content: '¿Cuál es el tiempo de entrega?',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '13',
-          content: 'El tiempo de entrega es de 3-5 días hábiles',
-          sender: 'assistant',
-          timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 + 5 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '14',
-          content: 'Perfecto, muchas gracias',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000).toISOString()
-    },
-    {
-      id: '7',
-      contactName: 'Sofia Martínez',
-      contactPhone: '+34 677 888 999',
-      platform: 'instagram',
-      status: 'active',
-      priority: 'high',
-      assignedAssistant: 'Asistente de Ventas',
-      lastMessage: 'Me interesa el producto premium',
-      lastMessageTime: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), // Hace 6 horas
-      unreadCount: 1,
-      tags: ['premium', 'producto', 'interés'],
-      messages: [
-        {
-          id: '15',
-          content: 'Me interesa el producto premium',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      id: '8',
-      contactName: 'David López',
-      contactPhone: '+34 644 777 333',
-      platform: 'whatsapp',
-      status: 'pending',
-      priority: 'medium',
-      assignedAssistant: 'Soporte Técnico',
-      lastMessage: 'No puedo acceder a mi cuenta',
-      lastMessageTime: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(), // Hace 8 horas
-      unreadCount: 3,
-      tags: ['cuenta', 'acceso', 'problema'],
-      messages: [
-        {
-          id: '16',
-          content: 'No puedo acceder a mi cuenta',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      id: '9',
-      contactName: 'Elena García',
-      contactPhone: '+34 666 555 444',
-      contactEmail: 'elena.garcia@email.com',
-      platform: 'facebook',
-      status: 'resolved',
-      priority: 'low',
-      assignedAssistant: 'Asistente de Ventas',
-      lastMessage: 'Excelente servicio, los recomiendo',
-      lastMessageTime: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(), // Hace 4 días
-      unreadCount: 0,
-      tags: ['recomendación', 'servicio', 'satisfacción'],
-      messages: [
-        {
-          id: '17',
-          content: '¿Cómo puedo cancelar mi pedido?',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '18',
-          content: 'Puedes cancelar tu pedido desde tu panel de usuario',
-          sender: 'assistant',
-          timestamp: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000 + 2 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '19',
-          content: 'Excelente servicio, los recomiendo',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000 + 5 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000 + 5 * 60 * 1000).toISOString()
-    },
-    {
-      id: '10',
-      contactName: 'Javier Ruiz',
-      contactPhone: '+34 699 111 222',
-      platform: 'whatsapp',
-      status: 'active',
-      priority: 'high',
-      assignedAssistant: 'Asistente de Ventas',
-      lastMessage: '¿Tienen garantía extendida?',
-      lastMessageTime: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(), // Hace 12 horas
-      unreadCount: 2,
-      tags: ['garantía', 'extendida', 'consulta'],
-      messages: [
-        {
-          id: '20',
-          content: '¿Tienen garantía extendida?',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      id: '11',
-      contactName: 'Carmen Vega',
-      contactPhone: '+34 655 666 777',
-      platform: 'instagram',
-      status: 'pending',
-      priority: 'medium',
-      assignedAssistant: 'Asistente de Ventas',
-      lastMessage: '¿Hacen envíos internacionales?',
-      lastMessageTime: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString(), // Hace 18 horas
-      unreadCount: 1,
-      tags: ['envíos', 'internacional', 'logística'],
-      messages: [
-        {
-          id: '21',
-          content: '¿Hacen envíos internacionales?',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      id: '12',
-      contactName: 'Antonio Morales',
-      contactPhone: '+34 633 222 111',
-      platform: 'whatsapp',
-      status: 'resolved',
-      priority: 'low',
-      assignedAssistant: 'Soporte Técnico',
-      lastMessage: 'Problema resuelto, gracias',
-      lastMessageTime: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // Hace 5 días
-      unreadCount: 0,
-      tags: ['resuelto', 'problema', 'agradecimiento'],
-      messages: [
-        {
-          id: '22',
-          content: 'Mi pedido llegó dañado',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '23',
-          content: 'Lamento mucho el inconveniente. Te enviaremos un reemplazo inmediatamente',
-          sender: 'assistant',
-          timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        },
-        {
-          id: '24',
-          content: 'Problema resuelto, gracias',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString()
-    },
-    {
-      id: '13',
-      contactName: 'Isabel Sánchez',
-      contactPhone: '+34 677 333 444',
-      contactEmail: 'isabel.sanchez@email.com',
-      platform: 'facebook',
-      status: 'active',
-      priority: 'urgent',
-      assignedAssistant: 'Soporte Técnico',
-      lastMessage: 'EMERGENCIA: Sistema caído',
-      lastMessageTime: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // Hace 30 minutos
-      unreadCount: 4,
-      tags: ['emergencia', 'sistema', 'caído'],
-      messages: [
-        {
-          id: '25',
-          content: 'EMERGENCIA: Sistema caído',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-          type: 'text',
-          status: 'read'
-        }
-      ],
-      createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString()
-    }
-  ]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+
+  // Combinar conversaciones normales con chats de WhatsApp y conversaciones web
 
   // Combinar conversaciones normales con chats de WhatsApp y conversaciones web
   console.log('Conversaciones web disponibles:', webConversations);
