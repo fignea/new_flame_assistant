@@ -120,7 +120,7 @@ export class MediaController {
       }
 
       // Guardar en base de datos
-      const mediaFile = await MediaService.createMediaFile(userId, mediaData);
+      const mediaFile = await MediaService.createMediaFile(req.tenant?.id || '', mediaData);
 
       res.status(201).json({
         success: true,
@@ -157,7 +157,7 @@ export class MediaController {
         });
       }
 
-      const mediaFile = await MediaService.getMediaFileById(parseInt(id), userId);
+      const mediaFile = await MediaService.getMediaFileById(id, req.tenant?.id || '');
       
       if (!mediaFile) {
         return res.status(404).json({
@@ -196,7 +196,7 @@ export class MediaController {
       }
 
       const mediaFiles = await MediaService.getUserMediaFiles(
-        userId,
+        req.tenant?.id || '',
         type as string,
         parseInt(limit as string) || 50,
         parseInt(offset as string) || 0
@@ -231,7 +231,7 @@ export class MediaController {
         });
       }
 
-      const mediaFile = await MediaService.getMediaFileById(parseInt(id), userId);
+      const mediaFile = await MediaService.getMediaFileById(id, req.tenant?.id || '');
       
       if (!mediaFile) {
         return res.status(404).json({
@@ -278,7 +278,7 @@ export class MediaController {
         });
       }
 
-      const mediaFile = await MediaService.getMediaFileById(parseInt(id), userId);
+      const mediaFile = await MediaService.getMediaFileById(id, req.tenant?.id || '');
       
       if (!mediaFile || !mediaFile.thumbnail_path) {
         return res.status(404).json({
@@ -324,7 +324,7 @@ export class MediaController {
         });
       }
 
-      const deleted = await MediaService.deleteMediaFile(parseInt(id), userId);
+      const deleted = await MediaService.deleteMediaFile(id, req.tenant?.id || '');
       
       if (!deleted) {
         return res.status(404).json({
@@ -360,7 +360,7 @@ export class MediaController {
         });
       }
 
-      const stats = await MediaService.getMediaStats(userId);
+      const stats = await MediaService.getMediaStats(req.tenant?.id || '');
 
       res.json({
         success: true,

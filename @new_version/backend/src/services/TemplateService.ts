@@ -7,14 +7,14 @@ export class TemplateService {
    */
   static async createTemplate(
     template: Omit<ResponseTemplate, 'id' | 'created_at' | 'updated_at'>,
-    userId: number
+    tenantId: string
   ): Promise<ResponseTemplate> {
     try {
       // Verificar que el asistente pertenece al usuario
       if (template.assistant_id) {
         const assistant = await database.get(
-          'SELECT id FROM assistants WHERE id = $1 AND user_id = $2',
-          [template.assistant_id, userId]
+          'SELECT id FROM assistants WHERE id = $1 AND tenant_id = $2',
+          [template.assistant_id, tenantId]
         );
 
         if (!assistant) {
@@ -43,8 +43,8 @@ export class TemplateService {
       const result = await database.get(
         `SELECT rt.* FROM response_templates rt
          JOIN assistants a ON rt.assistant_id = a.id
-         WHERE a.user_id = $1 AND rt.name = $2 ORDER BY rt.created_at DESC LIMIT 1`,
-        [userId, template.name]
+         WHERE a.tenant_id = $1 AND rt.name = $2 ORDER BY rt.created_at DESC LIMIT 1`,
+        [tenantId, template.name]
       );
 
       return {
@@ -61,17 +61,16 @@ export class TemplateService {
    * Obtener todas las plantillas de un usuario
    */
   static async getUserTemplates(
-    userId: number,
+    tenantId: string,
     assistantId?: number,
     category?: TemplateCategory
   ): Promise<ResponseTemplate[]> {
     try {
       let query = `
         SELECT rt.* FROM response_templates rt
-        JOIN assistants a ON rt.assistant_id = a.id
-        WHERE a.user_id = $1
+        WHERE rt.tenant_id = $1
       `;
-      const params: any[] = [userId];
+      const params: any[] = [tenantId];
 
       if (assistantId) {
         query += ' AND rt.assistant_id = $2';
@@ -101,13 +100,13 @@ export class TemplateService {
   /**
    * Obtener una plantilla por ID
    */
-  static async getTemplateById(templateId: number, userId: number): Promise<ResponseTemplate | null> {
+  static async getTemplateById(templateId: number, tenantId: string): Promise<ResponseTemplate | null> {
     try {
       const template = await database.get(
         `SELECT rt.* FROM response_templates rt
          JOIN assistants a ON rt.assistant_id = a.id
-         WHERE rt.id = $1 AND a.user_id = $2`,
-        [templateId, userId]
+         WHERE rt.id = $1 AND a.tenant_id = $2`,
+        [templateId, tenantId]
       );
 
       if (!template) {
@@ -130,15 +129,15 @@ export class TemplateService {
   static async updateTemplate(
     templateId: number,
     updates: Partial<ResponseTemplate>,
-    userId: number
+    tenantId: string
   ): Promise<ResponseTemplate | null> {
     try {
       // Verificar que la plantilla pertenece al usuario
       const existingTemplate = await database.get(
         `SELECT rt.id FROM response_templates rt
          JOIN assistants a ON rt.assistant_id = a.id
-         WHERE rt.id = $1 AND a.user_id = $2`,
-        [templateId, userId]
+         WHERE rt.id = $1 AND a.tenant_id = $2`,
+        [templateId, tenantId]
       );
 
       if (!existingTemplate) {
@@ -205,8 +204,8 @@ export class TemplateService {
       const result = await database.get(
         `SELECT rt.* FROM response_templates rt
          JOIN assistants a ON rt.assistant_id = a.id
-         WHERE rt.id = $1 AND a.user_id = $2`,
-        [templateId, userId]
+         WHERE rt.id = $1 AND a.tenant_id = $2`,
+        [templateId, tenantId]
       );
 
       if (!result) {
@@ -226,14 +225,14 @@ export class TemplateService {
   /**
    * Eliminar una plantilla
    */
-  static async deleteTemplate(templateId: number, userId: number): Promise<boolean> {
+  static async deleteTemplate(templateId: number, tenantId: string): Promise<boolean> {
     try {
       // Primero verificar que la plantilla pertenece al usuario
       const existingTemplate = await database.get(
         `SELECT rt.id FROM response_templates rt
          JOIN assistants a ON rt.assistant_id = a.id
-         WHERE rt.id = $1 AND a.user_id = $2`,
-        [templateId, userId]
+         WHERE rt.id = $1 AND a.tenant_id = $2`,
+        [templateId, tenantId]
       );
 
       if (!existingTemplate) {
@@ -257,19 +256,19 @@ export class TemplateService {
    */
   static async findTemplatesByKeywords(
     keywords: string[],
-    userId: number,
+    tenantId: string,
     assistantId?: number
   ): Promise<ResponseTemplate[]> {
     try {
       let query = `
         SELECT rt.* FROM response_templates rt
         JOIN assistants a ON rt.assistant_id = a.id
-        WHERE a.user_id = $1 
+        WHERE a.tenant_id = $1 
         AND rt.is_active = true
         AND (
       `;
 
-      const params: any[] = [userId];
+      const params: any[] = [tenantId];
       const conditions: string[] = [];
 
       keywords.forEach((keyword, index) => {
@@ -304,19 +303,19 @@ export class TemplateService {
    */
   static async getTemplatesByCategory(
     category: TemplateCategory,
-    userId: number,
+    tenantId: string,
     assistantId?: number
   ): Promise<ResponseTemplate[]> {
     try {
       let query = `
         SELECT rt.* FROM response_templates rt
         JOIN assistants a ON rt.assistant_id = a.id
-        WHERE a.user_id = $1 
+        WHERE a.tenant_id = $1 
         AND rt.category = $2
         AND rt.is_active = true
       `;
 
-      const params: any[] = [userId, category];
+      const params: any[] = [tenantId, category];
 
       if (assistantId) {
         query += ' AND rt.assistant_id = $3';
@@ -343,10 +342,10 @@ export class TemplateService {
   static async duplicateTemplate(
     templateId: number,
     newName: string,
-    userId: number
+    tenantId: string
   ): Promise<ResponseTemplate | null> {
     try {
-      const originalTemplate = await this.getTemplateById(templateId, userId);
+      const originalTemplate = await this.getTemplateById(templateId, tenantId);
 
       if (!originalTemplate) {
         return null;
@@ -358,7 +357,7 @@ export class TemplateService {
         id: undefined
       };
 
-      return await this.createTemplate(duplicatedTemplate, userId);
+      return await this.createTemplate(duplicatedTemplate, tenantId);
     } catch (error) {
       console.error('Error duplicando plantilla:', error);
       throw error;
@@ -368,7 +367,7 @@ export class TemplateService {
   /**
    * Obtener estadísticas de plantillas
    */
-  static async getTemplateStats(userId: number): Promise<{
+  static async getTemplateStats(tenantId: string): Promise<{
     total_templates: number;
     active_templates: number;
     templates_by_category: Record<string, number>;
@@ -380,8 +379,8 @@ export class TemplateService {
            COUNT(CASE WHEN rt.is_active = true THEN 1 END) as active_templates
          FROM response_templates rt
          JOIN assistants a ON rt.assistant_id = a.id
-         WHERE a.user_id = $1`,
-        [userId]
+         WHERE a.tenant_id = $1`,
+        [tenantId]
       );
 
       // Obtener estadísticas por categoría
@@ -389,9 +388,9 @@ export class TemplateService {
         `SELECT rt.category, COUNT(*) as count
          FROM response_templates rt
          JOIN assistants a ON rt.assistant_id = a.id
-         WHERE a.user_id = $1 AND rt.is_active = true AND rt.category IS NOT NULL
+         WHERE a.tenant_id = $1 AND rt.is_active = true AND rt.category IS NOT NULL
          GROUP BY rt.category`,
-        [userId]
+        [tenantId]
       );
 
       const templatesByCategory = categoryStats.reduce((acc, stat) => {

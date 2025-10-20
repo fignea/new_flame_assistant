@@ -16,18 +16,23 @@ import {
   Check, 
   Sun, 
   Moon, 
-  Bot 
+  Bot,
+  Building2,
+  Users
 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [tenantSlug, setTenantSlug] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [name, setName] = useState('');
   
-  const { login } = useApp();
+  const { login, register } = useApp();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
@@ -46,10 +51,23 @@ export const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      await login(email, password);
+      if (isRegisterMode) {
+        await register({
+          email,
+          password,
+          name,
+          tenant_slug: tenantSlug || undefined
+        });
+      } else {
+        await login({
+          email,
+          password,
+          tenant_slug: tenantSlug || undefined
+        });
+      }
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesión');
+      setError(err.message || `Error al ${isRegisterMode ? 'registrarse' : 'iniciar sesión'}`);
     } finally {
       setIsLoading(false);
     }
@@ -132,19 +150,23 @@ export const LoginPage: React.FC = () => {
               <div className="space-y-4">
                 <div className="inline-flex items-center space-x-2 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-full px-4 py-2 border border-purple-500/30">
                   <Star className="w-4 h-4 text-purple-600 dark:text-yellow-400" />
-                  <span className="text-sm font-medium">Accede a tu cuenta</span>
+                  <span className="text-sm font-medium">
+                    {isRegisterMode ? 'Crea tu cuenta' : 'Accede a tu cuenta'}
+                  </span>
                 </div>
                 
                 <h1 className="text-5xl lg:text-7xl font-bold leading-tight">
-                  Inicia Sesión en
+                  {isRegisterMode ? 'Únete a' : 'Inicia Sesión en'}
                   <span className="block bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent animate-pulse">
                     FLAME
                   </span>
                 </h1>
                 
                 <p className="text-xl text-gray-600 dark:text-dark-secondary leading-relaxed max-w-2xl">
-                  Conecta con la plataforma más avanzada de 
-                  <span className="text-purple-500 dark:text-purple-400 font-semibold"> mensajería IA.</span>
+                  {isRegisterMode 
+                    ? 'Crea tu organización y comienza a usar la plataforma más avanzada de mensajería IA.'
+                    : 'Conecta con la plataforma más avanzada de mensajería IA.'
+                  }
                 </p>
               </div>
 
@@ -153,8 +175,8 @@ export const LoginPage: React.FC = () => {
                 {[
                   {
                     icon: <Zap className="w-6 h-6" />,
-                    title: "Acceso Instantáneo",
-                    description: "Conecta en segundos"
+                    title: isRegisterMode ? "Configuración Rápida" : "Acceso Instantáneo",
+                    description: isRegisterMode ? "Configura en minutos" : "Conecta en segundos"
                   },
                   {
                     icon: <Shield className="w-6 h-6" />,
@@ -162,9 +184,9 @@ export const LoginPage: React.FC = () => {
                     description: "Protección empresarial"
                   },
                   {
-                    icon: <Bot className="w-6 h-6" />,
-                    title: "IA Avanzada",
-                    description: "Asistentes inteligentes"
+                    icon: <Building2 className="w-6 h-6" />,
+                    title: "Multi-tenant",
+                    description: "Aislamiento completo"
                   }
                 ].map((feature, index) => (
                   <div 
@@ -181,7 +203,7 @@ export const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Right Column - Login Card */}
+            {/* Right Column - Login/Register Card */}
             <div className="flex justify-center">
               <div className="w-full max-w-md">
                 <div className="relative group">
@@ -200,12 +222,67 @@ export const LoginPage: React.FC = () => {
                         <div className="absolute -inset-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl blur animate-pulse"></div>
                       </div>
                       
-                      <h2 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">¡Bienvenido de Vuelta!</h2>
-                      <p className="text-gray-600 dark:text-dark-secondary">Accede a tu cuenta FLAME</p>
+                      <h2 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">
+                        {isRegisterMode ? '¡Crea tu Cuenta!' : '¡Bienvenido de Vuelta!'}
+                      </h2>
+                      <p className="text-gray-600 dark:text-dark-secondary">
+                        {isRegisterMode ? 'Comienza tu experiencia FLAME' : 'Accede a tu cuenta FLAME'}
+                      </p>
                     </div>
 
-                    {/* Login Form */}
+                    {/* Mode Toggle */}
+                    <div className="flex bg-gray-100 dark:bg-gray-800 rounded-2xl p-1 mb-6">
+                      <button
+                        type="button"
+                        onClick={() => setIsRegisterMode(false)}
+                        className={`flex-1 py-2 px-4 rounded-xl text-sm font-medium transition-all duration-300 ${
+                          !isRegisterMode
+                            ? 'bg-white dark:bg-gray-700 text-purple-600 dark:text-purple-400 shadow-sm'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        Iniciar Sesión
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsRegisterMode(true)}
+                        className={`flex-1 py-2 px-4 rounded-xl text-sm font-medium transition-all duration-300 ${
+                          isRegisterMode
+                            ? 'bg-white dark:bg-gray-700 text-purple-600 dark:text-purple-400 shadow-sm'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        Registrarse
+                      </button>
+                    </div>
+
+                    {/* Form */}
                     <form onSubmit={handleSubmit} className="space-y-6">
+                      {/* Name (only for register) */}
+                      {isRegisterMode && (
+                        <div>
+                          <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Nombre completo
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                              <Users className="h-5 w-5 text-gray-400" />
+                            </div>
+                            <input
+                              id="name"
+                              name="name"
+                              type="text"
+                              autoComplete="name"
+                              required={isRegisterMode}
+                              value={name}
+                              onChange={(e) => setName(e.target.value)}
+                              className="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-2xl bg-white/50 dark:bg-dark-surface/50 backdrop-blur-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
+                              placeholder="Tu nombre completo"
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       {/* Email */}
                       <div>
                         <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -242,7 +319,7 @@ export const LoginPage: React.FC = () => {
                             id="password"
                             name="password"
                             type={showPassword ? 'text' : 'password'}
-                            autoComplete="current-password"
+                            autoComplete={isRegisterMode ? 'new-password' : 'current-password'}
                             required
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
@@ -263,6 +340,33 @@ export const LoginPage: React.FC = () => {
                         </div>
                       </div>
 
+                      {/* Tenant Slug (optional) */}
+                      <div>
+                        <label htmlFor="tenantSlug" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Organización (opcional)
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Building2 className="h-5 w-5 text-gray-400" />
+                          </div>
+                          <input
+                            id="tenantSlug"
+                            name="tenantSlug"
+                            type="text"
+                            value={tenantSlug}
+                            onChange={(e) => setTenantSlug(e.target.value)}
+                            className="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-2xl bg-white/50 dark:bg-dark-surface/50 backdrop-blur-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
+                            placeholder="mi-empresa"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {isRegisterMode 
+                            ? 'Si no especificas una organización, se creará una nueva para ti.'
+                            : 'Especifica el slug de tu organización para acceder.'
+                          }
+                        </p>
+                      </div>
+
                       {/* Error Message */}
                       {error && (
                         <div className="flex items-center space-x-2 text-red-600 dark:text-red-400 text-sm p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
@@ -281,12 +385,12 @@ export const LoginPage: React.FC = () => {
                           {isLoading ? (
                             <>
                               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                              <span>Iniciando sesión...</span>
+                              <span>{isRegisterMode ? 'Creando cuenta...' : 'Iniciando sesión...'}</span>
                             </>
                           ) : (
                             <>
                               <Zap className="w-5 h-5" />
-                              <span>Iniciar Sesión</span>
+                              <span>{isRegisterMode ? 'Crear Cuenta' : 'Iniciar Sesión'}</span>
                               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                             </>
                           )}
@@ -304,8 +408,9 @@ export const LoginPage: React.FC = () => {
                         <span className="text-sm font-medium">Credenciales de demostración</span>
                       </div>
                       <div className="text-xs text-green-700 dark:text-green-300 space-y-1 text-center">
-                        <div><strong>Email:</strong> admin@flame.com</div>
+                        <div><strong>Email:</strong> admin@demo.flame.com</div>
                         <div><strong>Contraseña:</strong> flame123</div>
+                        <div><strong>Organización:</strong> flame</div>
                       </div>
                     </div>
 

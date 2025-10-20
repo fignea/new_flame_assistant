@@ -209,7 +209,7 @@ export class AssignmentController {
       const userId = req.user!.id;
 
       const assignments = await AssignmentService.getConversationsByAssistant(
-        parseInt(assistantId),
+        assistantId,
         userId,
         parseInt(limit as string),
         parseInt(offset as string)

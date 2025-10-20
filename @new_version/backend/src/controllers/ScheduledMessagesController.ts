@@ -6,7 +6,7 @@ export class ScheduledMessagesController {
   public async create(req: AuthenticatedRequest, res: Response<ApiResponse>) {
     try {
       const userId = req.user?.id;
-      const { contactId, content, messageType = 'text', scheduledTime } = req.body;
+      const { conversationId, contactId, content, messageType = 'text', scheduledTime } = req.body;
       
       if (!userId) {
         return res.status(401).json({
@@ -15,24 +15,58 @@ export class ScheduledMessagesController {
         });
       }
 
-      if (!contactId || !content || !scheduledTime) {
+      if (!content || !scheduledTime) {
         return res.status(400).json({
           success: false,
-          message: 'ID del contacto, contenido y fecha programada son requeridos'
+          message: 'Contenido y fecha programada son requeridos'
         });
       }
 
-      // Verificar que el contacto existe y pertenece al usuario
-      const contact = await database.get(
-        'SELECT id FROM contacts WHERE user_id = ? AND id = ?',
-        [userId, contactId]
-      );
-
-      if (!contact) {
-        return res.status(404).json({
+      if (!conversationId && !contactId) {
+        return res.status(400).json({
           success: false,
-          message: 'Contacto no encontrado'
+          message: 'Se requiere conversationId o contactId'
         });
+      }
+
+      let finalConversationId = conversationId;
+
+      // Si se proporciona contactId en lugar de conversationId, buscar o crear conversación
+      if (!conversationId && contactId) {
+        // Buscar conversación existente para este contacto
+        let conversation = await database.get(
+          `SELECT id FROM conversations 
+           WHERE tenant_id = $1 AND contact_id = $2 AND platform = 'whatsapp' 
+           ORDER BY last_message_at DESC LIMIT 1`,
+          [req.tenant?.id, contactId]
+        );
+
+        // Si no existe conversación, crear una
+        if (!conversation) {
+          const external_conv_id = `scheduled_${contactId}_${Date.now()}`;
+          conversation = await database.get(
+            `INSERT INTO conversations 
+             (tenant_id, contact_id, platform, external_conversation_id, status, title, last_message_at) 
+             VALUES ($1, $2, 'whatsapp', $3, 'active', 'Mensaje Programado', NOW())
+             RETURNING id`,
+            [req.tenant?.id, contactId, external_conv_id]
+          );
+        }
+
+        finalConversationId = conversation.id;
+      } else {
+        // Verificar que la conversación existe y pertenece al tenant
+        const conversation = await database.get(
+          'SELECT id FROM conversations WHERE tenant_id = $1 AND id = $2',
+          [req.tenant?.id, conversationId]
+        );
+
+        if (!conversation) {
+          return res.status(404).json({
+            success: false,
+            message: 'Conversación no encontrada'
+          });
+        }
       }
 
       // Verificar que la fecha programada es futura
@@ -45,20 +79,22 @@ export class ScheduledMessagesController {
       }
 
       // Crear programación
-      const result = await database.run(
+      const result = await database.get(
         `INSERT INTO scheduled_messages 
-         (user_id, contact_id, content, message_type, scheduled_time) 
-         VALUES (?, ?, ?, ?, ?)`,
-        [userId, contactId, content, messageType, scheduledTime]
+         (tenant_id, conversation_id, content, message_type, scheduled_at, created_by) 
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [req.tenant?.id, finalConversationId, content, messageType, scheduledTime, userId]
       );
 
       // Obtener el mensaje creado
       const scheduledMessage = await database.get(
-        `SELECT sm.*, c.name as contact_name, c.whatsapp_id 
+        `SELECT sm.*, co.name as contact_name, co.phone as phone_number
          FROM scheduled_messages sm
-         JOIN contacts c ON sm.contact_id = c.id
-         WHERE sm.id = ?`,
-        [result.id]
+         JOIN conversations conv ON sm.conversation_id = conv.id
+         JOIN contacts co ON conv.contact_id = co.id
+         WHERE sm.id = $1`,
+        [result?.id]
       );
 
       return res.status(201).json({
@@ -93,13 +129,14 @@ export class ScheduledMessagesController {
       const offset = (page - 1) * limit;
 
       let query = `
-        SELECT sm.*, c.name as contact_name, c.whatsapp_id, c.phone_number
+        SELECT sm.*, co.name as contact_name, co.phone as phone_number
         FROM scheduled_messages sm
-        JOIN contacts c ON sm.contact_id = c.id
-        WHERE sm.user_id = $1
+        JOIN conversations conv ON sm.conversation_id = conv.id
+        JOIN contacts co ON conv.contact_id = co.id
+        WHERE sm.tenant_id = $1
       `;
-      let countQuery = 'SELECT COUNT(*) as total FROM scheduled_messages WHERE user_id = $1';
-      let params: any[] = [userId];
+      let countQuery = 'SELECT COUNT(*)::integer as count FROM scheduled_messages WHERE tenant_id = $1';
+      let params: any[] = [req.tenant?.id];
 
       if (status) {
         query += ` AND sm.status = $2`;
@@ -107,20 +144,20 @@ export class ScheduledMessagesController {
         params.push(status);
       }
 
-      query += ` ORDER BY sm.scheduled_time ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      query += ` ORDER BY sm.scheduled_at ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
       params.push(limit, offset);
 
       const [messages, totalResult] = await Promise.all([
-        database.all(query, params),
-        database.get(countQuery, status ? [userId, status] : [userId])
+        database.query(query, params),
+        database.get(countQuery, status ? [req.tenant?.id, status] : [req.tenant?.id])
       ]);
 
-      const total = (totalResult as any).total;
+      const total = parseInt((totalResult as any).count) || 0;
       const pages = Math.ceil(total / limit);
 
       return res.json({
         success: true,
-        data: messages,
+        data: messages.rows,
         message: 'Programación obtenidos exitosamente',
         pagination: {
           page,
@@ -155,8 +192,8 @@ export class ScheduledMessagesController {
         `SELECT sm.*, c.name as contact_name, c.whatsapp_id, c.phone_number
          FROM scheduled_messages sm
          JOIN contacts c ON sm.contact_id = c.id
-         WHERE sm.id = ? AND sm.user_id = ?`,
-        [id, userId]
+         WHERE sm.id = $1 AND sm.tenant_id = $2`,
+        [id, req.tenant?.id]
       );
 
       if (!scheduledMessage) {
@@ -194,10 +231,10 @@ export class ScheduledMessagesController {
         });
       }
 
-      // Verificar que el mensaje existe y pertenece al usuario
+      // Verificar que el mensaje existe y pertenece al tenant
       const existingMessage = await database.get(
-        'SELECT * FROM scheduled_messages WHERE id = ? AND user_id = ?',
-        [id, userId]
+        'SELECT * FROM scheduled_messages WHERE id = $1 AND tenant_id = $2',
+        [id, req.tenant?.id]
       );
 
       if (!existingMessage) {
@@ -229,18 +266,22 @@ export class ScheduledMessagesController {
       // Actualizar mensaje
       const updates: string[] = [];
       const params: any[] = [];
+      let paramIndex = 1;
 
       if (content) {
-        updates.push('content = ?');
+        updates.push(`content = $${paramIndex}`);
         params.push(content);
+        paramIndex++;
       }
       if (messageType) {
-        updates.push('message_type = ?');
+        updates.push(`message_type = $${paramIndex}`);
         params.push(messageType);
+        paramIndex++;
       }
       if (scheduledTime) {
-        updates.push('scheduled_time = ?');
+        updates.push(`scheduled_at = $${paramIndex}`);
         params.push(scheduledTime);
+        paramIndex++;
       }
 
       if (updates.length === 0) {
@@ -251,19 +292,21 @@ export class ScheduledMessagesController {
       }
 
       updates.push('updated_at = CURRENT_TIMESTAMP');
-      params.push(id, userId);
+      params.push(id);
+      params.push(req.tenant?.id);
 
       await database.run(
-        `UPDATE scheduled_messages SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
+        `UPDATE scheduled_messages SET ${updates.join(', ')} WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}`,
         params
       );
 
       // Obtener el mensaje actualizado
       const updatedMessage = await database.get(
-        `SELECT sm.*, c.name as contact_name, c.whatsapp_id
+        `SELECT sm.*, co.name as contact_name, co.phone as phone_number
          FROM scheduled_messages sm
-         JOIN contacts c ON sm.contact_id = c.id
-         WHERE sm.id = ?`,
+         JOIN conversations conv ON sm.conversation_id = conv.id
+         JOIN contacts co ON conv.contact_id = co.id
+         WHERE sm.id = $1`,
         [id]
       );
 
@@ -294,10 +337,10 @@ export class ScheduledMessagesController {
         });
       }
 
-      // Verificar que el mensaje existe y pertenece al usuario
+      // Verificar que el mensaje existe y pertenece al tenant
       const existingMessage = await database.get(
-        'SELECT status FROM scheduled_messages WHERE id = ? AND user_id = ?',
-        [id, userId]
+        'SELECT status FROM scheduled_messages WHERE id = $1 AND tenant_id = $2',
+        [id, req.tenant?.id]
       );
 
       if (!existingMessage) {
@@ -317,8 +360,8 @@ export class ScheduledMessagesController {
 
       // Eliminar mensaje
       await database.run(
-        'DELETE FROM scheduled_messages WHERE id = ? AND user_id = ?',
-        [id, userId]
+        'DELETE FROM scheduled_messages WHERE id = $1 AND tenant_id = $2',
+        [id, req.tenant?.id]
       );
 
       return res.json({
@@ -347,10 +390,10 @@ export class ScheduledMessagesController {
         });
       }
 
-      // Verificar que el mensaje existe y pertenece al usuario
+      // Verificar que el mensaje existe y pertenece al tenant
       const existingMessage = await database.get(
-        'SELECT status FROM scheduled_messages WHERE id = ? AND user_id = ?',
-        [id, userId]
+        'SELECT status FROM scheduled_messages WHERE id = $1 AND tenant_id = $2',
+        [id, req.tenant?.id]
       );
 
       if (!existingMessage) {
@@ -370,8 +413,8 @@ export class ScheduledMessagesController {
 
       // Cancelar mensaje
       await database.run(
-        'UPDATE scheduled_messages SET status = "cancelled", updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
-        [id, userId]
+        'UPDATE scheduled_messages SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND tenant_id = $3',
+        ['cancelled', id, req.tenant?.id]
       );
 
       return res.json({

@@ -1,5 +1,5 @@
 # Frontend Dockerfile
-FROM node:20-alpine as builder
+FROM node:20-alpine as base
 
 WORKDIR /app
 
@@ -12,6 +12,23 @@ RUN npm ci
 # Copiar código fuente
 COPY . .
 
+# Etapa de desarrollo
+FROM base as development
+
+# Variables de entorno para desarrollo
+ENV NODE_ENV=development
+ENV VITE_API_URL=http://localhost:3001
+ENV VITE_WS_URL=ws://localhost:3001
+
+# Exponer puerto de desarrollo
+EXPOSE 3000
+
+# Comando de desarrollo
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+# Etapa de construcción
+FROM base as builder
+
 # Configurar variables de entorno para producción
 ENV NODE_ENV=production
 ENV VITE_API_URL=""
@@ -19,8 +36,8 @@ ENV VITE_API_URL=""
 # Compilar aplicación
 RUN npm run build
 
-# Etapa de producción con nginx
-FROM nginx:alpine
+# Etapa de producción
+FROM nginx:alpine as production
 
 # Instalar curl para health checks
 RUN apk add --no-cache curl

@@ -14,7 +14,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dev|--development)
             ENVIRONMENT="dev"
-            COMPOSE_FILE="docker-compose.yml"
+            COMPOSE_FILE="docker-compose.dev.yml"
             shift
             ;;
         -h|--help)
@@ -29,6 +29,14 @@ while [[ $# -gt 0 ]]; do
             echo "  $0                     # Modo desarrollo"
             echo "  $0 --dev               # Modo desarrollo"
             echo "  $0 --prod              # Modo producción"
+            echo ""
+            echo "Variables de entorno requeridas para producción:"
+            echo "  - POSTGRES_PASSWORD"
+            echo "  - JWT_SECRET"
+            echo "  - OPENAI_API_KEY"
+            echo "  - CORS_ORIGIN"
+            echo "  - API_URL"
+            echo "  - WS_URL"
             exit 0
             ;;
         *)
@@ -39,206 +47,155 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "🚀 Iniciando WhatsApp Manager en modo $ENVIRONMENT..."
+echo "🚀 Iniciando Flame Assistant en modo $ENVIRONMENT..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Verificar que Docker esté instalado
 if ! command -v docker &> /dev/null; then
-    echo "❌ Docker no está instalado. Por favor instala Docker primero."
-    echo "   🔗 https://docs.docker.com/get-docker/"
+    echo "❌ Docker no está instalado."
     exit 1
 fi
 
 if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Docker Compose no está instalado. Por favor instala Docker Compose primero."
-    echo "   🔗 https://docs.docker.com/compose/install/"
+    echo "❌ Docker Compose no está instalado."
     exit 1
 fi
 
-# Verificar que Docker esté ejecutándose
-if ! docker info > /dev/null 2>&1; then
-    echo "❌ Docker no está ejecutándose. Por favor inicia Docker primero."
-    exit 1
+# Verificar variables de entorno para producción
+if [ "$ENVIRONMENT" = "prod" ]; then
+    echo "🔍 Verificando variables de entorno para producción..."
+    
+    required_vars=("POSTGRES_PASSWORD" "JWT_SECRET" "OPENAI_API_KEY" "CORS_ORIGIN" "API_URL" "WS_URL")
+    missing_vars=()
+    
+    for var in "${required_vars[@]}"; do
+        if [ -z "${!var}" ]; then
+            missing_vars+=("$var")
+        fi
+    done
+    
+    if [ ${#missing_vars[@]} -ne 0 ]; then
+        echo "❌ Faltan las siguientes variables de entorno requeridas:"
+        for var in "${missing_vars[@]}"; do
+            echo "   - $var"
+        done
+        echo ""
+        echo "Crea un archivo .env con las variables necesarias o expórtalas en tu shell."
+        exit 1
+    fi
+    
+    echo "✅ Todas las variables de entorno están configuradas"
 fi
 
-echo "✅ Docker está disponible y ejecutándose"
+# Crear directorios necesarios
+echo "📁 Creando directorios necesarios..."
+mkdir -p docker-data/backend/sessions
+mkdir -p docker-data/backend/logs
+mkdir -p docker-data/backend/uploads
+mkdir -p docker-data/postgres
+mkdir -p docker-data/redis
 
-# Crear archivo .env para backend si no existe
-if [ ! -f backend/.env ]; then
-    echo "📝 Creando archivo .env para backend..."
-    cp backend/env.example backend/.env
-    echo "✅ Archivo .env creado. Puedes editarlo si necesitas cambiar la configuración."
-fi
-
-# Crear directorios para datos persistentes
-echo "📁 Creando directorios para datos persistentes..."
-mkdir -p docker-data/{backend,sessions,logs}
-chmod 755 docker-data/{backend,sessions,logs}
-echo "✅ Directorios creados"
-
-# Detener contenedores existentes si están ejecutándose
+# Detener contenedores existentes
 echo "🛑 Deteniendo contenedores existentes..."
-docker-compose -f $COMPOSE_FILE down > /dev/null 2>&1
+docker-compose -f $COMPOSE_FILE down
 
-# Limpiar solo imágenes anteriores (mantener volúmenes)
-echo "🧹 Limpiando imágenes anteriores (manteniendo datos)..."
-docker-compose -f $COMPOSE_FILE down --rmi all --remove-orphans > /dev/null 2>&1
-
-# Construir contenedores
-echo "🔨 Construyendo contenedores..."
-echo "   📦 Esto puede tomar varios minutos la primera vez..."
+# Construir imágenes
+echo "🔨 Construyendo imágenes Docker..."
 docker-compose -f $COMPOSE_FILE build --no-cache
-
-if [ $? -ne 0 ]; then
-    echo "❌ Error construyendo contenedores"
-    exit 1
-fi
-
-echo "✅ Contenedores construidos exitosamente"
 
 # Iniciar servicios
 echo "🚀 Iniciando servicios..."
 docker-compose -f $COMPOSE_FILE up -d
 
-if [ $? -ne 0 ]; then
-    echo "❌ Error iniciando servicios"
+# Esperar a que los servicios estén listos
+echo "⏳ Esperando a que los servicios estén listos..."
+sleep 10
+
+# Verificar estado de los servicios
+echo "🔍 Verificando estado de los servicios..."
+
+# Verificar PostgreSQL
+echo "📊 Verificando PostgreSQL..."
+if docker-compose -f $COMPOSE_FILE exec -T postgres pg_isready -U flame_user -d flame_assistant > /dev/null 2>&1; then
+    echo "✅ PostgreSQL está funcionando"
+else
+    echo "❌ PostgreSQL no está respondiendo"
+    echo "📋 Logs de PostgreSQL:"
+    docker-compose -f $COMPOSE_FILE logs postgres
     exit 1
 fi
 
-echo "✅ Servicios iniciados"
-
-# Esperar a que los servicios estén listos
-echo "⏳ Esperando a que los servicios estén listos..."
-echo "   🔄 Backend iniciando..."
-
-# Esperar al backend (hasta 2 minutos)
-for i in {1..40}; do
-    if curl -f http://localhost:3001/health > /dev/null 2>&1; then
-        echo "   ✅ Backend listo"
-        break
-    fi
-    if [ $i -eq 40 ]; then
-        echo "   ❌ Backend no responde después de 2 minutos"
-        echo "   📊 Ver logs: docker-compose -f $COMPOSE_FILE logs backend"
-        exit 1
-    fi
-    sleep 3
-    echo "   ⏳ Esperando backend... ($i/40)"
-done
-
-echo "   🔄 Frontend iniciando..."
-
-# Esperar al frontend (hasta 1 minuto)
-for i in {1..20}; do
-    if curl -f http://localhost > /dev/null 2>&1; then
-        echo "   ✅ Frontend listo"
-        break
-    fi
-    if [ $i -eq 20 ]; then
-        echo "   ❌ Frontend no responde después de 1 minuto"
-        echo "   📊 Ver logs: docker-compose -f $COMPOSE_FILE logs frontend"
-        exit 1
-    fi
-    sleep 3
-    echo "   ⏳ Esperando frontend... ($i/20)"
-done
-
-# Ejecutar migraciones de base de datos
-echo "🗄️ Ejecutando migraciones de base de datos..."
-
-# Esperar a que PostgreSQL esté completamente listo
-echo "   ⏳ Esperando a que PostgreSQL esté listo..."
-for i in {1..20}; do
-    if docker-compose -f $COMPOSE_FILE exec postgres pg_isready -U whatsapp_user -d whatsapp_manager > /dev/null 2>&1; then
-        echo "   ✅ PostgreSQL listo"
-        break
-    fi
-    if [ $i -eq 20 ]; then
-        echo "   ❌ PostgreSQL no responde después de 1 minuto"
-        echo "   📊 Ver logs: docker-compose -f $COMPOSE_FILE logs postgres"
-        exit 1
-    fi
-    sleep 3
-    echo "   ⏳ Esperando PostgreSQL... ($i/20)"
-done
-
-# Ejecutar migración usando el script mejorado
-echo "   🔄 Ejecutando migración mejorada..."
-docker-compose -f $COMPOSE_FILE exec backend npm run migrate
-
-if [ $? -eq 0 ]; then
-    echo "   ✅ Migración completada exitosamente"
+# Verificar Redis
+echo "🔴 Verificando Redis..."
+if docker-compose -f $COMPOSE_FILE exec -T redis redis-cli ping > /dev/null 2>&1; then
+    echo "✅ Redis está funcionando"
 else
-    echo "   ⚠️  Error en migración automática, intentando migración manual..."
-    
-    # Fallback: ejecutar migración manual
-    echo "   📝 Ejecutando migración manual..."
-    docker-compose -f $COMPOSE_FILE exec -T postgres psql -U whatsapp_user -d whatsapp_manager < backend/scripts/init-db.sql
-    
-    # Verificar que se creó el usuario
-    USER_COUNT=$(docker-compose -f $COMPOSE_FILE exec -T postgres psql -U whatsapp_user -d whatsapp_manager -t -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' \n')
-    
-    if [ "$USER_COUNT" -gt "0" ]; then
-        echo "   ✅ Usuario por defecto creado exitosamente"
+    echo "❌ Redis no está respondiendo"
+    echo "📋 Logs de Redis:"
+    docker-compose -f $COMPOSE_FILE logs redis
+    exit 1
+fi
+
+# Verificar Backend
+echo "🔧 Verificando Backend..."
+max_attempts=30
+attempt=0
+while [ $attempt -lt $max_attempts ]; do
+    if curl -s http://localhost:3001/health > /dev/null 2>&1; then
+        echo "✅ Backend está funcionando"
+        break
     else
-        echo "   ❌ Error al crear usuario por defecto"
-        echo "   📊 Ver logs de PostgreSQL:"
-        docker-compose -f $COMPOSE_FILE logs postgres | tail -20
-        exit 1
+        attempt=$((attempt + 1))
+        echo "⏳ Esperando backend... (intento $attempt/$max_attempts)"
+        sleep 2
     fi
+done
+
+if [ $attempt -eq $max_attempts ]; then
+    echo "❌ Backend no está respondiendo después de $max_attempts intentos"
+    echo "📋 Logs del Backend:"
+    docker-compose -f $COMPOSE_FILE logs backend
+    exit 1
 fi
 
-# Mostrar información del usuario por defecto
-echo "   👤 Usuario por defecto:"
-docker-compose -f $COMPOSE_FILE exec -T postgres psql -U whatsapp_user -d whatsapp_manager -c "SELECT email, name FROM users WHERE email = 'admin@flame.com';" 2>/dev/null || echo "   ⚠️ No se pudo verificar el usuario"
-
-echo "✅ Migraciones de base de datos completadas"
-
-# Verificar estado final de los servicios
-echo "🔍 Verificando estado final de los servicios..."
-
-# Verificar backend
-if curl -f http://localhost:3001/health > /dev/null 2>&1; then
-    echo "✅ Backend está funcionando correctamente"
+# Verificar Frontend
+echo "🎨 Verificando Frontend..."
+if curl -s http://localhost:80 > /dev/null 2>&1 || curl -s http://localhost:3000 > /dev/null 2>&1; then
+    echo "✅ Frontend está funcionando"
 else
-    echo "❌ Backend no responde"
-fi
-
-# Verificar frontend
-if curl -f http://localhost > /dev/null 2>&1; then
-    echo "✅ Frontend está funcionando correctamente"
-else
-    echo "❌ Frontend no responde"
+    echo "❌ Frontend no está respondiendo"
+    echo "📋 Logs del Frontend:"
+    docker-compose -f $COMPOSE_FILE logs frontend
+    exit 1
 fi
 
 echo ""
-echo "🎉 Flame AI iniciado exitosamente en modo $ENVIRONMENT!"
+echo "🎉 ¡Flame Assistant iniciado exitosamente!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "📍 Accede a la aplicación:"
-echo "   🌐 Frontend: http://localhost"
-echo "   🔧 Backend API: http://localhost:3001"
-echo "   🏥 Health Check: http://localhost:3001/health"
+echo "📍 URLs de acceso:"
+if [ "$ENVIRONMENT" = "prod" ]; then
+    echo "   🌐 Frontend: http://localhost"
+    echo "   🔧 Backend API: http://localhost:3001"
+    echo "   🏥 Health Check: http://localhost:3001/health"
+else
+    echo "   🌐 Frontend: http://localhost:3000"
+    echo "   🔧 Backend API: http://localhost:3001"
+    echo "   🏥 Health Check: http://localhost:3001/health"
+fi
 echo ""
 echo "🔑 Credenciales por defecto:"
-echo "   📧 Email: admin@flame.com"
-echo "   🔒 Contraseña: flame123"
+echo "   📧 Email: admin@demo.flame.com"
+echo "   🔐 Contraseña: flame123"
+echo "   🏢 Organización: flame"
 echo ""
-echo "📊 Comandos útiles:"
-echo "   📋 Ver logs backend:    docker-compose -f $COMPOSE_FILE logs -f backend"
-echo "   📋 Ver logs frontend:   docker-compose -f $COMPOSE_FILE logs -f frontend"
-echo "   📋 Ver estado:          docker-compose -f $COMPOSE_FILE ps"
-echo "   🛑 Detener servicios:   ./stop.sh"
-echo "   🗑️  Limpiar todo:      ./clean.sh"
+echo "📊 Estado de los servicios:"
+docker-compose -f $COMPOSE_FILE ps
 echo ""
-echo "💾 Datos persistentes en: ./docker-data/"
-echo "   📊 Base de datos:       ./docker-data/backend/"
-echo "   📱 Sesiones WhatsApp:   ./docker-data/sessions/"
-echo "   📝 Logs:               ./docker-data/logs/"
+echo "📋 Para ver logs en tiempo real:"
+echo "   docker-compose -f $COMPOSE_FILE logs -f"
 echo ""
-echo "⚠️  IMPORTANTE: Los datos se mantienen entre reinicios"
-echo "   🔄 start/stop: Los datos se conservan"
-echo "   🗑️  clean.sh: Solo esto borra los datos permanentemente"
+echo "🛑 Para detener los servicios:"
+echo "   ./stop.sh --$ENVIRONMENT"
 echo ""
-echo "🎯 ¡Todo listo! Abre http://localhost en tu navegador"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

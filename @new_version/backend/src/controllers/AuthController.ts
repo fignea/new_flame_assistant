@@ -1,13 +1,22 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
+import * as jwt from 'jsonwebtoken';
 import { database } from '../config/database';
 import { generateToken } from '../middleware/auth';
-import { LoginRequest, RegisterRequest, User, ApiResponse } from '../types';
+import { 
+  LoginRequest, 
+  RegisterRequest, 
+  User, 
+  Tenant, 
+  ApiResponse, 
+  AuthResponse,
+  CreateTenantRequest 
+} from '../types';
 
 export class AuthController {
-  public async login(req: Request<{}, ApiResponse, LoginRequest>, res: Response<ApiResponse>) {
+  public async login(req: Request<{}, ApiResponse<AuthResponse>, LoginRequest>, res: Response<ApiResponse<AuthResponse>>) {
     try {
-      const { email, password } = req.body;
+      const { email, password, tenant_slug } = req.body;
 
       // Validar datos de entrada
       if (!email || !password) {
@@ -17,11 +26,24 @@ export class AuthController {
         });
       }
 
-      // Buscar usuario
-      const user = await database.get(
-        'SELECT * FROM users WHERE email = $1',
-        [email.toLowerCase()]
-      ) as User;
+      // Buscar usuario con información del tenant
+      let query = `
+        SELECT 
+          u.id, u.tenant_id, u.email, u.password_hash, u.name, u.role, u.permissions, u.is_active,
+          t.id as tenant_id, t.slug, t.name as tenant_name, t.plan_type, t.limits, t.status as tenant_status
+        FROM users u
+        JOIN tenants t ON u.tenant_id = t.id
+        WHERE u.email = $1 AND u.is_active = TRUE AND t.deleted_at IS NULL
+      `;
+      const params = [email.toLowerCase()];
+
+      // Si se proporciona tenant_slug, filtrar por tenant
+      if (tenant_slug) {
+        query += ' AND t.slug = $2';
+        params.push(tenant_slug);
+      }
+
+      const user = await database.get(query, params) as any;
 
       if (!user) {
         return res.status(401).json({
@@ -31,8 +53,7 @@ export class AuthController {
       }
 
       // Verificar contraseña
-      const isValidPassword = await bcrypt.compare(password, user.password);
-      
+      const isValidPassword = await bcrypt.compare(password, user.password_hash);
       if (!isValidPassword) {
         return res.status(401).json({
           success: false,
@@ -40,20 +61,56 @@ export class AuthController {
         });
       }
 
-      // Generar token
-      const token = generateToken(user);
+      // Verificar que el tenant esté activo
+      if (user.tenant_status !== 'active') {
+        return res.status(401).json({
+          success: false,
+          message: 'Tenant inactivo'
+        });
+      }
 
-      // Respuesta exitosa (sin incluir la contraseña)
-      const { password: _, ...userWithoutPassword } = user;
-      
+      // Generar tokens
+      const accessToken = generateToken(user, user);
+      const refreshToken = generateToken(user, user); // Por simplicidad, usamos el mismo token
+
+      // Preparar respuesta
+      const userResponse: User = {
+        id: user.id,
+        tenant_id: user.tenant_id,
+        email: user.email,
+        password_hash: user.password_hash,
+        name: user.name,
+        role: user.role,
+        permissions: user.permissions,
+        profile: {},
+        preferences: {},
+        is_active: user.is_active,
+        created_at: user.created_at,
+        updated_at: user.updated_at
+      };
+
+      const tenantResponse: Tenant = {
+        id: user.tenant_id,
+        slug: user.slug,
+        name: user.tenant_name,
+        plan_type: user.plan_type,
+        status: user.tenant_status,
+        settings: {},
+        billing_info: {},
+        limits: user.limits,
+        created_at: user.created_at,
+        updated_at: user.updated_at
+      };
+
       return res.json({
         success: true,
         data: {
-          user: userWithoutPassword,
-          accessToken: token,
-          refreshToken: token // Por ahora usamos el mismo token
-        },
-        message: 'Inicio de sesión exitoso'
+          user: userResponse,
+          tenant: tenantResponse,
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_in: 7 * 24 * 60 * 60
+        }
       });
 
     } catch (error) {
@@ -65,22 +122,15 @@ export class AuthController {
     }
   }
 
-  public async register(req: Request<{}, ApiResponse, RegisterRequest>, res: Response<ApiResponse>) {
+  public async register(req: Request<{}, ApiResponse<AuthResponse>, RegisterRequest>, res: Response<ApiResponse<AuthResponse>>) {
     try {
-      const { email, password, name } = req.body;
+      const { email, password, name, tenant_slug } = req.body;
 
       // Validar datos de entrada
       if (!email || !password || !name) {
         return res.status(400).json({
           success: false,
           message: 'Email, contraseña y nombre son requeridos'
-        });
-      }
-
-      if (password.length < 6) {
-        return res.status(400).json({
-          success: false,
-          message: 'La contraseña debe tener al menos 6 caracteres'
         });
       }
 
@@ -91,38 +141,119 @@ export class AuthController {
       );
 
       if (existingUser) {
-        return res.status(409).json({
+        return res.status(400).json({
           success: false,
           message: 'El usuario ya existe'
         });
       }
 
+      // Buscar o crear tenant
+      let tenant;
+      if (tenant_slug) {
+        // Buscar tenant existente
+        tenant = await database.get(
+          'SELECT * FROM tenants WHERE slug = $1 AND deleted_at IS NULL',
+          [tenant_slug]
+        );
+        
+        if (!tenant) {
+          return res.status(400).json({
+            success: false,
+            message: 'Tenant no encontrado'
+          });
+        }
+      } else {
+        // Crear nuevo tenant
+        const tenantData: CreateTenantRequest = {
+          name: `${name}'s Organization`,
+          domain: undefined,
+          plan_type: 'starter',
+          settings: {},
+          billing_info: {},
+          limits: {
+            max_users: 5,
+            max_contacts: 100,
+            max_conversations: 50
+          }
+        };
+
+        const newTenant = await database.run(`
+          INSERT INTO tenants (name, slug, plan_type, settings, billing_info, limits)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING *
+        `, [
+          tenantData.name,
+          `org-${Date.now()}`,
+          tenantData.plan_type,
+          JSON.stringify(tenantData.settings),
+          JSON.stringify(tenantData.billing_info),
+          JSON.stringify(tenantData.limits)
+        ]);
+
+        tenant = newTenant;
+      }
+
       // Hash de la contraseña
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const saltRounds = 12;
+      const passwordHash = await bcrypt.hash(password, saltRounds);
 
       // Crear usuario
-      const result = await database.query(
-        'INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING id',
-        [email.toLowerCase(), hashedPassword, name]
-      );
+      const newUser = await database.run(`
+        INSERT INTO users (tenant_id, email, password_hash, name, role, permissions, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `, [
+        tenant.id,
+        email.toLowerCase(),
+        passwordHash,
+        name,
+        'owner',
+        JSON.stringify({}),
+        true
+      ]);
 
-      // Obtener el usuario creado
-      const newUser = await database.get(
-        'SELECT id, email, name, created_at FROM users WHERE id = $1',
-        [result.rows[0].id]
-      ) as User;
+      // Generar tokens
+      const accessToken = generateToken(newUser, tenant);
+      const refreshToken = generateToken(newUser, tenant);
 
-      // Generar token
-      const token = generateToken(newUser);
+      // Preparar respuesta
+      const userResponse: User = {
+        id: newUser.id,
+        tenant_id: newUser.tenant_id,
+        email: newUser.email,
+        password_hash: newUser.password_hash,
+        name: newUser.name,
+        role: newUser.role,
+        permissions: newUser.permissions,
+        profile: {},
+        preferences: {},
+        is_active: newUser.is_active,
+        created_at: newUser.created_at,
+        updated_at: newUser.updated_at
+      };
+
+      const tenantResponse: Tenant = {
+        id: tenant.id,
+        slug: tenant.slug,
+        name: tenant.name,
+        plan_type: tenant.plan_type,
+        status: tenant.status,
+        settings: tenant.settings,
+        billing_info: tenant.billing_info,
+        limits: tenant.limits,
+        created_at: tenant.created_at,
+        updated_at: tenant.updated_at
+      };
 
       return res.status(201).json({
         success: true,
         data: {
-          user: newUser,
-          accessToken: token,
-          refreshToken: token // Por ahora usamos el mismo token
-        },
-        message: 'Usuario registrado exitosamente'
+          user: userResponse,
+          tenant: tenantResponse,
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_in: 7 * 24 * 60 * 60
+        }
       });
 
     } catch (error) {
@@ -134,35 +265,25 @@ export class AuthController {
     }
   }
 
-  public async getProfile(req: Request, res: Response<ApiResponse>) {
+  public async getProfile(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.id;
+      const user = (req as any).user;
+      const tenant = (req as any).tenant;
 
-      if (!userId) {
+      if (!user || !tenant) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no autenticado'
         });
       }
 
-      const user = await database.get(
-        'SELECT id, email, name, created_at, updated_at FROM users WHERE id = $1',
-        [userId]
-      ) as User;
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuario no encontrado'
-        });
-      }
-
       return res.json({
         success: true,
-        data: { user },
-        message: 'Perfil obtenido exitosamente'
+        data: {
+          user,
+          tenant
+        }
       });
-
     } catch (error) {
       console.error('Get profile error:', error);
       return res.status(500).json({
@@ -172,84 +293,33 @@ export class AuthController {
     }
   }
 
-  public async updateProfile(req: Request, res: Response<ApiResponse>) {
+  public async updateProfile(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.id;
-      const { name, currentPassword, newPassword } = req.body;
+      const user = (req as any).user;
+      const { name, email } = req.body;
 
-      if (!userId) {
+      if (!user) {
         return res.status(401).json({
           success: false,
           message: 'Usuario no autenticado'
         });
       }
 
-      // Obtener usuario actual
-      const user = await database.get(
-        'SELECT * FROM users WHERE id = $1',
-        [userId]
-      ) as User;
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuario no encontrado'
-        });
-      }
-
-      // Actualizar nombre si se proporciona
-      if (name && name !== user.name) {
-        await database.run(
-          'UPDATE users SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-          [name, userId]
-        );
-      }
-
-      // Actualizar contraseña si se proporciona
-      if (newPassword) {
-        if (!currentPassword) {
-          return res.status(400).json({
-            success: false,
-            message: 'Contraseña actual requerida para cambiar la contraseña'
-          });
-        }
-
-        const isValidCurrentPassword = await bcrypt.compare(currentPassword, user.password);
-        
-        if (!isValidCurrentPassword) {
-          return res.status(400).json({
-            success: false,
-            message: 'Contraseña actual incorrecta'
-          });
-        }
-
-        if (newPassword.length < 6) {
-          return res.status(400).json({
-            success: false,
-            message: 'La nueva contraseña debe tener al menos 6 caracteres'
-          });
-        }
-
-        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-        
-        await database.run(
-          'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-          [hashedNewPassword, userId]
-        );
-      }
-
-      // Obtener usuario actualizado
-      const updatedUser = await database.get(
-        'SELECT id, email, name, created_at, updated_at FROM users WHERE id = $1',
-        [userId]
-      ) as User;
+      // Actualizar perfil
+      const updatedUser = await database.run(`
+        UPDATE users 
+        SET name = $1, email = $2, updated_at = NOW()
+        WHERE id = $3
+        RETURNING *
+      `, [name || user.name, email || user.email, user.id]);
 
       return res.json({
         success: true,
-        data: { user: updatedUser },
-        message: 'Perfil actualizado exitosamente'
+        data: {
+          user: updatedUser,
+          tenant: (req as any).tenant
+        }
       });
-
     } catch (error) {
       console.error('Update profile error:', error);
       return res.status(500).json({
@@ -258,6 +328,86 @@ export class AuthController {
       });
     }
   }
+
+  public async refreshToken(req: Request, res: Response) {
+    try {
+      const { refresh_token } = req.body;
+
+      if (!refresh_token) {
+        return res.status(400).json({
+          success: false,
+          message: 'Refresh token requerido'
+        });
+      }
+
+      // Verificar refresh token (por ahora usamos el mismo token)
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret) {
+        return res.status(500).json({
+          success: false,
+          message: 'Error de configuración del servidor'
+        });
+      }
+
+      try {
+        const decoded = jwt.verify(refresh_token, jwtSecret) as any;
+        
+        // Obtener usuario actualizado
+        const user = await database.get(`
+          SELECT u.*, t.* FROM users u
+          JOIN tenants t ON u.tenant_id = t.id
+          WHERE u.id = $1 AND u.is_active = TRUE AND t.deleted_at IS NULL
+        `, [decoded.userId]) as any;
+
+        if (!user) {
+          return res.status(401).json({
+            success: false,
+            message: 'Usuario no válido'
+          });
+        }
+
+        // Generar nuevo token
+        const newToken = generateToken(user, user);
+
+        return res.json({
+          success: true,
+          data: {
+            access_token: newToken,
+            expires_in: 7 * 24 * 60 * 60
+          }
+        });
+      } catch (jwtError) {
+        return res.status(401).json({
+          success: false,
+          message: 'Refresh token inválido'
+        });
+      }
+    } catch (error) {
+      console.error('Refresh token error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
+
+  public async logout(req: Request, res: Response) {
+    try {
+      // Por ahora solo devolvemos éxito
+      // En el futuro se puede implementar blacklist de tokens
+      return res.json({
+        success: true,
+        message: 'Sesión cerrada exitosamente'
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor'
+      });
+    }
+  }
 }
 
+// Exportar instancia del controlador
 export const authController = new AuthController();

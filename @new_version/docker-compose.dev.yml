@@ -1,60 +1,134 @@
-version: '3.8'
-
 services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: flame-assistant-postgres-dev
+    environment:
+      POSTGRES_DB: flame_assistant_dev
+      POSTGRES_USER: flame_user
+      POSTGRES_PASSWORD: flame_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./backend/scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - flame-assistant-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flame_user -d flame_assistant_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: flame-assistant-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    restart: unless-stopped
+    networks:
+      - flame-assistant-dev-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+
+  # Backend API (Development)
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: whatsapp-manager-backend-dev
+      target: development
+    container_name: flame-assistant-backend-dev
     ports:
       - "3001:3001"
+      - "9229:9229" # Debug port
     environment:
       - NODE_ENV=development
       - PORT=3001
-      - JWT_SECRET=whatsapp-manager-dev-secret-2024
+      - JWT_SECRET=flame-assistant-dev-jwt-key-2024
       - JWT_EXPIRES_IN=7d
-      - CORS_ORIGIN=http://localhost:5173
-      - DB_PATH=/app/data/whatsapp_manager.db
+      - CORS_ORIGIN=http://localhost:3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=flame_assistant_dev
+      - DB_USER=flame_user
+      - DB_PASSWORD=flame_password
+      - REDIS_URL=redis://redis:6379
+      - REDIS_DB=0
       - WHATSAPP_SESSION_PATH=/app/sessions
       - WHATSAPP_QR_TIMEOUT=120000
       - WHATSAPP_CONNECT_TIMEOUT=60000
       - LOG_LEVEL=debug
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
-      - ./backend/src:/app/src:ro
-      - backend_data_dev:/app/data
-      - backend_sessions_dev:/app/sessions
-      - backend_logs_dev:/app/logs
+      - ./backend:/app
+      - /app/node_modules
+      - backend_dev_sessions:/app/sessions
+      - backend_dev_logs:/app/logs
+      - backend_dev_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     networks:
-      - whatsapp-manager-dev-network
-    command: ["npm", "run", "dev"]
+      - flame-assistant-dev-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
+  # Frontend (Development)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: whatsapp-manager-frontend-dev
+      target: development
+    container_name: flame-assistant-frontend-dev
     ports:
-      - "5173:5173"
+      - "3000:3000"
     environment:
-      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:3001
+      - VITE_WS_URL=ws://localhost:3001
     volumes:
-      - ./frontend/src:/app/src:ro
-      - ./frontend/public:/app/public:ro
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
     networks:
-      - whatsapp-manager-dev-network
+      - flame-assistant-dev-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
 volumes:
-  backend_data_dev:
+  postgres_dev_data:
     driver: local
-  backend_sessions_dev:
+  redis_dev_data:
     driver: local
-  backend_logs_dev:
+  backend_dev_sessions:
+    driver: local
+  backend_dev_logs:
+    driver: local
+  backend_dev_uploads:
     driver: local
 
 networks:
-  whatsapp-manager-dev-network:
+  flame-assistant-dev-network:
     driver: bridge

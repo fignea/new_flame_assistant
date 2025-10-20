@@ -1,335 +1,403 @@
--- Inicialización de base de datos PostgreSQL para WhatsApp Manager
+-- ========================================
+-- FLAME ASSISTANT - SCHEMA MULTI-TENANT
+-- ========================================
+-- Script de inicialización completo para base de datos multi-tenant
+-- Reemplaza completamente el schema anterior
+-- Versión: 2.0
+-- Fecha: Diciembre 2024
+
+-- ========================================
+-- CONFIGURACIÓN INICIAL
+-- ========================================
 
 -- Crear extensiones necesarias
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Configurar timezone por defecto
+SET timezone = 'UTC';
+
+-- ========================================
+-- FUNCIONES AUXILIARES
+-- ========================================
 
 -- Función para actualizar timestamp automáticamente
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
+    NEW.updated_at = NOW();
     RETURN NEW;
 END;
 $$ language 'plpgsql';
 
--- Crear tabla de usuarios
-CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
+-- Función para generar slug único
+CREATE OR REPLACE FUNCTION generate_tenant_slug(tenant_name TEXT)
+RETURNS TEXT AS $$
+DECLARE
+    base_slug TEXT;
+    final_slug TEXT;
+    counter INTEGER := 0;
+BEGIN
+    -- Convertir nombre a slug
+    base_slug := lower(regexp_replace(tenant_name, '[^a-zA-Z0-9]+', '-', 'g'));
+    base_slug := trim(both '-' from base_slug);
+    
+    final_slug := base_slug;
+    
+    -- Verificar unicidad y agregar contador si es necesario
+    WHILE EXISTS (SELECT 1 FROM tenants WHERE slug = final_slug) LOOP
+        counter := counter + 1;
+        final_slug := base_slug || '-' || counter;
+    END LOOP;
+    
+    RETURN final_slug;
+END;
+$$ language 'plpgsql';
+
+-- Función para encriptar datos sensibles
+CREATE OR REPLACE FUNCTION encrypt_sensitive_data(data TEXT, key TEXT)
+RETURNS TEXT AS $$
+BEGIN
+    RETURN pgp_sym_encrypt(data, key);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Función para desencriptar datos sensibles
+CREATE OR REPLACE FUNCTION decrypt_sensitive_data(encrypted_data TEXT, key TEXT)
+RETURNS TEXT AS $$
+BEGIN
+    RETURN pgp_sym_decrypt(encrypted_data, key);
+END;
+$$ LANGUAGE plpgsql;
+
+-- ========================================
+-- TABLAS PRINCIPALES MULTI-TENANT
+-- ========================================
+
+-- 1. TENANTS (Organizaciones)
+CREATE TABLE tenants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    domain VARCHAR(255) UNIQUE,
+    plan_type VARCHAR(50) NOT NULL DEFAULT 'starter',
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    settings JSONB DEFAULT '{}',
+    billing_info JSONB DEFAULT '{}',
+    limits JSONB DEFAULT '{"max_users": 10, "max_contacts": 1000, "max_conversations": 5000}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE
 );
 
--- Crear tabla de sesiones de WhatsApp
-CREATE TABLE IF NOT EXISTS whatsapp_sessions (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    session_id VARCHAR(255) UNIQUE NOT NULL,
-    phone_number VARCHAR(50),
-    name VARCHAR(255),
-    is_connected BOOLEAN DEFAULT FALSE,
-    qr_code TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 2. USERS (Usuarios del Sistema)
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'agent',
+    permissions JSONB DEFAULT '{}',
+    profile JSONB DEFAULT '{}',
+    preferences JSONB DEFAULT '{}',
+    last_login_at TIMESTAMP WITH TIME ZONE,
+    is_active BOOLEAN DEFAULT TRUE,
+    email_verified_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    
+    UNIQUE(tenant_id, email)
 );
 
--- Crear tabla de contactos
-CREATE TABLE IF NOT EXISTS contacts (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    whatsapp_id VARCHAR(255) NOT NULL,
+-- 3. INTEGRATIONS (Integraciones)
+CREATE TABLE integrations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'inactive',
+    config JSONB NOT NULL DEFAULT '{}',
+    credentials JSONB NOT NULL DEFAULT '{}',
+    webhook_url VARCHAR(500),
+    last_sync_at TIMESTAMP WITH TIME ZONE,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(tenant_id, type, name)
+);
+
+-- 4. CONTACTS (Contactos)
+CREATE TABLE contacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    external_id VARCHAR(255) NOT NULL,
+    platform VARCHAR(50) NOT NULL,
     name VARCHAR(255),
-    phone_number VARCHAR(50),
-    is_group BOOLEAN DEFAULT FALSE,
+    phone VARCHAR(50),
+    email VARCHAR(255),
     avatar_url TEXT,
+    is_group BOOLEAN DEFAULT FALSE,
     is_blocked BOOLEAN DEFAULT FALSE,
-    last_interaction TIMESTAMP,
+    metadata JSONB DEFAULT '{}',
+    tags TEXT[] DEFAULT '{}',
+    custom_fields JSONB DEFAULT '{}',
+    last_interaction_at TIMESTAMP WITH TIME ZONE,
     interaction_count INTEGER DEFAULT 0,
-    chat_hash VARCHAR(255), -- Hash único para identificar conversaciones
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(tenant_id, platform, external_id)
 );
 
--- Crear tabla de asistentes (debe ir antes de messages por las referencias)
-CREATE TABLE IF NOT EXISTS assistants (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+-- 5. ASSISTANTS (Asistentes de IA)
+CREATE TABLE assistants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
     prompt TEXT,
     is_active BOOLEAN DEFAULT TRUE,
-    openai_api_key TEXT,
-    model VARCHAR(50) DEFAULT 'gpt-3.5-turbo',
+    ai_provider VARCHAR(50) DEFAULT 'openai',
+    model VARCHAR(100) DEFAULT 'gpt-3.5-turbo',
+    api_key_encrypted TEXT,
     max_tokens INTEGER DEFAULT 150,
-    temperature DECIMAL(2,1) DEFAULT 0.7,
+    temperature DECIMAL(3,2) DEFAULT 0.7,
     auto_assign BOOLEAN DEFAULT TRUE,
     response_delay INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    working_hours JSONB DEFAULT '{}',
+    business_hours JSONB DEFAULT '{}',
+    fallback_message TEXT,
+    config JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE
 );
 
--- Crear tabla de mensajes
-CREATE TABLE IF NOT EXISTS messages (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    whatsapp_message_id VARCHAR(255) NOT NULL,
-    contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
-    chat_id VARCHAR(255) NOT NULL,
-    chat_hash VARCHAR(255), -- Hash único para identificar conversaciones
-    content TEXT NOT NULL,
-    message_type VARCHAR(50) DEFAULT 'text',
-    is_from_me BOOLEAN DEFAULT FALSE,
-    timestamp TIMESTAMP NOT NULL,
-    status VARCHAR(50) DEFAULT 'pending',
-    media_url TEXT,
-    assistant_id INTEGER REFERENCES assistants(id),
-    is_auto_response BOOLEAN DEFAULT FALSE,
-    template_id INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 6. CONVERSATIONS (Conversaciones)
+CREATE TABLE conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    platform VARCHAR(50) NOT NULL,
+    external_conversation_id VARCHAR(255) NOT NULL,
+    title VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'active',
+    priority VARCHAR(20) DEFAULT 'normal',
+    assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
+    assistant_id UUID REFERENCES assistants(id) ON DELETE SET NULL,
+    tags TEXT[] DEFAULT '{}',
+    metadata JSONB DEFAULT '{}',
+    last_message_at TIMESTAMP WITH TIME ZONE,
+    first_response_at TIMESTAMP WITH TIME ZONE,
+    resolution_time INTEGER,
+    satisfaction_score INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(tenant_id, platform, external_conversation_id)
 );
 
--- Crear tabla de programación
-CREATE TABLE IF NOT EXISTS scheduled_messages (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
-    chat_id VARCHAR(255) NOT NULL,
-    content TEXT NOT NULL,
-    message_type VARCHAR(50) DEFAULT 'text',
-    scheduled_time TIMESTAMP NOT NULL,
-    status VARCHAR(50) DEFAULT 'pending',
-    sent_at TIMESTAMP,
-    error_message TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-
--- Crear tabla de visitantes web
-CREATE TABLE IF NOT EXISTS web_visitors (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    session_id VARCHAR(255) NOT NULL,
-    name VARCHAR(255),
-    email VARCHAR(255),
-    phone VARCHAR(50),
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    location VARCHAR(255),
-    is_online BOOLEAN DEFAULT FALSE,
-    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Crear tabla de conversaciones web
-CREATE TABLE IF NOT EXISTS web_conversations (
-    id SERIAL PRIMARY KEY,
-    public_id VARCHAR(20) UNIQUE NOT NULL,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    visitor_id INTEGER REFERENCES web_visitors(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    status VARCHAR(50) DEFAULT 'active',
-    assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    priority VARCHAR(50) DEFAULT 'normal',
-    tags TEXT[],
-    metadata JSONB,
-    last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Crear tabla de mensajes web
-CREATE TABLE IF NOT EXISTS web_messages (
-    id SERIAL PRIMARY KEY,
-    conversation_id INTEGER REFERENCES web_conversations(id) ON DELETE CASCADE,
-    sender_type VARCHAR(50) NOT NULL,
-    sender_id INTEGER,
-    content TEXT NOT NULL,
-    message_type VARCHAR(50) DEFAULT 'text',
-    is_read BOOLEAN DEFAULT FALSE,
-    metadata JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- ========================================
--- NUEVAS TABLAS PARA SISTEMA DE ASISTENTES
--- ========================================
-
--- 1. Asignaciones de asistentes a conversaciones
-CREATE TABLE IF NOT EXISTS assistant_assignments (
-    id SERIAL PRIMARY KEY,
-    assistant_id INTEGER REFERENCES assistants(id) ON DELETE CASCADE,
-    conversation_id VARCHAR(255) NOT NULL,
-    platform VARCHAR(50) NOT NULL, -- 'whatsapp', 'web', 'facebook', etc.
-    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    is_active BOOLEAN DEFAULT TRUE,
-    assignment_type VARCHAR(50) DEFAULT 'automatic', -- 'automatic', 'manual'
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 2. Plantillas de respuestas
-CREATE TABLE IF NOT EXISTS response_templates (
-    id SERIAL PRIMARY KEY,
-    assistant_id INTEGER REFERENCES assistants(id) ON DELETE CASCADE,
+-- 7. RESPONSE_TEMPLATES (Plantillas de Respuesta)
+CREATE TABLE response_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    assistant_id UUID REFERENCES assistants(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
-    trigger_keywords TEXT[], -- Palabras clave que activan esta plantilla
-    conditions JSONB, -- Condiciones específicas
-    category VARCHAR(100), -- Categoría de la plantilla
-    priority INTEGER DEFAULT 0, -- Prioridad de la plantilla
-    response_delay INTEGER DEFAULT 0, -- Retraso en segundos antes de responder
+    category VARCHAR(100) DEFAULT 'general',
+    trigger_keywords TEXT[] DEFAULT '{}',
+    conditions JSONB DEFAULT '{}',
+    priority INTEGER DEFAULT 0,
+    response_delay INTEGER DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    usage_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE
 );
 
--- 3. Sistema de etiquetas
-CREATE TABLE IF NOT EXISTS tags (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+-- 8. MESSAGES (Mensajes)
+CREATE TABLE messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    external_message_id VARCHAR(255) NOT NULL,
+    sender_type VARCHAR(20) NOT NULL,
+    sender_id UUID,
+    content TEXT NOT NULL,
+    message_type VARCHAR(50) DEFAULT 'text',
+    media_url TEXT,
+    media_metadata JSONB DEFAULT '{}',
+    is_from_me BOOLEAN DEFAULT FALSE,
+    is_auto_response BOOLEAN DEFAULT FALSE,
+    template_id UUID REFERENCES response_templates(id),
+    assistant_id UUID REFERENCES assistants(id),
+    status VARCHAR(20) DEFAULT 'sent',
+    error_message TEXT,
+    quoted_message_id UUID REFERENCES messages(id),
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(tenant_id, external_message_id)
+);
+
+-- 9. TAGS (Etiquetas)
+CREATE TABLE tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     description TEXT,
-    color VARCHAR(7) DEFAULT '#3B82F6', -- Color en hex
+    color VARCHAR(7) DEFAULT '#3B82F6',
+    category VARCHAR(50) DEFAULT 'general',
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    usage_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(tenant_id, name)
 );
 
--- 4. Etiquetas de conversaciones
-CREATE TABLE IF NOT EXISTS conversation_tags (
-    conversation_id VARCHAR(255) NOT NULL,
-    platform VARCHAR(50) NOT NULL,
-    tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (conversation_id, platform, tag_id)
+-- 11. SCHEDULED_MESSAGES (Mensajes Programados)
+CREATE TABLE scheduled_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    message_type VARCHAR(50) DEFAULT 'text',
+    media_url TEXT,
+    scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending',
+    sent_at TIMESTAMP WITH TIME ZONE,
+    error_message TEXT,
+    created_by UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 5. Etiquetas de contactos
-CREATE TABLE IF NOT EXISTS contact_tags (
-    contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
-    tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+-- ========================================
+-- TABLAS DE SEGURIDAD Y AUDITORÍA
+-- ========================================
+
+-- 12. AUDIT_LOGS (Logs de Auditoría)
+CREATE TABLE audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    action VARCHAR(100) NOT NULL,
+    resource_type VARCHAR(100) NOT NULL,
+    resource_id UUID,
+    old_values JSONB,
+    new_values JSONB,
+    ip_address INET,
+    user_agent TEXT,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 13. API_KEYS (Claves de API)
+CREATE TABLE api_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    key_hash VARCHAR(255) NOT NULL UNIQUE,
+    permissions JSONB DEFAULT '{}',
+    last_used_at TIMESTAMP WITH TIME ZONE,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 14. WEBHOOKS (Webhooks)
+CREATE TABLE webhooks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    url VARCHAR(500) NOT NULL,
+    events TEXT[] NOT NULL,
+    secret VARCHAR(255),
+    is_active BOOLEAN DEFAULT TRUE,
+    retry_count INTEGER DEFAULT 3,
+    timeout_seconds INTEGER DEFAULT 30,
+    last_triggered_at TIMESTAMP WITH TIME ZONE,
+    success_count INTEGER DEFAULT 0,
+    failure_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ========================================
+-- TABLAS DE ANALYTICS Y REPORTES
+-- ========================================
+
+-- 15. ANALYTICS_EVENTS (Eventos de Analytics)
+CREATE TABLE analytics_events (
+    id UUID DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    event_type VARCHAR(100) NOT NULL,
+    event_data JSONB NOT NULL,
+    user_id UUID REFERENCES users(id),
+    conversation_id UUID REFERENCES conversations(id),
+    contact_id UUID REFERENCES contacts(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (id, created_at)
+) PARTITION BY RANGE (created_at);
+
+-- 16. PERFORMANCE_METRICS (Métricas de Rendimiento)
+CREATE TABLE performance_metrics (
+    id UUID DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    metric_name VARCHAR(100) NOT NULL,
+    metric_value DECIMAL(15,4) NOT NULL,
+    metric_unit VARCHAR(20),
+    dimensions JSONB DEFAULT '{}',
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (id, recorded_at)
+) PARTITION BY RANGE (recorded_at);
+
+-- ========================================
+-- TABLAS DE RELACIONES
+-- ========================================
+
+-- 17. CONVERSATION_TAGS (Etiquetas de Conversaciones)
+CREATE TABLE conversation_tags (
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (conversation_id, tag_id)
+);
+
+-- 18. CONTACT_TAGS (Etiquetas de Contactos)
+CREATE TABLE contact_tags (
+    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     PRIMARY KEY (contact_id, tag_id)
 );
 
--- 6. Historial de interacciones
-CREATE TABLE IF NOT EXISTS interaction_history (
-    id SERIAL PRIMARY KEY,
-    contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
-    conversation_id VARCHAR(255) NOT NULL,
-    platform VARCHAR(50) NOT NULL,
-    interaction_type VARCHAR(50) NOT NULL, -- 'message', 'call', 'meeting'
-    content TEXT,
-    metadata JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 19. ASSISTANT_ASSIGNMENTS (Asignaciones de Asistentes)
+CREATE TABLE assistant_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    assistant_id UUID NOT NULL REFERENCES assistants(id) ON DELETE CASCADE,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    is_active BOOLEAN DEFAULT TRUE,
+    assignment_type VARCHAR(50) DEFAULT 'automatic',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 7. Notas de contactos
-CREATE TABLE IF NOT EXISTS contact_notes (
-    id SERIAL PRIMARY KEY,
-    contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    content TEXT NOT NULL,
-    is_private BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 8. Configuración de asistentes
-CREATE TABLE IF NOT EXISTS assistant_configs (
-    id SERIAL PRIMARY KEY,
-    assistant_id INTEGER REFERENCES assistants(id) ON DELETE CASCADE,
-    config_key VARCHAR(100) NOT NULL,
-    config_value JSONB NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(assistant_id, config_key)
-);
-
--- Crear índices para mejorar performance
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_whatsapp_sessions_user_id ON whatsapp_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_contacts_user_id ON contacts(user_id);
-CREATE INDEX IF NOT EXISTS idx_contacts_whatsapp_id ON contacts(whatsapp_id);
-CREATE INDEX IF NOT EXISTS idx_contacts_chat_hash ON contacts(chat_hash);
-CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id);
-CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);
-CREATE INDEX IF NOT EXISTS idx_messages_chat_hash ON messages(chat_hash);
-CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
-CREATE INDEX IF NOT EXISTS idx_scheduled_messages_user_id ON scheduled_messages(user_id);
-CREATE INDEX IF NOT EXISTS idx_scheduled_messages_contact_id ON scheduled_messages(contact_id);
-CREATE INDEX IF NOT EXISTS idx_scheduled_messages_scheduled_time ON scheduled_messages(scheduled_time);
-CREATE INDEX IF NOT EXISTS idx_scheduled_messages_status ON scheduled_messages(status);
-
--- Índices para web chat
-CREATE INDEX IF NOT EXISTS idx_web_visitors_user_id ON web_visitors(user_id);
-CREATE INDEX IF NOT EXISTS idx_web_visitors_session_id ON web_visitors(session_id);
-CREATE INDEX IF NOT EXISTS idx_web_conversations_public_id ON web_conversations(public_id);
-CREATE INDEX IF NOT EXISTS idx_web_conversations_user_id ON web_conversations(user_id);
-CREATE INDEX IF NOT EXISTS idx_web_conversations_visitor_id ON web_conversations(visitor_id);
-CREATE INDEX IF NOT EXISTS idx_web_conversations_status ON web_conversations(status);
-CREATE INDEX IF NOT EXISTS idx_web_conversations_last_message_at ON web_conversations(last_message_at);
-CREATE INDEX IF NOT EXISTS idx_web_messages_conversation_id ON web_messages(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_web_messages_created_at ON web_messages(created_at);
-
--- Índices para nuevas tablas de asistentes
-CREATE INDEX IF NOT EXISTS idx_assistant_assignments_assistant_id ON assistant_assignments(assistant_id);
-CREATE INDEX IF NOT EXISTS idx_assistant_assignments_conversation_id ON assistant_assignments(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_assistant_assignments_platform ON assistant_assignments(platform);
-CREATE INDEX IF NOT EXISTS idx_assistant_assignments_is_active ON assistant_assignments(is_active);
-
-CREATE INDEX IF NOT EXISTS idx_response_templates_assistant_id ON response_templates(assistant_id);
-CREATE INDEX IF NOT EXISTS idx_response_templates_is_active ON response_templates(is_active);
-CREATE INDEX IF NOT EXISTS idx_response_templates_trigger_keywords ON response_templates USING GIN(trigger_keywords);
-CREATE INDEX IF NOT EXISTS idx_response_templates_category ON response_templates(category);
-CREATE INDEX IF NOT EXISTS idx_response_templates_priority ON response_templates(priority);
-CREATE INDEX IF NOT EXISTS idx_response_templates_response_delay ON response_templates(response_delay);
-
-CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id);
-CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
-CREATE INDEX IF NOT EXISTS idx_tags_is_active ON tags(is_active);
-
-CREATE INDEX IF NOT EXISTS idx_conversation_tags_conversation_id ON conversation_tags(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_conversation_tags_platform ON conversation_tags(platform);
-CREATE INDEX IF NOT EXISTS idx_conversation_tags_tag_id ON conversation_tags(tag_id);
-
-CREATE INDEX IF NOT EXISTS idx_contact_tags_contact_id ON contact_tags(contact_id);
-CREATE INDEX IF NOT EXISTS idx_contact_tags_tag_id ON contact_tags(tag_id);
-
-CREATE INDEX IF NOT EXISTS idx_interaction_history_contact_id ON interaction_history(contact_id);
-CREATE INDEX IF NOT EXISTS idx_interaction_history_conversation_id ON interaction_history(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_interaction_history_type ON interaction_history(interaction_type);
-CREATE INDEX IF NOT EXISTS idx_interaction_history_created_at ON interaction_history(created_at);
-
-CREATE INDEX IF NOT EXISTS idx_contact_notes_contact_id ON contact_notes(contact_id);
-CREATE INDEX IF NOT EXISTS idx_contact_notes_user_id ON contact_notes(user_id);
-CREATE INDEX IF NOT EXISTS idx_contact_notes_created_at ON contact_notes(created_at);
-
-CREATE INDEX IF NOT EXISTS idx_assistant_configs_assistant_id ON assistant_configs(assistant_id);
-CREATE INDEX IF NOT EXISTS idx_assistant_configs_key ON assistant_configs(config_key);
-
--- Índices adicionales para campos nuevos en tablas existentes
-CREATE INDEX IF NOT EXISTS idx_contacts_avatar_url ON contacts(avatar_url);
-CREATE INDEX IF NOT EXISTS idx_contacts_is_blocked ON contacts(is_blocked);
-CREATE INDEX IF NOT EXISTS idx_contacts_last_interaction ON contacts(last_interaction);
-CREATE INDEX IF NOT EXISTS idx_contacts_interaction_count ON contacts(interaction_count);
-
-CREATE INDEX IF NOT EXISTS idx_assistants_openai_api_key ON assistants(openai_api_key);
-CREATE INDEX IF NOT EXISTS idx_assistants_model ON assistants(model);
-CREATE INDEX IF NOT EXISTS idx_assistants_auto_assign ON assistants(auto_assign);
-
-CREATE INDEX IF NOT EXISTS idx_messages_assistant_id ON messages(assistant_id);
-CREATE INDEX IF NOT EXISTS idx_messages_is_auto_response ON messages(is_auto_response);
-CREATE INDEX IF NOT EXISTS idx_messages_template_id ON messages(template_id);
-
--- Crear tabla de archivos multimedia
-CREATE TABLE IF NOT EXISTS media_files (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+-- 20. MEDIA_FILES (Archivos Multimedia)
+CREATE TABLE media_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     original_name VARCHAR(255) NOT NULL,
     file_name VARCHAR(255) NOT NULL,
     file_path TEXT NOT NULL,
@@ -338,64 +406,440 @@ CREATE TABLE IF NOT EXISTS media_files (
     mime_type VARCHAR(100) NOT NULL,
     width INTEGER,
     height INTEGER,
-    duration INTEGER, -- Para videos/audio en segundos
-    thumbnail_path TEXT, -- Para videos/imágenes
+    duration INTEGER,
+    thumbnail_path TEXT,
     is_compressed BOOLEAN DEFAULT FALSE,
-    compression_ratio DECIMAL(5,2), -- Ratio de compresión (0.0 - 1.0)
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    compression_ratio DECIMAL(5,2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Crear índices para la tabla de archivos multimedia
-CREATE INDEX IF NOT EXISTS idx_media_files_user_id ON media_files(user_id);
-CREATE INDEX IF NOT EXISTS idx_media_files_file_type ON media_files(file_type);
-CREATE INDEX IF NOT EXISTS idx_media_files_created_at ON media_files(created_at);
+-- 21. CONTACT_NOTES (Notas de Contactos)
+CREATE TABLE contact_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    is_private BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
--- Triggers para actualizar updated_at automáticamente
+-- ========================================
+-- ÍNDICES PRINCIPALES
+-- ========================================
+
+-- Índices para tenants
+CREATE INDEX idx_tenants_slug ON tenants(slug);
+CREATE INDEX idx_tenants_domain ON tenants(domain);
+CREATE INDEX idx_tenants_status ON tenants(status);
+CREATE INDEX idx_tenants_created_at ON tenants(created_at);
+
+-- Índices para users
+CREATE INDEX idx_users_tenant_id ON users(tenant_id);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_is_active ON users(is_active);
+CREATE INDEX idx_users_last_login_at ON users(last_login_at);
+
+-- Índices para integrations
+CREATE INDEX idx_integrations_tenant_id ON integrations(tenant_id);
+CREATE INDEX idx_integrations_type ON integrations(type);
+CREATE INDEX idx_integrations_status ON integrations(status);
+
+-- Índices para contacts
+CREATE INDEX idx_contacts_tenant_id ON contacts(tenant_id);
+CREATE INDEX idx_contacts_platform ON contacts(platform);
+CREATE INDEX idx_contacts_external_id ON contacts(external_id);
+CREATE INDEX idx_contacts_phone ON contacts(phone);
+CREATE INDEX idx_contacts_email ON contacts(email);
+CREATE INDEX idx_contacts_is_group ON contacts(is_group);
+CREATE INDEX idx_contacts_last_interaction_at ON contacts(last_interaction_at);
+CREATE INDEX idx_contacts_tags ON contacts USING GIN(tags);
+
+-- Índices para conversations
+CREATE INDEX idx_conversations_tenant_id ON conversations(tenant_id);
+CREATE INDEX idx_conversations_contact_id ON conversations(contact_id);
+CREATE INDEX idx_conversations_platform ON conversations(platform);
+CREATE INDEX idx_conversations_status ON conversations(status);
+CREATE INDEX idx_conversations_assigned_to ON conversations(assigned_to);
+CREATE INDEX idx_conversations_assistant_id ON conversations(assistant_id);
+CREATE INDEX idx_conversations_last_message_at ON conversations(last_message_at);
+CREATE INDEX idx_conversations_tags ON conversations USING GIN(tags);
+
+-- Índices para assistants
+CREATE INDEX idx_assistants_tenant_id ON assistants(tenant_id);
+CREATE INDEX idx_assistants_is_active ON assistants(is_active);
+CREATE INDEX idx_assistants_auto_assign ON assistants(auto_assign);
+
+-- Índices para messages
+CREATE INDEX idx_messages_tenant_id ON messages(tenant_id);
+CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
+CREATE INDEX idx_messages_sender_type ON messages(sender_type);
+CREATE INDEX idx_messages_sender_id ON messages(sender_id);
+CREATE INDEX idx_messages_created_at ON messages(created_at);
+CREATE INDEX idx_messages_status ON messages(status);
+CREATE INDEX idx_messages_is_auto_response ON messages(is_auto_response);
+
+-- Índices para response_templates
+CREATE INDEX idx_response_templates_tenant_id ON response_templates(tenant_id);
+CREATE INDEX idx_response_templates_assistant_id ON response_templates(assistant_id);
+CREATE INDEX idx_response_templates_category ON response_templates(category);
+CREATE INDEX idx_response_templates_is_active ON response_templates(is_active);
+CREATE INDEX idx_response_templates_trigger_keywords ON response_templates USING GIN(trigger_keywords);
+
+-- Índices para tags
+CREATE INDEX idx_tags_tenant_id ON tags(tenant_id);
+CREATE INDEX idx_tags_name ON tags(name);
+CREATE INDEX idx_tags_category ON tags(category);
+CREATE INDEX idx_tags_is_active ON tags(is_active);
+
+-- Índices para scheduled_messages
+CREATE INDEX idx_scheduled_messages_tenant_id ON scheduled_messages(tenant_id);
+CREATE INDEX idx_scheduled_messages_conversation_id ON scheduled_messages(conversation_id);
+CREATE INDEX idx_scheduled_messages_scheduled_at ON scheduled_messages(scheduled_at);
+CREATE INDEX idx_scheduled_messages_status ON scheduled_messages(status);
+
+-- Índices para audit_logs
+CREATE INDEX idx_audit_logs_tenant_id ON audit_logs(tenant_id);
+CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX idx_audit_logs_resource_type ON audit_logs(resource_type);
+CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
+
+-- Índices para api_keys
+CREATE INDEX idx_api_keys_tenant_id ON api_keys(tenant_id);
+CREATE INDEX idx_api_keys_user_id ON api_keys(user_id);
+CREATE INDEX idx_api_keys_key_hash ON api_keys(key_hash);
+CREATE INDEX idx_api_keys_is_active ON api_keys(is_active);
+
+-- Índices para webhooks
+CREATE INDEX idx_webhooks_tenant_id ON webhooks(tenant_id);
+CREATE INDEX idx_webhooks_is_active ON webhooks(is_active);
+CREATE INDEX idx_webhooks_events ON webhooks USING GIN(events);
+
+-- Índices para analytics_events
+CREATE INDEX idx_analytics_events_tenant_id ON analytics_events(tenant_id);
+CREATE INDEX idx_analytics_events_event_type ON analytics_events(event_type);
+CREATE INDEX idx_analytics_events_created_at ON analytics_events(created_at);
+
+-- Índices para performance_metrics
+CREATE INDEX idx_performance_metrics_tenant_id ON performance_metrics(tenant_id);
+CREATE INDEX idx_performance_metrics_metric_name ON performance_metrics(metric_name);
+CREATE INDEX idx_performance_metrics_recorded_at ON performance_metrics(recorded_at);
+
+-- ========================================
+-- ÍNDICES COMPUESTOS OPTIMIZADOS
+-- ========================================
+
+-- Índices para consultas frecuentes
+CREATE INDEX idx_messages_tenant_conversation_created 
+    ON messages(tenant_id, conversation_id, created_at DESC);
+
+CREATE INDEX idx_conversations_tenant_status_assigned 
+    ON conversations(tenant_id, status, assigned_to);
+
+CREATE INDEX idx_contacts_tenant_platform_last_interaction 
+    ON contacts(tenant_id, platform, last_interaction_at DESC);
+
+CREATE INDEX idx_analytics_events_tenant_type_created 
+    ON analytics_events(tenant_id, event_type, created_at DESC);
+
+-- Índices parciales para datos activos
+CREATE INDEX idx_users_active ON users(tenant_id, email) WHERE is_active = TRUE;
+CREATE INDEX idx_conversations_active ON conversations(tenant_id, status) WHERE status = 'active';
+CREATE INDEX idx_assistants_active ON assistants(tenant_id, name) WHERE is_active = TRUE;
+
+-- ========================================
+-- ROW LEVEL SECURITY (RLS)
+-- ========================================
+
+-- Habilitar RLS en todas las tablas
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE integrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assistants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE response_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scheduled_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE webhooks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE performance_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversation_tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contact_tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assistant_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE media_files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contact_notes ENABLE ROW LEVEL SECURITY;
+
+-- Políticas de RLS para aislamiento por tenant
+CREATE POLICY tenant_isolation ON tenants
+    FOR ALL TO PUBLIC
+    USING (id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY user_tenant_isolation ON users
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY integration_tenant_isolation ON integrations
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY contact_tenant_isolation ON contacts
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY conversation_tenant_isolation ON conversations
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY assistant_tenant_isolation ON assistants
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY message_tenant_isolation ON messages
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY template_tenant_isolation ON response_templates
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY tag_tenant_isolation ON tags
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY scheduled_message_tenant_isolation ON scheduled_messages
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY audit_log_tenant_isolation ON audit_logs
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY api_key_tenant_isolation ON api_keys
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY webhook_tenant_isolation ON webhooks
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY analytics_event_tenant_isolation ON analytics_events
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY performance_metric_tenant_isolation ON performance_metrics
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY conversation_tag_tenant_isolation ON conversation_tags
+    FOR ALL TO PUBLIC
+    USING (conversation_id IN (
+        SELECT id FROM conversations WHERE tenant_id = current_setting('app.current_tenant_id')::UUID
+    ));
+
+CREATE POLICY contact_tag_tenant_isolation ON contact_tags
+    FOR ALL TO PUBLIC
+    USING (contact_id IN (
+        SELECT id FROM contacts WHERE tenant_id = current_setting('app.current_tenant_id')::UUID
+    ));
+
+CREATE POLICY assistant_assignment_tenant_isolation ON assistant_assignments
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY media_file_tenant_isolation ON media_files
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+CREATE POLICY contact_note_tenant_isolation ON contact_notes
+    FOR ALL TO PUBLIC
+    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+-- ========================================
+-- TRIGGERS
+-- ========================================
+
+-- Triggers de actualización de timestamps
+CREATE TRIGGER update_tenants_updated_at BEFORE UPDATE ON tenants FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_whatsapp_sessions_updated_at BEFORE UPDATE ON whatsapp_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_integrations_updated_at BEFORE UPDATE ON integrations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_contacts_updated_at BEFORE UPDATE ON contacts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_scheduled_messages_updated_at BEFORE UPDATE ON scheduled_messages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_web_conversations_updated_at BEFORE UPDATE ON web_conversations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_conversations_updated_at BEFORE UPDATE ON conversations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_assistants_updated_at BEFORE UPDATE ON assistants FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_assistant_assignments_updated_at BEFORE UPDATE ON assistant_assignments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_messages_updated_at BEFORE UPDATE ON messages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_response_templates_updated_at BEFORE UPDATE ON response_templates FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_tags_updated_at BEFORE UPDATE ON tags FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_contact_notes_updated_at BEFORE UPDATE ON contact_notes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_assistant_configs_updated_at BEFORE UPDATE ON assistant_configs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_scheduled_messages_updated_at BEFORE UPDATE ON scheduled_messages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_api_keys_updated_at BEFORE UPDATE ON api_keys FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_webhooks_updated_at BEFORE UPDATE ON webhooks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_assistant_assignments_updated_at BEFORE UPDATE ON assistant_assignments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_media_files_updated_at BEFORE UPDATE ON media_files FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_contact_notes_updated_at BEFORE UPDATE ON contact_notes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insertar usuario de demostración por defecto
--- Email: admin@flame.com
--- Contraseña: flame123 (hash bcryptjs)
-INSERT INTO users (email, password, name) VALUES (
-    'admin@flame.com',
+-- ========================================
+-- VISTAS MATERIALIZADAS
+-- ========================================
+
+-- Dashboard Principal
+CREATE MATERIALIZED VIEW dashboard_stats AS
+SELECT 
+    t.id as tenant_id,
+    t.name as tenant_name,
+    t.plan_type,
+    t.status as tenant_status,
+    COUNT(DISTINCT u.id) as total_users,
+    COUNT(DISTINCT c.id) as total_contacts,
+    COUNT(DISTINCT conv.id) as total_conversations,
+    COUNT(DISTINCT m.id) as total_messages,
+    COUNT(DISTINCT CASE WHEN conv.status = 'active' THEN conv.id END) as active_conversations,
+    COUNT(DISTINCT CASE WHEN m.created_at >= CURRENT_DATE THEN m.id END) as messages_today,
+    AVG(CASE WHEN conv.resolution_time IS NOT NULL THEN conv.resolution_time END) as avg_resolution_time,
+    AVG(conv.satisfaction_score) as avg_satisfaction_score
+FROM tenants t
+LEFT JOIN users u ON t.id = u.tenant_id AND u.is_active = TRUE AND u.deleted_at IS NULL
+LEFT JOIN contacts c ON t.id = c.tenant_id
+LEFT JOIN conversations conv ON t.id = conv.tenant_id
+LEFT JOIN messages m ON conv.id = m.conversation_id
+WHERE t.deleted_at IS NULL
+GROUP BY t.id, t.name, t.plan_type, t.status;
+
+-- Índice para la vista materializada
+CREATE UNIQUE INDEX idx_dashboard_stats_tenant_id ON dashboard_stats(tenant_id);
+
+-- Métricas de Asistentes
+CREATE MATERIALIZED VIEW assistant_metrics AS
+SELECT 
+    a.tenant_id,
+    a.id as assistant_id,
+    a.name as assistant_name,
+    a.is_active,
+    COUNT(DISTINCT conv.id) as total_conversations,
+    COUNT(DISTINCT m.id) as total_messages,
+    COUNT(DISTINCT CASE WHEN m.is_auto_response = TRUE THEN m.id END) as auto_responses,
+    AVG(CASE WHEN conv.resolution_time IS NOT NULL THEN conv.resolution_time END) as avg_response_time,
+    AVG(conv.satisfaction_score) as avg_satisfaction
+FROM assistants a
+LEFT JOIN conversations conv ON a.id = conv.assistant_id
+LEFT JOIN messages m ON conv.id = m.conversation_id
+WHERE a.is_active = TRUE AND a.deleted_at IS NULL
+GROUP BY a.tenant_id, a.id, a.name, a.is_active;
+
+-- Índice para la vista materializada
+CREATE UNIQUE INDEX idx_assistant_metrics_assistant_id ON assistant_metrics(assistant_id);
+
+-- ========================================
+-- DATOS DE DEMOSTRACIÓN
+-- ========================================
+
+-- Crear tenant de demostración
+INSERT INTO tenants (slug, name, domain, plan_type, status, settings, limits) VALUES (
+    'flame',
+    'FLAME Assistant',
+    'flame.com',
+    'pro',
+    'active',
+    '{"timezone": "America/Mexico_City", "language": "es"}',
+    '{"max_users": 50, "max_contacts": 10000, "max_conversations": 50000}'
+) ON CONFLICT (slug) DO NOTHING;
+
+-- Crear usuario administrador de demostración
+INSERT INTO users (tenant_id, email, password_hash, name, role, is_active) VALUES (
+    (SELECT id FROM tenants WHERE slug = 'flame'),
+    'admin@demo.flame.com',
     '$2a$10$I0OxCUtctlX2g1KR5kHjF.JXA3ub/BMiq7QVtoyaMV42NOTVai5ZC', -- flame123
-    'Administrator'
-) ON CONFLICT (email) DO NOTHING;
+    'Administrator Demo',
+    'owner',
+    TRUE
+) ON CONFLICT (tenant_id, email) DO NOTHING;
 
--- Insertar un asistente de demostración por defecto
-INSERT INTO assistants (user_id, name, description, prompt, is_active) VALUES (
-    (SELECT id FROM users WHERE email = 'admin@flame.com'),
+-- Crear integración de WhatsApp de demostración
+INSERT INTO integrations (tenant_id, type, name, status, config) VALUES (
+    (SELECT id FROM tenants WHERE slug = 'flame'),
+    'whatsapp',
+    'WhatsApp Principal',
+    'active',
+    '{"session_name": "demo_session", "qr_timeout": 300}'
+) ON CONFLICT (tenant_id, type, name) DO NOTHING;
+
+-- Crear asistente de demostración
+INSERT INTO assistants (tenant_id, name, description, prompt, is_active, model, max_tokens, temperature) VALUES (
+    (SELECT id FROM tenants WHERE slug = 'flame'),
     'Asistente General',
     'Asistente de WhatsApp para responder consultas generales',
     'Eres un asistente virtual de WhatsApp. Responde de manera amable y profesional a las consultas de los usuarios. Si no sabes algo, admítelo y ofrece ayuda alternativa.',
-    true
+    TRUE,
+    'gpt-3.5-turbo',
+    150,
+    0.7
 ) ON CONFLICT DO NOTHING;
 
 -- Crear etiquetas de demostración
-INSERT INTO tags (user_id, name, description, color, is_active) VALUES 
-    ((SELECT id FROM users WHERE email = 'admin@flame.com'), 'Ventas', 'Etiqueta para conversaciones de ventas', '#10B981', true),
-    ((SELECT id FROM users WHERE email = 'admin@flame.com'), 'Soporte', 'Etiqueta para consultas de soporte técnico', '#F59E0B', true),
-    ((SELECT id FROM users WHERE email = 'admin@flame.com'), 'Urgente', 'Etiqueta para asuntos urgentes', '#EF4444', true),
-    ((SELECT id FROM users WHERE email = 'admin@flame.com'), 'Nuevo Cliente', 'Etiqueta para nuevos clientes', '#8B5CF6', true),
-    ((SELECT id FROM users WHERE email = 'admin@flame.com'), 'Seguimiento', 'Etiqueta para seguimiento de casos', '#06B6D4', true)
-ON CONFLICT DO NOTHING;
+INSERT INTO tags (tenant_id, name, description, color, category, is_active) VALUES 
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 'Ventas', 'Etiqueta para conversaciones de ventas', '#10B981', 'business', TRUE),
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 'Soporte', 'Etiqueta para consultas de soporte técnico', '#F59E0B', 'support', TRUE),
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 'Urgente', 'Etiqueta para asuntos urgentes', '#EF4444', 'priority', TRUE),
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 'Nuevo Cliente', 'Etiqueta para nuevos clientes', '#8B5CF6', 'customer', TRUE),
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 'Seguimiento', 'Etiqueta para seguimiento de casos', '#06B6D4', 'followup', TRUE)
+ON CONFLICT (tenant_id, name) DO NOTHING;
 
 -- Crear plantillas de demostración
-INSERT INTO response_templates (assistant_id, name, content, trigger_keywords, category, priority, response_delay, is_active) VALUES 
-    ((SELECT id FROM assistants WHERE name = 'Asistente General'), 'Saludo Inicial', '¡Hola! Gracias por contactarnos. ¿En qué puedo ayudarte hoy?', ARRAY['hola', 'buenos días', 'buenas tardes', 'buenas noches'], 'greeting', 1, 2, true),
-    ((SELECT id FROM assistants WHERE name = 'Asistente General'), 'Consulta de Precios', 'Te ayudo con información sobre nuestros precios. ¿Te interesa algún producto específico?', ARRAY['precio', 'costo', 'cuanto cuesta', 'valor'], 'information', 2, 3, true),
-    ((SELECT id FROM assistants WHERE name = 'Asistente General'), 'Soporte Técnico', 'Entiendo que tienes un problema técnico. Voy a conectarte con nuestro equipo de soporte.', ARRAY['problema', 'error', 'no funciona', 'ayuda técnica'], 'escalation', 3, 1, true),
-    ((SELECT id FROM assistants WHERE name = 'Asistente General'), 'Despedida', '¡Gracias por contactarnos! Si tienes más preguntas, no dudes en escribirnos. ¡Que tengas un excelente día!', ARRAY['gracias', 'chau', 'adiós', 'hasta luego'], 'farewell', 1, 2, true)
+INSERT INTO response_templates (tenant_id, assistant_id, name, content, trigger_keywords, category, priority, response_delay, is_active) VALUES 
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 
+     (SELECT id FROM assistants WHERE name = 'Asistente General'), 
+     'Saludo Inicial', 
+     '¡Hola! Gracias por contactarnos. ¿En qué puedo ayudarte hoy?', 
+     ARRAY['hola', 'buenos días', 'buenas tardes', 'buenas noches'], 
+     'greeting', 1, 2, TRUE),
+    
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 
+     (SELECT id FROM assistants WHERE name = 'Asistente General'), 
+     'Consulta de Precios', 
+     'Te ayudo con información sobre nuestros precios. ¿Te interesa algún producto específico?', 
+     ARRAY['precio', 'costo', 'cuanto cuesta', 'valor'], 
+     'information', 2, 3, TRUE),
+    
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 
+     (SELECT id FROM assistants WHERE name = 'Asistente General'), 
+     'Soporte Técnico', 
+     'Entiendo que tienes un problema técnico. Voy a conectarte con nuestro equipo de soporte.', 
+     ARRAY['problema', 'error', 'no funciona', 'ayuda técnica'], 
+     'escalation', 3, 1, TRUE),
+    
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 
+     (SELECT id FROM assistants WHERE name = 'Asistente General'), 
+     'Despedida', 
+     '¡Gracias por contactarnos! Si tienes más preguntas, no dudes en escribirnos. ¡Que tengas un excelente día!', 
+     ARRAY['gracias', 'chau', 'adiós', 'hasta luego'], 
+     'farewell', 1, 2, TRUE)
 ON CONFLICT DO NOTHING;
+
+-- ========================================
+-- CONFIGURACIÓN FINAL
+-- ========================================
+
+-- Actualizar estadísticas de la base de datos
+ANALYZE;
+
+-- Actualizar vistas materializadas
+REFRESH MATERIALIZED VIEW dashboard_stats;
+REFRESH MATERIALIZED VIEW assistant_metrics;
+
+-- Mensaje de finalización
+DO $$
+BEGIN
+    RAISE NOTICE '========================================';
+    RAISE NOTICE 'FLAME ASSISTANT - SCHEMA MULTI-TENANT';
+    RAISE NOTICE '========================================';
+    RAISE NOTICE 'Schema inicializado correctamente';
+    RAISE NOTICE 'Tenant demo creado: flame';
+    RAISE NOTICE 'Usuario admin: admin@demo.flame.com';
+    RAISE NOTICE 'Contraseña: flame123';
+    RAISE NOTICE '========================================';
+END $$;

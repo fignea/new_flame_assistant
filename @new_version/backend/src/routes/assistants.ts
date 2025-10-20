@@ -1,23 +1,31 @@
 import { Router } from 'express';
-import { assistantsController } from '../controllers/AssistantsController';
 import { authenticate } from '../middleware/auth';
+import { assistantsController } from '../controllers/AssistantsController';
 
 const router = Router();
 
-// Aplicar autenticación a todas las rutas
+// Aplicar middleware de autenticación a todas las rutas
 router.use(authenticate);
 
-// Rutas de asistentes
-router.post('/', assistantsController.create);
-router.get('/', assistantsController.getAll);
-router.get('/stats', assistantsController.getAllStats);
-router.get('/models', assistantsController.getAvailableModels);
-router.post('/validate-key', assistantsController.validateApiKey);
-router.get('/:id', assistantsController.getById);
-router.put('/:id', assistantsController.update);
-router.delete('/:id', assistantsController.delete);
-router.patch('/:id/toggle-status', assistantsController.toggleStatus);
-router.get('/:id/stats', assistantsController.getStats);
-router.get('/:id/usage', assistantsController.getUsageInfo);
+// GET /api/assistants - Obtener todos los asistentes
+router.get('/', assistantsController.getAll.bind(assistantsController));
+
+// GET /api/assistants/stats - Obtener estadísticas de asistentes
+router.get('/stats', assistantsController.getStats.bind(assistantsController));
+
+// GET /api/assistants/:id - Obtener asistente por ID
+router.get('/:id', assistantsController.getById.bind(assistantsController));
+
+// POST /api/assistants - Crear nuevo asistente
+router.post('/', assistantsController.create.bind(assistantsController));
+
+// PUT /api/assistants/:id - Actualizar asistente
+router.put('/:id', assistantsController.update.bind(assistantsController));
+
+// DELETE /api/assistants/:id - Eliminar asistente
+router.delete('/:id', assistantsController.delete.bind(assistantsController));
+
+// GET /api/assistants/:id/metrics - Obtener métricas del asistente
+router.get('/:id/metrics', assistantsController.getMetrics.bind(assistantsController));
 
 export default router;
