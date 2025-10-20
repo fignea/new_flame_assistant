@@ -13,9 +13,9 @@ export const useTemplates = (params?: {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getUserTemplates(params);
+      const response = await apiService.getTemplates(params);
       if (response.success && response.data) {
-        setTemplates(response.data);
+        setTemplates(response.data.data || response.data);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar plantillas');

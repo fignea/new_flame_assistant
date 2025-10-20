@@ -41,24 +41,50 @@ export class TemplateController {
    */
   static async getUserTemplates(req: AuthenticatedRequest, res: Response) {
     try {
-      const userId = req.user!.id;
-      const { assistant_id, category } = req.query;
+      const tenantId = req.tenant?.id;
+      const { assistant_id, category, page = 1, limit = 20 } = req.query;
+
+      if (!tenantId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      const offset = (Number(page) - 1) * Number(limit);
 
       const templates = await TemplateService.getUserTemplates(
-        req.tenant?.id || '',
+        tenantId,
         assistant_id ? parseInt(assistant_id as string) : undefined,
         category as any || undefined
       );
 
+      // Aplicar paginación manualmente
+      const paginatedTemplates = templates.slice(offset, offset + Number(limit));
+      const total = templates.length;
+
       res.json({
         success: true,
-        data: templates
+        data: paginatedTemplates,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total: total,
+          pages: Math.ceil(total / Number(limit))
+        }
       });
     } catch (error) {
       console.error('Error getting user templates:', error);
       res.status(500).json({
         success: false,
-        error: 'Error interno del servidor'
+        message: 'Error interno del servidor',
+        data: [],
+        pagination: {
+          page: 1,
+          limit: 20,
+          total: 0,
+          pages: 0
+        }
       });
     }
   }

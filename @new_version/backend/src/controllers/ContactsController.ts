@@ -282,12 +282,12 @@ export class ContactsController {
         });
       }
 
-      const result = await database.run(
+      const result = await database.query(
         `DELETE FROM contacts WHERE id = $1 AND tenant_id = $2`,
         [id, tenantId]
       );
 
-      if (result.changes === 0) {
+      if (result.rowCount === 0) {
         return res.status(404).json({
           success: false,
           message: 'Contacto no encontrado'

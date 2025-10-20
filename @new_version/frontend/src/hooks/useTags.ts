@@ -12,9 +12,9 @@ export const useTags = (params?: {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getUserTags(params);
+      const response = await apiService.getTags(params);
       if (response.success && response.data) {
-        setTags(response.data);
+        setTags(response.data.data || response.data);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar etiquetas');

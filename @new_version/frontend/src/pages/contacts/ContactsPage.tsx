@@ -59,7 +59,7 @@ export const ContactsPage: React.FC = () => {
   const [newContact, setNewContact] = useState({
     name: '',
     phone_number: '',
-    whatsapp_id: '',
+    email: '',
     is_group: false
   });
   const [bulkContacts, setBulkContacts] = useState('');
@@ -247,17 +247,32 @@ export const ContactsPage: React.FC = () => {
 
   // Crear contacto individual
   const createContact = async () => {
-    if (!newContact.name || (!newContact.phone_number && !newContact.whatsapp_id)) {
-      showError('Campos requeridos', 'El nombre y al menos un identificador (teléfono o WhatsApp ID) son requeridos');
+    if (!newContact.name || !newContact.phone_number) {
+      showError('Campos requeridos', 'El nombre y el número de teléfono son requeridos');
       return;
     }
 
     try {
       setCreatingContact(true);
-      const response = await apiService.createContact(newContact);
+      
+      // Adaptar datos al formato esperado por el backend
+      const contactData = {
+        name: newContact.name,
+        phone: newContact.phone_number,
+        email: newContact.email || null,
+        external_id: newContact.phone_number.replace(/[^0-9]/g, ''), // Generar external_id desde el teléfono (solo números)
+        platform: 'whatsapp',
+        is_group: newContact.is_group || false,
+        is_blocked: false,
+        metadata: {},
+        tags: [],
+        custom_fields: {}
+      };
+      
+      const response = await apiService.createContact(contactData);
       if (response.success) {
         setShowCreateModal(false);
-        setNewContact({ name: '', phone_number: '', whatsapp_id: '', is_group: false });
+        setNewContact({ name: '', phone_number: '', email: '', is_group: false });
         loadContacts(); // Recargar la lista
         showSuccess('Contacto creado', 'El contacto ha sido creado exitosamente');
       } else {
@@ -285,11 +300,19 @@ export const ContactsPage: React.FC = () => {
       const lines = bulkContacts.split('\n').filter(line => line.trim());
       const contactsData = lines.map(line => {
         const parts = line.split(',').map(part => part.trim());
+        const phone = parts[1] || '';
+        
         return {
           name: parts[0] || '',
-          phone_number: parts[1] || '',
-          whatsapp_id: parts[2] || parts[1] || '', // Si no hay WhatsApp ID, usar el teléfono
-          is_group: parts[3]?.toLowerCase() === 'true' || false
+          phone: phone,
+          email: parts[2] || null,
+          external_id: phone.replace(/[^0-9]/g, ''), // Generar external_id desde el teléfono (solo números)
+          platform: 'whatsapp',
+          is_group: parts[3]?.toLowerCase() === 'true' || false,
+          is_blocked: false,
+          metadata: {},
+          tags: [],
+          custom_fields: {}
         };
       });
 
@@ -610,7 +633,7 @@ export const ContactsPage: React.FC = () => {
               </p>
               {searchTerm && (
                 <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
-                  Busca por nombre, número de teléfono o ID de WhatsApp
+                  Busca por nombre, número de teléfono o email
                 </p>
               )}
             </div>
@@ -1251,14 +1274,14 @@ export const ContactsPage: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      WhatsApp ID
+                      Email
                     </label>
                     <input
-                      type="text"
-                      value={newContact.whatsapp_id}
-                      onChange={(e) => setNewContact({ ...newContact, whatsapp_id: e.target.value })}
+                      type="email"
+                      value={newContact.email}
+                      onChange={(e) => setNewContact({ ...newContact, email: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
-                      placeholder="1234567890@c.us"
+                      placeholder="contacto@email.com"
                     />
                   </div>
 
@@ -1330,10 +1353,10 @@ export const ContactsPage: React.FC = () => {
                       Ingresa un contacto por línea con el siguiente formato:
                     </p>
                     <code className="text-xs bg-blue-100 dark:bg-blue-800 p-2 rounded block">
-                      Nombre, Teléfono, WhatsApp ID, Es Grupo
+                      Nombre, Teléfono, Email, Es Grupo
                     </code>
                     <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                      Ejemplo: Juan Pérez, +1234567890, 1234567890@c.us, false
+                      Ejemplo: Juan Pérez, +5491112345678, juan@email.com, false
                     </p>
                   </div>
 
