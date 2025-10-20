@@ -1,37 +1,62 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, User, Bell, Shield, Database, Palette, Globe, Key, RefreshCw } from 'lucide-react';
+import { 
+  Settings, 
+  User, 
+  Bell, 
+  Shield, 
+  Database, 
+  Palette, 
+  Globe, 
+  Key, 
+  RefreshCw,
+  Building2,
+  Users,
+  MessageSquare,
+  Bot,
+  FileText,
+  Tag,
+  Image,
+  Calendar,
+  Server,
+  HardDrive,
+  Cpu,
+  Activity,
+  CheckCircle,
+  XCircle,
+  Save,
+  Loader2
+} from 'lucide-react';
 import { apiService } from '../../services/api.service';
+import { useApp } from '../../contexts/AppContext';
+import { useNotificationHelpers } from '../../components/NotificationSystem';
 
 export const ConfigPage: React.FC = () => {
+  const { user, tenant } = useApp();
+  const { showSuccess, showError } = useNotificationHelpers();
   const [activeTab, setActiveTab] = useState('profile');
-  const [profile, setProfile] = useState({
-    name: '',
-    email: '',
-    created_at: ''
-  });
   const [systemInfo, setSystemInfo] = useState<any>(null);
   const [databaseStatus, setDatabaseStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-
-  // Cargar datos del perfil
-  const loadProfile = async () => {
-    try {
-      setLoading(true);
-      const response = await apiService.getProfile();
-      if (response.success && response.data) {
-        setProfile(response.data);
-      }
-    } catch (error) {
-      console.error('Error loading profile:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  
+  // Estados del formulario de perfil
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    email: ''
+  });
+  
+  // Estados del formulario de cambio de contraseña
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
 
   // Cargar información del sistema
   const loadSystemInfo = async () => {
     try {
-      const response = await apiService.get('/api/config/system-info');
+      const response = await apiService.getSystemInfo();
       if (response.success && response.data) {
         setSystemInfo(response.data);
       }
@@ -43,7 +68,7 @@ export const ConfigPage: React.FC = () => {
   // Cargar estado de la base de datos
   const loadDatabaseStatus = async () => {
     try {
-      const response = await apiService.get('/api/config/database-status');
+      const response = await apiService.getDatabaseStatus();
       if (response.success && response.data) {
         setDatabaseStatus(response.data);
       }
@@ -52,21 +77,85 @@ export const ConfigPage: React.FC = () => {
     }
   };
 
+  // Cargar datos iniciales
   useEffect(() => {
-    loadProfile();
+    if (user) {
+      setProfileForm({
+        name: user.name || '',
+        email: user.email || ''
+      });
+    }
     loadSystemInfo();
     loadDatabaseStatus();
-  }, []);
+  }, [user]);
+
+  // Guardar cambios del perfil
+  const handleSaveProfile = async () => {
+    try {
+      setSavingProfile(true);
+      const response = await apiService.updateProfile(profileForm);
+      if (response.success) {
+        showSuccess('Perfil actualizado', 'Los cambios se han guardado exitosamente');
+      } else {
+        showError('Error', response.message || 'No se pudo actualizar el perfil');
+      }
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      showError('Error', 'No se pudo actualizar el perfil');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // Cambiar contraseña
+  const handleChangePassword = async () => {
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      showError('Error', 'Las contraseñas no coinciden');
+      return;
+    }
+    
+    if (passwordForm.newPassword.length < 6) {
+      showError('Error', 'La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+
+    try {
+      setChangingPassword(true);
+      const response = await apiService.post('/api/config/change-password', {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      });
+      
+      if (response.success) {
+        showSuccess('Contraseña actualizada', 'Tu contraseña ha sido cambiada exitosamente');
+        setPasswordForm({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+      } else {
+        showError('Error', response.message || 'No se pudo cambiar la contraseña');
+      }
+    } catch (error) {
+      console.error('Error changing password:', error);
+      showError('Error', 'No se pudo cambiar la contraseña');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  // Refrescar datos
+  const handleRefresh = () => {
+    loadSystemInfo();
+    loadDatabaseStatus();
+  };
 
   const tabs = [
     { id: 'profile', name: 'Perfil', icon: User },
-    { id: 'notifications', name: 'Notificaciones', icon: Bell },
+    { id: 'tenant', name: 'Organización', icon: Building2 },
     { id: 'security', name: 'Seguridad', icon: Shield },
     { id: 'database', name: 'Base de Datos', icon: Database },
     { id: 'system', name: 'Sistema', icon: Settings },
-    { id: 'appearance', name: 'Apariencia', icon: Palette },
-    { id: 'integrations', name: 'Integraciones', icon: Globe },
-    { id: 'api', name: 'API Keys', icon: Key },
   ];
 
   const renderTabContent = () => {
@@ -74,63 +163,284 @@ export const ConfigPage: React.FC = () => {
       case 'profile':
         return (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Información Personal</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Actualiza tu información personal y preferencias.</p>
-            </div>
-            <div className="grid grid-cols-1 gap-6">
+            <div className="flex items-center justify-between">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre</label>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Información Personal</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Actualiza tu información personal y preferencias</p>
+              </div>
+              <button
+                onClick={handleSaveProfile}
+                disabled={savingProfile}
+                className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 disabled:opacity-50"
+              >
+                {savingProfile ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Guardar Cambios</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nombre</label>
                 <input
                   type="text"
-                  value={profile.name}
-                  onChange={(e) => setProfile({...profile, name: e.target.value})}
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  value={profileForm.name}
+                  onChange={(e) => setProfileForm({...profileForm, name: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
+                  placeholder="Tu nombre"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
                 <input
                   type="email"
-                  value={profile.email}
-                  onChange={(e) => setProfile({...profile, email: e.target.value})}
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  value={profileForm.email}
+                  onChange={(e) => setProfileForm({...profileForm, email: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
+                  placeholder="tu@email.com"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Rol</label>
-                <select className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                  <option>Administrador</option>
-                  <option>Usuario</option>
-                  <option>Moderador</option>
-                </select>
+
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Rol</label>
+                <input
+                  type="text"
+                  value={user?.role || 'N/A'}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                />
+              </div>
+
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ID de Usuario</label>
+                <input
+                  type="text"
+                  value={user?.id || 'N/A'}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs font-mono"
+                />
               </div>
             </div>
           </div>
         );
-      
-      case 'notifications':
+
+      case 'tenant':
         return (
           <div className="space-y-6">
             <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Configuración de Notificaciones</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Personaliza cómo y cuándo recibir notificaciones.</p>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Información de la Organización</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Detalles de tu organización y límites del plan</p>
             </div>
-            <div className="space-y-4">
-              {[
-                { name: 'Nuevas conversaciones', description: 'Recibir notificaciones cuando lleguen nuevos mensajes' },
-                { name: 'Menciones', description: 'Notificaciones cuando te mencionen en conversaciones' },
-                { name: 'Sistema', description: 'Actualizaciones del sistema y mantenimiento' },
-                { name: 'Email', description: 'Recibir notificaciones por correo electrónico' },
-              ].map((item) => (
-                <div key={item.name} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-900 dark:text-white">{item.name}</h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{item.description}</p>
-                  </div>
-                  <input type="checkbox" defaultChecked className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <div className="flex items-center space-x-3 mb-4">
+                  <Building2 className="w-5 h-5 text-purple-500" />
+                  <h4 className="font-medium text-gray-900 dark:text-white">Nombre</h4>
                 </div>
-              ))}
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{tenant?.name || 'N/A'}</p>
+              </div>
+
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <div className="flex items-center space-x-3 mb-4">
+                  <Key className="w-5 h-5 text-blue-500" />
+                  <h4 className="font-medium text-gray-900 dark:text-white">Slug</h4>
+                </div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{tenant?.slug || 'N/A'}</p>
+              </div>
+
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <div className="flex items-center space-x-3 mb-4">
+                  <Activity className="w-5 h-5 text-green-500" />
+                  <h4 className="font-medium text-gray-900 dark:text-white">Plan</h4>
+                </div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white capitalize">{tenant?.plan_type || 'N/A'}</p>
+              </div>
+
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <div className="flex items-center space-x-3 mb-4">
+                  <CheckCircle className="w-5 h-5 text-emerald-500" />
+                  <h4 className="font-medium text-gray-900 dark:text-white">Estado</h4>
+                </div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white capitalize">{tenant?.status || 'N/A'}</p>
+              </div>
+            </div>
+
+            {/* Límites del Plan */}
+            {tenant?.limits && (
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-4">Límites del Plan</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Usuarios Máximos</span>
+                    <span className="text-lg font-bold text-gray-900 dark:text-white">{tenant.limits.max_users || 'Ilimitado'}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Contactos Máximos</span>
+                    <span className="text-lg font-bold text-gray-900 dark:text-white">{tenant.limits.max_contacts || 'Ilimitado'}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Conversaciones Máximas</span>
+                    <span className="text-lg font-bold text-gray-900 dark:text-white">{tenant.limits.max_conversations || 'Ilimitado'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Estadísticas de Uso */}
+            {systemInfo?.tenant && (
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-gray-900 dark:text-white">Uso Actual</h4>
+                  <button
+                    onClick={handleRefresh}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4 text-gray-500" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                  <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <Users className="w-6 h-6 text-purple-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.tenant.totalUsers}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">Usuarios</div>
+                  </div>
+                  <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <User className="w-6 h-6 text-blue-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.tenant.totalContacts}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">Contactos</div>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <MessageSquare className="w-6 h-6 text-green-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.tenant.totalConversations}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">Conversaciones</div>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                    <MessageSquare className="w-6 h-6 text-orange-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.tenant.totalMessages}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">Mensajes</div>
+                  </div>
+                  <div className="text-center p-4 bg-pink-50 dark:bg-pink-900/20 rounded-lg">
+                    <Calendar className="w-6 h-6 text-pink-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.tenant.totalScheduledMessages}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">Programados</div>
+                  </div>
+                  <div className="text-center p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                    <Bot className="w-6 h-6 text-indigo-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.tenant.totalAssistants}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">Asistentes</div>
+                  </div>
+                  <div className="text-center p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg">
+                    <FileText className="w-6 h-6 text-cyan-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.tenant.totalTemplates}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">Plantillas</div>
+                  </div>
+                  <div className="text-center p-4 bg-teal-50 dark:bg-teal-900/20 rounded-lg">
+                    <Tag className="w-6 h-6 text-teal-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.tenant.totalTags}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">Etiquetas</div>
+                  </div>
+                  <div className="text-center p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                    <Image className="w-6 h-6 text-amber-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.tenant.totalMediaFiles}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">Archivos</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Información de Usuario */}
+            <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+              <h4 className="font-medium text-gray-900 dark:text-white mb-4">Detalles de la Cuenta</h4>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">ID de Usuario</span>
+                  <span className="text-sm font-mono text-gray-900 dark:text-white">{user?.id?.substring(0, 8)}...</span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Rol</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{user?.role || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Cuenta Creada</span>
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {user?.created_at ? new Date(user.created_at).toLocaleDateString('es-ES') : 'N/A'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'tenant':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Información de la Organización</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Detalles de tu organización y configuración</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nombre de la Organización</label>
+                <input
+                  type="text"
+                  value={tenant?.name || ''}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white"
+                />
+              </div>
+
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Slug</label>
+                <input
+                  type="text"
+                  value={tenant?.slug || ''}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white"
+                />
+              </div>
+
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Plan</label>
+                <div className="flex items-center space-x-2">
+                  <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-300 rounded-full text-sm font-medium capitalize">
+                    {tenant?.plan_type || 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Estado</label>
+                <div className="flex items-center space-x-2">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium capitalize ${
+                    tenant?.status === 'active' 
+                      ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
+                      : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+                  }`}>
+                    {tenant?.status || 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ID de Organización</label>
+                <input
+                  type="text"
+                  value={tenant?.id || ''}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-mono text-xs"
+                />
+              </div>
             </div>
           </div>
         );
@@ -140,30 +450,64 @@ export const ConfigPage: React.FC = () => {
           <div className="space-y-6">
             <div>
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Configuración de Seguridad</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Gestiona la seguridad de tu cuenta.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Gestiona la seguridad de tu cuenta</p>
             </div>
-            <div className="space-y-4">
-              <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Cambiar Contraseña</h4>
-                <div className="space-y-3">
+
+            <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+              <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Cambiar Contraseña</h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Contraseña Actual
+                  </label>
                   <input
                     type="password"
-                    placeholder="Contraseña actual"
-                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                  <input
-                    type="password"
-                    placeholder="Nueva contraseña"
-                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                  <input
-                    type="password"
-                    placeholder="Confirmar nueva contraseña"
-                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    value={passwordForm.currentPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
+                    placeholder="Tu contraseña actual"
                   />
                 </div>
-                <button className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                  Actualizar Contraseña
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Nueva Contraseña
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
+                    placeholder="Mínimo 6 caracteres"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Confirmar Nueva Contraseña
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-dark-surface text-gray-900 dark:text-white"
+                    placeholder="Repite la nueva contraseña"
+                  />
+                </div>
+                <button
+                  onClick={handleChangePassword}
+                  disabled={changingPassword}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 disabled:opacity-50 flex items-center space-x-2"
+                >
+                  {changingPassword ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Actualizando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-4 h-4" />
+                      <span>Actualizar Contraseña</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -173,154 +517,197 @@ export const ConfigPage: React.FC = () => {
       case 'database':
         return (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Configuración de Base de Datos</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Gestiona la conexión y configuración de la base de datos.</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Estado de la Base de Datos</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Información sobre la conexión y estado de la base de datos</p>
+              </div>
+              <button
+                onClick={handleRefresh}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Actualizar</span>
+              </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Estado de Conexión</h4>
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${databaseStatus?.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
-                    {databaseStatus?.connected ? 'Conectado' : 'Desconectado'}
-                  </span>
+
+            {databaseStatus && (
+              <>
+                {/* Estado de Conexión */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                    <div className="flex items-center space-x-3 mb-2">
+                      {databaseStatus.connected ? (
+                        <CheckCircle className="w-5 h-5 text-green-500" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-red-500" />
+                      )}
+                      <h4 className="font-medium text-gray-900 dark:text-white">Estado</h4>
+                    </div>
+                    <p className={`text-lg font-bold ${databaseStatus.connected ? 'text-green-600' : 'text-red-600'}`}>
+                      {databaseStatus.connected ? 'Conectado' : 'Desconectado'}
+                    </p>
+                  </div>
+
+                  <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <Database className="w-5 h-5 text-blue-500" />
+                      <h4 className="font-medium text-gray-900 dark:text-white">Tipo</h4>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">
+                      {databaseStatus.type} {databaseStatus.version}
+                    </p>
+                  </div>
+
+                  <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <HardDrive className="w-5 h-5 text-purple-500" />
+                      <h4 className="font-medium text-gray-900 dark:text-white">Tamaño</h4>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">{databaseStatus.size}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Tipo de Base de Datos</h4>
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {databaseStatus?.type || 'PostgreSQL'} {databaseStatus?.version || '15'}
-                </span>
-              </div>
-            </div>
+
+                {/* Conexiones Activas */}
+                <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <Activity className="w-5 h-5 text-green-500" />
+                    <h4 className="font-medium text-gray-900 dark:text-white">Conexiones Activas</h4>
+                  </div>
+                  <p className="text-3xl font-bold text-gray-900 dark:text-white">{databaseStatus.activeConnections}</p>
+                </div>
+
+                {/* Top 10 Tablas por Tamaño */}
+                {databaseStatus.tables && databaseStatus.tables.length > 0 && (
+                  <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                    <h4 className="font-medium text-gray-900 dark:text-white mb-4">Tablas Principales (Top 10 por tamaño)</h4>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead>
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Tabla
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Schema
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Tamaño
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                          {databaseStatus.tables.map((table: any, index: number) => (
+                            <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                                {table.tablename}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                                {table.schemaname}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                                {table.size}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         );
       
       case 'system':
         return (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Información del Sistema</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Estadísticas y estado del sistema.</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Información del Sistema</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Estadísticas y estado del servidor</p>
+              </div>
+              <button
+                onClick={handleRefresh}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Actualizar</span>
+              </button>
             </div>
-            {systemInfo ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Usuarios Totales</h4>
-                  <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{systemInfo.totalUsers}</span>
+
+            {systemInfo?.system && (
+              <>
+                {/* Información del Servidor */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <Server className="w-5 h-5 text-blue-500" />
+                      <h4 className="font-medium text-gray-900 dark:text-white">Node.js</h4>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">{systemInfo.system.nodeVersion}</p>
+                  </div>
+
+                  <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <Globe className="w-5 h-5 text-green-500" />
+                      <h4 className="font-medium text-gray-900 dark:text-white">Plataforma</h4>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white capitalize">{systemInfo.system.platform}</p>
+                  </div>
+
+                  <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <Activity className="w-5 h-5 text-purple-500" />
+                      <h4 className="font-medium text-gray-900 dark:text-white">Entorno</h4>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white capitalize">{systemInfo.system.environment}</p>
+                  </div>
+
+                  <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <Activity className="w-5 h-5 text-orange-500" />
+                      <h4 className="font-medium text-gray-900 dark:text-white">Uptime</h4>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">
+                      {Math.floor(systemInfo.system.systemUptime / 60)} min
+                    </p>
+                  </div>
                 </div>
-                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Contactos</h4>
-                  <span className="text-2xl font-bold text-green-600 dark:text-green-400">{systemInfo.totalContacts}</span>
+
+                {/* Uso de Memoria */}
+                <div className="bg-white dark:bg-dark-surface p-6 rounded-xl border border-gray-200 dark:border-dark-border">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <Cpu className="w-5 h-5 text-pink-500" />
+                    <h4 className="font-medium text-gray-900 dark:text-white">Uso de Memoria (MB)</h4>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="p-4 bg-pink-50 dark:bg-pink-900/20 rounded-lg">
+                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">RSS</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.system.memoryUsage.rss}</div>
+                    </div>
+                    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Heap Total</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.system.memoryUsage.heapTotal}</div>
+                    </div>
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Heap Usado</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.system.memoryUsage.heapUsed}</div>
+                    </div>
+                    <div className="p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg">
+                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">External</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{systemInfo.system.memoryUsage.external}</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Mensajes</h4>
-                  <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">{systemInfo.totalMessages}</span>
-                </div>
-                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Programación</h4>
-                  <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">{systemInfo.totalScheduledMessages}</span>
-                </div>
-                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Asistentes</h4>
-                  <span className="text-2xl font-bold text-pink-600 dark:text-pink-400">{systemInfo.totalAssistants}</span>
-                </div>
-                <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Tiempo de Actividad</h4>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
-                    {Math.floor(systemInfo.systemUptime / 3600)}h {Math.floor((systemInfo.systemUptime % 3600) / 60)}m
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <RefreshCw className="w-8 h-8 text-gray-400 mx-auto mb-2 animate-spin" />
-                <p className="text-gray-500 dark:text-gray-400">Cargando información del sistema...</p>
-              </div>
+              </>
             )}
           </div>
         );
       
-      case 'appearance':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Apariencia</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Personaliza la apariencia de la aplicación.</p>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tema</label>
-                <select className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                  <option>Sistema</option>
-                  <option>Claro</option>
-                  <option>Oscuro</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Idioma</label>
-                <select className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                  <option>Español</option>
-                  <option>English</option>
-                  <option>Português</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        );
-      
-      case 'integrations':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Integraciones</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Gestiona las integraciones con servicios externos.</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {['WhatsApp', 'Facebook', 'Instagram', 'Telegram'].map((service) => (
-                <div key={service} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-gray-900 dark:text-white">{service}</h4>
-                    <input type="checkbox" className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Configurar integración con {service}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      
-      case 'api':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">API Keys</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Gestiona las claves de API para integraciones.</p>
-            </div>
-            <div className="space-y-4">
-              <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">OpenAI API Key</h4>
-                <input
-                  type="password"
-                  placeholder="sk-..."
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-              <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">JWT Secret</h4>
-                <input
-                  type="password"
-                  placeholder="your-jwt-secret"
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          </div>
-        );
-      
       default:
-        return null;
+        return <div>Selecciona una opción</div>;
     }
   };
 
@@ -329,48 +716,53 @@ export const ConfigPage: React.FC = () => {
       {/* Header */}
       <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-dark-border/50 p-6">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-            Configuración
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Gestiona la configuración de tu cuenta y la aplicación.
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                Configuración
+              </h1>
+              <p className="mt-1 text-gray-600 dark:text-gray-400">
+                Gestiona tu cuenta, organización y configuración del sistema
+              </p>
+            </div>
+            <Settings className="w-10 h-10 text-purple-500" />
+          </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-6 space-y-8">
-        <div className="flex flex-col lg:flex-row gap-8">
-        {/* Sidebar */}
-        <div className="lg:w-64">
-          <nav className="space-y-1">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                    activeTab === tab.id
-                      ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <Icon className="mr-3 h-5 w-5" />
-                  {tab.name}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Sidebar con tabs */}
+          <div className="lg:col-span-1">
+            <div className="bg-white dark:bg-dark-surface rounded-2xl border border-gray-200 dark:border-dark-border p-4 space-y-2">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                      activeTab === tab.id
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span className="font-medium">{tab.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-        {/* Content */}
-        <div className="flex-1">
-          <div className="bg-white dark:bg-zinc-800 shadow rounded-lg p-6">
+          {/* Contenido del tab activo */}
+          <div className="lg:col-span-3">
             {renderTabContent()}
           </div>
-        </div>
         </div>
       </div>
     </div>
   );
 };
+
+export default ConfigPage;
