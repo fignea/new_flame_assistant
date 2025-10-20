@@ -6,7 +6,7 @@ export class ScheduledMessagesController {
   public async create(req: AuthenticatedRequest, res: Response<ApiResponse>) {
     try {
       const userId = req.user?.id;
-      const { contactId, content, messageType = 'text', scheduledTime } = req.body;
+      const { conversationId, content, messageType = 'text', scheduledTime } = req.body;
       
       if (!userId) {
         return res.status(401).json({
@@ -15,23 +15,23 @@ export class ScheduledMessagesController {
         });
       }
 
-      if (!contactId || !content || !scheduledTime) {
+      if (!conversationId || !content || !scheduledTime) {
         return res.status(400).json({
           success: false,
-          message: 'ID del contacto, contenido y fecha programada son requeridos'
+          message: 'ID de la conversación, contenido y fecha programada son requeridos'
         });
       }
 
-      // Verificar que el contacto existe y pertenece al tenant
-      const contact = await database.get(
-        'SELECT id FROM contacts WHERE tenant_id = $1 AND id = $2',
-        [req.tenant?.id, contactId]
+      // Verificar que la conversación existe y pertenece al tenant
+      const conversation = await database.get(
+        'SELECT id FROM conversations WHERE tenant_id = $1 AND id = $2',
+        [req.tenant?.id, conversationId]
       );
 
-      if (!contact) {
+      if (!conversation) {
         return res.status(404).json({
           success: false,
-          message: 'Contacto no encontrado'
+          message: 'Conversación no encontrada'
         });
       }
 
@@ -47,16 +47,17 @@ export class ScheduledMessagesController {
       // Crear programación
       const result = await database.run(
         `INSERT INTO scheduled_messages 
-         (tenant_id, user_id, contact_id, content, message_type, scheduled_time) 
+         (tenant_id, conversation_id, content, message_type, scheduled_at, created_by) 
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [req.tenant?.id, userId, contactId, content, messageType, scheduledTime]
+        [req.tenant?.id, conversationId, content, messageType, scheduledTime, userId]
       );
 
       // Obtener el mensaje creado
       const scheduledMessage = await database.get(
-        `SELECT sm.*, c.name as contact_name, c.whatsapp_id 
+        `SELECT sm.*, co.name as contact_name, co.phone as phone_number
          FROM scheduled_messages sm
-         JOIN contacts c ON sm.contact_id = c.id
+         JOIN conversations conv ON sm.conversation_id = conv.id
+         JOIN contacts co ON conv.contact_id = co.id
          WHERE sm.id = $1`,
         [result.id]
       );
@@ -93,9 +94,10 @@ export class ScheduledMessagesController {
       const offset = (page - 1) * limit;
 
       let query = `
-        SELECT sm.*, c.name as contact_name, c.whatsapp_id, c.phone_number
+        SELECT sm.*, co.name as contact_name, co.phone as phone_number
         FROM scheduled_messages sm
-        JOIN contacts c ON sm.contact_id = c.id
+        JOIN conversations conv ON sm.conversation_id = conv.id
+        JOIN contacts co ON conv.contact_id = co.id
         WHERE sm.tenant_id = $1
       `;
       let countQuery = 'SELECT COUNT(*) as total FROM scheduled_messages WHERE tenant_id = $1';
@@ -107,7 +109,7 @@ export class ScheduledMessagesController {
         params.push(status);
       }
 
-      query += ` ORDER BY sm.scheduled_time ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      query += ` ORDER BY sm.scheduled_at ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
       params.push(limit, offset);
 
       const [messages, totalResult] = await Promise.all([

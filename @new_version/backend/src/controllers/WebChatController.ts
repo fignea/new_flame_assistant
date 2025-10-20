@@ -298,6 +298,76 @@ export class WebChatController {
       });
     }
   }
+
+  public async getStats(req: AuthenticatedRequest, res: Response<ApiResponse<any>>) {
+    try {
+      const tenantId = req.tenant?.id;
+      
+      if (!tenantId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Usuario no autenticado'
+        });
+      }
+
+      // Obtener estadísticas de conversaciones de web chat
+      const totalConversations = await database.get(`
+        SELECT COUNT(*) as total
+        FROM conversations 
+        WHERE tenant_id = $1 AND platform = 'web_chat'
+      `, [tenantId]) as any;
+
+      const activeConversations = await database.get(`
+        SELECT COUNT(*) as total
+        FROM conversations 
+        WHERE tenant_id = $1 AND platform = 'web_chat' AND status = 'active'
+      `, [tenantId]) as any;
+
+      const closedConversations = await database.get(`
+        SELECT COUNT(*) as total
+        FROM conversations 
+        WHERE tenant_id = $1 AND platform = 'web_chat' AND status = 'closed'
+      `, [tenantId]) as any;
+
+      const assignedConversations = await database.get(`
+        SELECT COUNT(*) as total
+        FROM conversations 
+        WHERE tenant_id = $1 AND platform = 'web_chat' AND assigned_to IS NOT NULL
+      `, [tenantId]) as any;
+
+      // Obtener estadísticas de mensajes de web chat
+      const totalMessages = await database.get(`
+        SELECT COUNT(*) as total
+        FROM messages m
+        JOIN conversations c ON m.conversation_id = c.id
+        WHERE c.tenant_id = $1 AND c.platform = 'web_chat'
+      `, [tenantId]) as any;
+
+      const stats = {
+        conversations: {
+          total: parseInt(totalConversations.total) || 0,
+          active: parseInt(activeConversations.total) || 0,
+          closed: parseInt(closedConversations.total) || 0,
+          assigned: parseInt(assignedConversations.total) || 0
+        },
+        messages: {
+          total: parseInt(totalMessages.total) || 0
+        }
+      };
+
+      return res.json({
+        success: true,
+        data: stats
+      });
+
+    } catch (error) {
+      console.error('Error obteniendo estadísticas de web chat:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error obteniendo estadísticas de web chat'
+      });
+    }
+  }
 }
 
 export const webchatController = new WebChatController();

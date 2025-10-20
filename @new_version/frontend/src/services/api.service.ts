@@ -567,6 +567,10 @@ export class ApiService {
     return this.post(`/api/webchat/conversations/${id}/assign`, { assigned_to });
   }
 
+  async getWebChatStats(): Promise<ApiResponse<any>> {
+    return this.get('/api/webchat/stats');
+  }
+
   // ========================================
   // MÉTODOS DE MEDIA
   // ========================================

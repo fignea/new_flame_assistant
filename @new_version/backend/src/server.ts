@@ -170,7 +170,7 @@ class FlameAssistantServer {
     this.app.use('/api/contacts', contactsRoutes);
     this.app.use('/api/conversations', conversationsRoutes);
     this.app.use('/api/messages', messagesRoutes);
-    this.app.use('/api/scheduled', scheduledRoutes);
+    this.app.use('/api/scheduled-messages', scheduledRoutes);
     this.app.use('/api/config', configRoutes);
     this.app.use('/api/assignments', assignmentsRoutes);
     this.app.use('/api/whatsapp', whatsappRoutes);

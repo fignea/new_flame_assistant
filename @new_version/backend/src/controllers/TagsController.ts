@@ -36,8 +36,8 @@ export class TagsController {
         pagination: {
           page: Number(page),
           limit: Number(limit),
-          total: total.count,
-          pages: Math.ceil(total.count / Number(limit))
+          total: parseInt(total.count) || 0,
+          pages: Math.ceil((parseInt(total.count) || 0) / Number(limit))
         }
       });
     } catch (error) {
