@@ -15,7 +15,11 @@ export class ConfigController {
       }
 
       const user = await database.get(
-        'SELECT id, email, name, created_at FROM users WHERE id = $1 AND tenant_id = $2',
+        `SELECT 
+          id, email, name, role, permissions, profile, preferences, 
+          is_active, created_at, updated_at
+        FROM users 
+        WHERE id = $1 AND tenant_id = $2`,
         [userId, req.tenant?.id]
       );
 
@@ -26,9 +30,22 @@ export class ConfigController {
         });
       }
 
+      // Obtener información del tenant
+      const tenant = await database.get(
+        `SELECT 
+          id, slug, name, plan_type, status, settings, limits, 
+          billing_info, created_at
+        FROM tenants 
+        WHERE id = $1`,
+        [req.tenant?.id]
+      );
+
       return res.json({
         success: true,
-        data: user
+        data: {
+          user,
+          tenant
+        }
       });
 
     } catch (error) {
@@ -200,38 +217,59 @@ export class ConfigController {
         });
       }
 
+      // Contar usuarios del tenant
+      const usersCount = await database.get('SELECT COUNT(*)::integer as count FROM users WHERE tenant_id = $1', [req.tenant?.id]);
+      
+      // Contar contactos
+      const contactsCount = await database.get('SELECT COUNT(*)::integer as count FROM contacts WHERE tenant_id = $1', [req.tenant?.id]);
+      
+      // Contar conversaciones
+      const conversationsCount = await database.get('SELECT COUNT(*)::integer as count FROM conversations WHERE tenant_id = $1', [req.tenant?.id]);
+      
+      // Contar mensajes
+      const messagesCount = await database.get('SELECT COUNT(*)::integer as count FROM messages WHERE tenant_id = $1', [req.tenant?.id]);
+      
+      // Contar programación
+      const scheduledCount = await database.get('SELECT COUNT(*)::integer as count FROM scheduled_messages WHERE tenant_id = $1', [req.tenant?.id]);
+      
+      // Contar asistentes
+      const assistantsCount = await database.get('SELECT COUNT(*)::integer as count FROM assistants WHERE tenant_id = $1', [req.tenant?.id]);
+      
+      // Contar plantillas
+      const templatesCount = await database.get('SELECT COUNT(*)::integer as count FROM response_templates WHERE tenant_id = $1', [req.tenant?.id]);
+      
+      // Contar tags
+      const tagsCount = await database.get('SELECT COUNT(*)::integer as count FROM tags WHERE tenant_id = $1', [req.tenant?.id]);
+      
+      // Contar archivos multimedia
+      const mediaCount = await database.get('SELECT COUNT(*)::integer as count FROM media_files WHERE tenant_id = $1', [req.tenant?.id]);
+
       // Obtener estadísticas del sistema
       const stats = {
-        totalUsers: 0,
-        totalContacts: 0,
-        totalMessages: 0,
-        totalScheduledMessages: 0,
-        totalAssistants: 0,
-        systemUptime: process.uptime(),
-        memoryUsage: process.memoryUsage(),
-        nodeVersion: process.version,
-        platform: process.platform
+        tenant: {
+          totalUsers: usersCount?.count || 0,
+          totalContacts: contactsCount?.count || 0,
+          totalConversations: conversationsCount?.count || 0,
+          totalMessages: messagesCount?.count || 0,
+          totalScheduledMessages: scheduledCount?.count || 0,
+          totalAssistants: assistantsCount?.count || 0,
+          totalTemplates: templatesCount?.count || 0,
+          totalTags: tagsCount?.count || 0,
+          totalMediaFiles: mediaCount?.count || 0
+        },
+        system: {
+          systemUptime: Math.floor(process.uptime()),
+          memoryUsage: {
+            rss: Math.floor(process.memoryUsage().rss / 1024 / 1024),
+            heapTotal: Math.floor(process.memoryUsage().heapTotal / 1024 / 1024),
+            heapUsed: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
+            external: Math.floor(process.memoryUsage().external / 1024 / 1024)
+          },
+          nodeVersion: process.version,
+          platform: process.platform,
+          environment: process.env.NODE_ENV || 'development'
+        }
       };
-
-      // Contar usuarios del tenant
-      const usersCount = await database.get('SELECT COUNT(*) as count FROM users WHERE tenant_id = $1', [req.tenant?.id]);
-      stats.totalUsers = usersCount?.count || 0;
-
-      // Contar contactos
-      const contactsCount = await database.get('SELECT COUNT(*) as count FROM contacts WHERE tenant_id = $1', [req.tenant?.id]);
-      stats.totalContacts = contactsCount?.count || 0;
-
-      // Contar mensajes
-      const messagesCount = await database.get('SELECT COUNT(*) as count FROM messages WHERE tenant_id = $1', [req.tenant?.id]);
-      stats.totalMessages = messagesCount?.count || 0;
-
-      // Contar programación
-      const scheduledCount = await database.get('SELECT COUNT(*) as count FROM scheduled_messages WHERE tenant_id = $1', [req.tenant?.id]);
-      stats.totalScheduledMessages = scheduledCount?.count || 0;
-
-      // Contar asistentes
-      const assistantsCount = await database.get('SELECT COUNT(*) as count FROM assistants WHERE tenant_id = $1', [req.tenant?.id]);
-      stats.totalAssistants = assistantsCount?.count || 0;
 
       return res.json({
         success: true,
@@ -261,10 +299,41 @@ export class ConfigController {
       // Verificar conexión a la base de datos
       const testQuery = await database.get('SELECT 1 as test');
       
+      // Obtener versión de PostgreSQL
+      const versionQuery = await database.get('SELECT version()');
+      const version = versionQuery?.version?.match(/PostgreSQL (\d+\.\d+)/)?.[1] || 'Unknown';
+      
+      // Obtener tamaño de la base de datos
+      const sizeQuery = await database.get(`
+        SELECT pg_size_pretty(pg_database_size(current_database())) as size
+      `);
+      
+      // Obtener número de conexiones activas
+      const connectionsQuery = await database.get(`
+        SELECT count(*)::integer as count 
+        FROM pg_stat_activity 
+        WHERE datname = current_database()
+      `);
+      
+      // Obtener estadísticas de tablas
+      const tablesQuery = await database.all(`
+        SELECT 
+          schemaname,
+          tablename,
+          pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size
+        FROM pg_tables 
+        WHERE schemaname = 'public'
+        ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
+        LIMIT 10
+      `);
+      
       const status = {
         connected: !!testQuery,
         type: 'PostgreSQL',
-        version: '15',
+        version: version,
+        size: sizeQuery?.size || 'Unknown',
+        activeConnections: connectionsQuery?.count || 0,
+        tables: tablesQuery || [],
         lastCheck: new Date().toISOString()
       };
 
