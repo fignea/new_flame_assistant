@@ -16,7 +16,8 @@ import {
   Clock,
   Tag,
   Layout,
-  Image
+  Image,
+  UserCircle2
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useApp } from '../contexts/AppContext';
@@ -36,6 +37,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
     { name: 'Dashboard', href: '/dashboard', icon: Layout },
     { name: 'Inbox', href: '/inbox', icon: MessageSquare },
     { name: 'Contactos', href: '/contacts', icon: Users },
+    { name: 'Usuarios', href: '/users', icon: UserCircle2 },
     { name: 'Programación', href: '/scheduled', icon: Clock },
     { name: 'Documentos', href: '/documents', icon: FileText },
     { name: 'Asistentes', href: '/assistants', icon: Bot },

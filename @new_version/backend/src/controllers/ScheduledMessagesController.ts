@@ -6,7 +6,7 @@ export class ScheduledMessagesController {
   public async create(req: AuthenticatedRequest, res: Response<ApiResponse>) {
     try {
       const userId = req.user?.id;
-      const { conversationId, content, messageType = 'text', scheduledTime } = req.body;
+      const { conversationId, contactId, content, messageType = 'text', scheduledTime } = req.body;
       
       if (!userId) {
         return res.status(401).json({
@@ -15,24 +15,58 @@ export class ScheduledMessagesController {
         });
       }
 
-      if (!conversationId || !content || !scheduledTime) {
+      if (!content || !scheduledTime) {
         return res.status(400).json({
           success: false,
-          message: 'ID de la conversación, contenido y fecha programada son requeridos'
+          message: 'Contenido y fecha programada son requeridos'
         });
       }
 
-      // Verificar que la conversación existe y pertenece al tenant
-      const conversation = await database.get(
-        'SELECT id FROM conversations WHERE tenant_id = $1 AND id = $2',
-        [req.tenant?.id, conversationId]
-      );
-
-      if (!conversation) {
-        return res.status(404).json({
+      if (!conversationId && !contactId) {
+        return res.status(400).json({
           success: false,
-          message: 'Conversación no encontrada'
+          message: 'Se requiere conversationId o contactId'
         });
+      }
+
+      let finalConversationId = conversationId;
+
+      // Si se proporciona contactId en lugar de conversationId, buscar o crear conversación
+      if (!conversationId && contactId) {
+        // Buscar conversación existente para este contacto
+        let conversation = await database.get(
+          `SELECT id FROM conversations 
+           WHERE tenant_id = $1 AND contact_id = $2 AND platform = 'whatsapp' 
+           ORDER BY last_message_at DESC LIMIT 1`,
+          [req.tenant?.id, contactId]
+        );
+
+        // Si no existe conversación, crear una
+        if (!conversation) {
+          const external_conv_id = `scheduled_${contactId}_${Date.now()}`;
+          conversation = await database.get(
+            `INSERT INTO conversations 
+             (tenant_id, contact_id, platform, external_conversation_id, status, title, last_message_at) 
+             VALUES ($1, $2, 'whatsapp', $3, 'active', 'Mensaje Programado', NOW())
+             RETURNING id`,
+            [req.tenant?.id, contactId, external_conv_id]
+          );
+        }
+
+        finalConversationId = conversation.id;
+      } else {
+        // Verificar que la conversación existe y pertenece al tenant
+        const conversation = await database.get(
+          'SELECT id FROM conversations WHERE tenant_id = $1 AND id = $2',
+          [req.tenant?.id, conversationId]
+        );
+
+        if (!conversation) {
+          return res.status(404).json({
+            success: false,
+            message: 'Conversación no encontrada'
+          });
+        }
       }
 
       // Verificar que la fecha programada es futura
@@ -45,11 +79,12 @@ export class ScheduledMessagesController {
       }
 
       // Crear programación
-      const result = await database.run(
+      const result = await database.get(
         `INSERT INTO scheduled_messages 
          (tenant_id, conversation_id, content, message_type, scheduled_at, created_by) 
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [req.tenant?.id, conversationId, content, messageType, scheduledTime, userId]
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [req.tenant?.id, finalConversationId, content, messageType, scheduledTime, userId]
       );
 
       // Obtener el mensaje creado
@@ -59,7 +94,7 @@ export class ScheduledMessagesController {
          JOIN conversations conv ON sm.conversation_id = conv.id
          JOIN contacts co ON conv.contact_id = co.id
          WHERE sm.id = $1`,
-        [result.id]
+        [result?.id]
       );
 
       return res.status(201).json({
@@ -100,7 +135,7 @@ export class ScheduledMessagesController {
         JOIN contacts co ON conv.contact_id = co.id
         WHERE sm.tenant_id = $1
       `;
-      let countQuery = 'SELECT COUNT(*) as total FROM scheduled_messages WHERE tenant_id = $1';
+      let countQuery = 'SELECT COUNT(*)::integer as count FROM scheduled_messages WHERE tenant_id = $1';
       let params: any[] = [req.tenant?.id];
 
       if (status) {
@@ -117,7 +152,7 @@ export class ScheduledMessagesController {
         database.get(countQuery, status ? [req.tenant?.id, status] : [req.tenant?.id])
       ]);
 
-      const total = (totalResult as any).total;
+      const total = parseInt((totalResult as any).count) || 0;
       const pages = Math.ceil(total / limit);
 
       return res.json({
@@ -231,18 +266,22 @@ export class ScheduledMessagesController {
       // Actualizar mensaje
       const updates: string[] = [];
       const params: any[] = [];
+      let paramIndex = 1;
 
       if (content) {
-        updates.push('content = ?');
+        updates.push(`content = $${paramIndex}`);
         params.push(content);
+        paramIndex++;
       }
       if (messageType) {
-        updates.push('message_type = ?');
+        updates.push(`message_type = $${paramIndex}`);
         params.push(messageType);
+        paramIndex++;
       }
       if (scheduledTime) {
-        updates.push('scheduled_time = ?');
+        updates.push(`scheduled_at = $${paramIndex}`);
         params.push(scheduledTime);
+        paramIndex++;
       }
 
       if (updates.length === 0) {
@@ -253,18 +292,20 @@ export class ScheduledMessagesController {
       }
 
       updates.push('updated_at = CURRENT_TIMESTAMP');
-      params.push(id, req.tenant?.id);
+      params.push(id);
+      params.push(req.tenant?.id);
 
       await database.run(
-        `UPDATE scheduled_messages SET ${updates.join(', ')} WHERE id = $${params.length - 1} AND tenant_id = $${params.length}`,
+        `UPDATE scheduled_messages SET ${updates.join(', ')} WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}`,
         params
       );
 
       // Obtener el mensaje actualizado
       const updatedMessage = await database.get(
-        `SELECT sm.*, c.name as contact_name, c.whatsapp_id
+        `SELECT sm.*, co.name as contact_name, co.phone as phone_number
          FROM scheduled_messages sm
-         JOIN contacts c ON sm.contact_id = c.id
+         JOIN conversations conv ON sm.conversation_id = conv.id
+         JOIN contacts co ON conv.contact_id = co.id
          WHERE sm.id = $1`,
         [id]
       );

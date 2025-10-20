@@ -212,6 +212,18 @@ export class ApiService {
     return this.delete(`/api/users/${id}`);
   }
 
+  async getUsersStats(): Promise<ApiResponse<any>> {
+    return this.get('/api/users/stats');
+  }
+
+  async toggleUserActive(id: string): Promise<ApiResponse<User>> {
+    return this.post(`/api/users/${id}/toggle-active`);
+  }
+
+  async changeUserPassword(id: string, newPassword: string): Promise<ApiResponse> {
+    return this.post(`/api/users/${id}/change-password`, { newPassword });
+  }
+
   // ========================================
   // MÉTODOS DE CONTACTOS
   // ========================================

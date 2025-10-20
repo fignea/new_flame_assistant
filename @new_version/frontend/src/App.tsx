@@ -13,6 +13,7 @@ import { InboxPage } from './pages/inbox/InboxPage';
 import { ContactsPage } from './pages/contacts/ContactsPage';
 import { DocumentsPage } from './pages/documents/DocumentsPage';
 import { AssistantsPage } from './pages/assistants/AssistantsPage';
+import UsersPage from './pages/users/UsersPage';
 import { IntegrationsPage } from './pages/integrations/IntegrationsPage';
 import { ConfigPage } from './pages/config/ConfigPage';
 import { ScheduledMessagesPage } from './pages/scheduled/ScheduledMessagesPage';
@@ -131,6 +132,16 @@ const AppContent: React.FC = () => {
               <ProtectedRoute>
                 <DashboardLayout>
                   <ContactsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/users" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <UsersPage />
                 </DashboardLayout>
               </ProtectedRoute>
             } 
