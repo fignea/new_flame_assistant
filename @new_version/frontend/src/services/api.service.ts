@@ -525,6 +525,45 @@ export class ApiService {
   }
 
   // ========================================
+  // MÉTODOS DE WEB CHAT
+  // ========================================
+
+  async getWebChatConversations(params?: { page?: number; limit?: number; status?: string; assigned_to?: string }): Promise<ApiResponse<PaginatedResponse<Conversation>>> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.assigned_to) queryParams.append('assigned_to', params.assigned_to);
+    
+    const query = queryParams.toString();
+    return this.get(`/api/webchat/conversations${query ? `?${query}` : ''}`);
+  }
+
+  async createWebChatConversation(data: { contact_name: string; contact_email?: string; contact_phone?: string; message: string }): Promise<ApiResponse<Conversation>> {
+    return this.post('/api/webchat/conversations', data);
+  }
+
+  async getWebChatConversation(id: string): Promise<ApiResponse<Conversation>> {
+    return this.get(`/api/webchat/conversations/${id}`);
+  }
+
+  async sendWebChatMessage(conversationId: string, content: string, sender_type: 'visitor' | 'agent' = 'visitor'): Promise<ApiResponse<Message>> {
+    return this.post(`/api/webchat/conversations/${conversationId}/messages`, { content, sender_type });
+  }
+
+  async updateWebChatConversation(id: string, data: { status?: string; priority?: string; assigned_to?: string; subject?: string }): Promise<ApiResponse<Conversation>> {
+    return this.put(`/api/webchat/conversations/${id}`, data);
+  }
+
+  async deleteWebChatConversation(id: string): Promise<ApiResponse<any>> {
+    return this.delete(`/api/webchat/conversations/${id}`);
+  }
+
+  async assignWebChatConversation(id: string, assigned_to: string): Promise<ApiResponse<Conversation>> {
+    return this.post(`/api/webchat/conversations/${id}/assign`, { assigned_to });
+  }
+
+  // ========================================
   // MÉTODOS DE MEDIA
   // ========================================
 

@@ -26,6 +26,9 @@ import messagesRoutes from './routes/messages';
 import scheduledRoutes from './routes/scheduled';
 import configRoutes from './routes/config';
 import assignmentsRoutes from './routes/assignments';
+import whatsappRoutes from './routes/whatsapp';
+import tagsRoutes from './routes/tags';
+import webchatRoutes from './routes/webchat';
 
 // Importar servicios
 import { whatsappService } from './services/WhatsAppService';
@@ -168,6 +171,9 @@ class FlameAssistantServer {
     this.app.use('/api/scheduled', scheduledRoutes);
     this.app.use('/api/config', configRoutes);
     this.app.use('/api/assignments', assignmentsRoutes);
+    this.app.use('/api/whatsapp', whatsappRoutes);
+    this.app.use('/api/tags', tagsRoutes);
+    this.app.use('/api/webchat', webchatRoutes);
 
     // Root endpoint
     this.app.get('/', (req, res) => {
