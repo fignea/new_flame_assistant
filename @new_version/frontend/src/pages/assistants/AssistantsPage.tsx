@@ -58,8 +58,8 @@ export const AssistantsPage: React.FC = () => {
       setLoading(true);
       const response = await apiService.getAssistants();
       if (response.success && response.data) {
-        const data = response.data as any;
-        setAssistants(data.data || []);
+        // El backend devuelve { data: Assistant[], pagination?: {...} }
+        setAssistants(response.data || []);
       }
     } catch (error) {
       console.error('Error loading assistants:', error);
@@ -74,10 +74,23 @@ export const AssistantsPage: React.FC = () => {
       setStatsLoading(true);
       const response = await apiService.getAssistantsStats();
       if (response.success && response.data) {
-        setAssistantStats(response.data);
+        // Mapear la respuesta del backend a la estructura esperada
+        setAssistantStats({
+          total_assistants: response.data.total || 0,
+          active_assistants: response.data.active || 0,
+          auto_assign_assistants: assistants.filter(a => a.auto_assign).length,
+          unique_models: [...new Set(assistants.map(a => a.model))].length
+        });
       }
     } catch (error) {
       console.error('Error loading assistant stats:', error);
+      // Calcular estadísticas localmente si falla el endpoint
+      setAssistantStats({
+        total_assistants: assistants.length,
+        active_assistants: assistants.filter(a => a.is_active).length,
+        auto_assign_assistants: assistants.filter(a => a.auto_assign).length,
+        unique_models: [...new Set(assistants.map(a => a.model))].length
+      });
     } finally {
       setStatsLoading(false);
     }
@@ -85,8 +98,19 @@ export const AssistantsPage: React.FC = () => {
 
   useEffect(() => {
     loadAssistants();
-    loadAssistantStats();
   }, []);
+
+  // Recalcular estadísticas cuando cambien los asistentes
+  useEffect(() => {
+    if (assistants.length > 0) {
+      setAssistantStats({
+        total_assistants: assistants.length,
+        active_assistants: assistants.filter(a => a.is_active).length,
+        auto_assign_assistants: assistants.filter(a => a.auto_assign).length,
+        unique_models: [...new Set(assistants.map(a => a.model))].length
+      });
+    }
+  }, [assistants]);
 
   const [formData, setFormData] = useState({
     name: '',

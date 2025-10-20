@@ -59,8 +59,8 @@ export const ScheduledMessagesPage: React.FC = () => {
       setLoading(true);
       const response = await apiService.getScheduledMessages();
       if (response.success && response.data) {
-        const data = response.data as any;
-        setScheduledMessages(data.data || []);
+        // El backend devuelve { data: ScheduledMessage[], pagination: {...} }
+        setScheduledMessages(response.data || []);
       }
     } catch (error) {
       console.error('Error loading scheduled messages:', error);
@@ -74,8 +74,8 @@ export const ScheduledMessagesPage: React.FC = () => {
     try {
       const response = await apiService.getContacts({ page: 1, limit: 1000 });
       if (response.success && response.data) {
-        const data = response.data as any;
-        setContacts(data.data || []);
+        // El backend devuelve { data: Contact[], pagination: {...} }
+        setContacts(response.data || []);
       }
     } catch (error) {
       console.error('Error loading contacts:', error);

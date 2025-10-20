@@ -80,10 +80,10 @@ export const ContactsPage: React.FC = () => {
       });
 
       if (response.success && response.data) {
-        const data = response.data as PaginatedResponse<Contact>;
-        setContacts(data.data || []);
-        setTotalPages(data.pagination?.pages || 1);
-        setTotalContacts(data.pagination?.total || 0);
+        // El backend devuelve { data: Contact[], pagination: {...} }
+        setContacts(response.data || []);
+        setTotalPages(response.pagination?.pages || 1);
+        setTotalContacts(response.pagination?.total || 0);
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
