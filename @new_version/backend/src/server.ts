@@ -161,57 +161,17 @@ class FlameAssistantServer {
       }
     });
 
-    // Ruta de prueba directa
-    this.app.get('/api/test-auth', async (req, res) => {
-      try {
-        const authHeader = req.headers.authorization;
-        console.log('🔍 Test Auth - Headers:', authHeader);
-        
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          return res.json({ success: false, message: 'No token provided' });
-        }
-
-        const token = authHeader.substring(7);
-        const jwtSecret = process.env.JWT_SECRET;
-        
-        console.log('🔍 Test Auth - Token:', token.substring(0, 20) + '...');
-        console.log('🔍 Test Auth - Secret:', jwtSecret?.substring(0, 10) + '...');
-        
-        if (!jwtSecret) {
-          return res.json({ success: false, message: 'JWT_SECRET not configured' });
-        }
-
-        const decoded = jwt.verify(token, jwtSecret);
-        console.log('🔍 Test Auth - Decoded:', decoded);
-        
-        return res.json({ 
-          success: true, 
-          message: 'Token válido',
-          decoded 
-        });
-      } catch (error: any) {
-        console.log('🔍 Test Auth - Error:', error.message);
-        return res.json({ 
-          success: false, 
-          message: 'Token error: ' + error.message 
-        });
-      }
-    });
 
     // API routes
     this.app.use('/api/auth', authRoutes);
-    // this.app.use('/api/whatsapp', whatsappRoutes);
-    this.app.use('/api/scheduled', scheduledRoutes);
-    // this.app.use('/api/integrations', integrationsRoutes);
-    this.app.use('/api/assistants', assistantsRoutes);
-    this.app.use('/api/config', configRoutes);
-    // this.app.use('/api/messages', messagesRoutes);
-    this.app.use('/api/assignments', assignmentsRoutes);
-    // this.app.use('/api/templates', templatesRoutes);
-    // this.app.use('/api/tags', tagsRoutes);
-    // this.app.use('/api/auto-response', autoResponseRoutes);
-    // this.app.use('/api/media', mediaRoutes);
     this.app.use('/api/dashboard', dashboardRoutes);
+    this.app.use('/api/assistants', assistantsRoutes);
+    this.app.use('/api/contacts', contactsRoutes);
+    this.app.use('/api/conversations', conversationsRoutes);
+    this.app.use('/api/messages', messagesRoutes);
+    this.app.use('/api/scheduled', scheduledRoutes);
+    this.app.use('/api/config', configRoutes);
+    this.app.use('/api/assignments', assignmentsRoutes);
 
     // Root endpoint
     this.app.get('/', (req, res) => {

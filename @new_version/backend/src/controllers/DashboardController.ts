@@ -15,116 +15,32 @@ export class DashboardController {
         });
       }
 
-      // Obtener información del tenant
-      const tenant = await database.get(
-        'SELECT name, plan_type, status FROM tenants WHERE id = $1',
-        [tenantId]
-      );
-
-      // Obtener estadísticas de asistentes
-      const assistantsStats = await database.get(
+      // Usar la vista materializada para obtener estadísticas
+      const stats = await database.get(
         `SELECT 
-          COUNT(*) as total,
-          COUNT(CASE WHEN is_active = true THEN 1 END) as active,
-          COUNT(CASE WHEN is_active = false THEN 1 END) as inactive
-        FROM assistants WHERE tenant_id = $1 AND deleted_at IS NULL`,
+          tenant_id,
+          tenant_name,
+          plan_type,
+          tenant_status,
+          total_users,
+          total_contacts,
+          total_conversations,
+          total_messages,
+          active_conversations,
+          messages_today,
+          avg_resolution_time,
+          avg_satisfaction_score
+        FROM dashboard_stats 
+        WHERE tenant_id = $1`,
         [tenantId]
       );
 
-      // Obtener estadísticas de conversaciones
-      const conversationsStats = await database.get(
-        `SELECT 
-          COUNT(*) as total,
-          COUNT(CASE WHEN DATE(created_at) = CURRENT_DATE THEN 1 END) as today,
-          COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as thisWeek,
-          COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as thisMonth
-        FROM conversations WHERE tenant_id = $1`,
-        [tenantId]
-      );
-
-      // Obtener estadísticas de mensajes
-      const messagesStats = await database.get(
-        `SELECT 
-          COUNT(*) as total,
-          COUNT(CASE WHEN DATE(created_at) = CURRENT_DATE THEN 1 END) as today,
-          COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as thisWeek,
-          COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as thisMonth
-        FROM messages WHERE tenant_id = $1`,
-        [tenantId]
-      );
-
-      // Obtener estadísticas de contactos
-      const contactsStats = await database.get(
-        `SELECT 
-          COUNT(*) as total,
-          COUNT(CASE WHEN DATE(created_at) = CURRENT_DATE THEN 1 END) as newToday,
-          COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as newThisWeek,
-          COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as newThisMonth
-        FROM contacts WHERE tenant_id = $1`,
-        [tenantId]
-      );
-
-      // Obtener estadísticas de plantillas
-      const templatesStats = await database.get(
-        `SELECT 
-          COUNT(*) as total,
-          COUNT(CASE WHEN is_active = true THEN 1 END) as active,
-          COUNT(DISTINCT category) as categories
-        FROM response_templates WHERE tenant_id = $1 AND deleted_at IS NULL`,
-        [tenantId]
-      );
-
-      // Obtener estadísticas de etiquetas
-      const tagsStats = await database.get(
-        `SELECT 
-          COUNT(*) as total,
-          COUNT(CASE WHEN is_active = true THEN 1 END) as active
-        FROM tags WHERE tenant_id = $1`,
-        [tenantId]
-      );
-
-      // Obtener estadísticas de etiquetas en conversaciones
-      const conversationTagsStats = await database.get(
-        `SELECT COUNT(*) as conversations
-        FROM conversation_tags ct
-        JOIN conversations c ON ct.conversation_id = c.id
-        WHERE c.tenant_id = $1`,
-        [tenantId]
-      );
-
-      // Obtener estadísticas de etiquetas en contactos
-      const contactTagsStats = await database.get(
-        `SELECT COUNT(*) as contacts
-        FROM contact_tags ct
-        JOIN contacts c ON ct.contact_id = c.id
-        WHERE c.tenant_id = $1`,
-        [tenantId]
-      );
-
-      // Obtener estadísticas de asignaciones
-      const assignmentsStats = await database.get(
-        `SELECT 
-          COUNT(*) as total,
-          COUNT(CASE WHEN assignment_type = 'automatic' THEN 1 END) as autoAssigned,
-          COUNT(CASE WHEN assignment_type = 'manual' THEN 1 END) as manualAssigned
-        FROM assistant_assignments WHERE tenant_id = $1`,
-        [tenantId]
-      );
-
-      const stats: DashboardStats = {
-        tenant_id: tenantId,
-        tenant_name: tenant?.name || 'Unknown',
-        plan_type: tenant?.plan_type || 'starter',
-        tenant_status: tenant?.status || 'active',
-        total_users: 1, // Por ahora hardcodeado, se puede implementar después
-        total_contacts: contactsStats?.total || 0,
-        total_conversations: conversationsStats?.total || 0,
-        total_messages: messagesStats?.total || 0,
-        active_conversations: conversationsStats?.active || 0,
-        messages_today: messagesStats?.today || 0,
-        avg_resolution_time: conversationsStats?.avg_resolution_time,
-        avg_satisfaction_score: conversationsStats?.avg_satisfaction_score
-      };
+      if (!stats) {
+        return res.status(404).json({
+          success: false,
+          message: 'Estadísticas no encontradas'
+        });
+      }
 
       return res.json({
         success: true,

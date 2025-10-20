@@ -410,7 +410,7 @@ export const LoginPage: React.FC = () => {
                       <div className="text-xs text-green-700 dark:text-green-300 space-y-1 text-center">
                         <div><strong>Email:</strong> admin@demo.flame.com</div>
                         <div><strong>Contraseña:</strong> flame123</div>
-                        <div><strong>Organización:</strong> (dejar vacío)</div>
+                        <div><strong>Organización:</strong> flame</div>
                       </div>
                     </div>
 

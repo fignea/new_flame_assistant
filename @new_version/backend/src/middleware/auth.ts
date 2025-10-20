@@ -61,8 +61,8 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
       }
 
       // Configurar contexto del tenant en la base de datos
-      await database.query('SET app.current_tenant_id = $1', [user.tenant_id]);
-      await database.query('SET app.current_user_id = $1', [user.id]);
+      await database.query(`SET app.current_tenant_id = '${user.tenant_id}'`);
+      await database.query(`SET app.current_user_id = '${user.id}'`);
 
       // Agregar usuario y tenant al request
       req.user = {

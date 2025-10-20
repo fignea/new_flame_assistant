@@ -834,7 +834,7 @@ BEGIN
     RAISE NOTICE 'FLAME ASSISTANT - SCHEMA MULTI-TENANT';
     RAISE NOTICE '========================================';
     RAISE NOTICE 'Schema inicializado correctamente';
-    RAISE NOTICE 'Tenant demo creado: demo-tenant';
+    RAISE NOTICE 'Tenant demo creado: flame';
     RAISE NOTICE 'Usuario admin: admin@demo.flame.com';
     RAISE NOTICE 'Contraseña: flame123';
     RAISE NOTICE '========================================';

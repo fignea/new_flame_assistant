@@ -185,9 +185,9 @@ else
 fi
 echo ""
 echo "🔑 Credenciales por defecto:"
-echo "   📧 Email: admin@flame.com"
+echo "   📧 Email: admin@demo.flame.com"
 echo "   🔐 Contraseña: flame123"
-echo "   🏢 Organización: (dejar vacío para crear nueva)"
+echo "   🏢 Organización: flame"
 echo ""
 echo "📊 Estado de los servicios:"
 docker-compose -f $COMPOSE_FILE ps
