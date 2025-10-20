@@ -248,6 +248,10 @@ export class ApiService {
     return this.post(`/api/contacts/${id}/unblock`);
   }
 
+  async getContactStats(id: string): Promise<ApiResponse<any>> {
+    return this.get(`/api/contacts/${id}/stats`);
+  }
+
   // ========================================
   // MÉTODOS DE CONVERSACIONES
   // ========================================
@@ -288,6 +292,14 @@ export class ApiService {
     return this.get('/api/conversations/unread-count');
   }
 
+  async assignConversation(id: string, userId: string): Promise<ApiResponse<Conversation>> {
+    return this.post(`/api/conversations/${id}/assign`, { assigned_to: userId });
+  }
+
+  async updateConversationStatus(id: string, status: string): Promise<ApiResponse<Conversation>> {
+    return this.put(`/api/conversations/${id}/status`, { status });
+  }
+
   // ========================================
   // MÉTODOS DE ASISTENTES
   // ========================================
@@ -318,6 +330,38 @@ export class ApiService {
 
   async getAssistantStats(id: string): Promise<ApiResponse<any>> {
     return this.get(`/api/assistants/${id}/stats`);
+  }
+
+  async searchAssistants(query: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<PaginatedResponse<Assistant>>> {
+    return this.get('/api/assistants/search', { q: query, ...params });
+  }
+
+  // ========================================
+  // MÉTODOS DE MENSAJES
+  // ========================================
+
+  async getMessages(filters?: MessageFilters): Promise<ApiResponse<PaginatedResponse<Message>>> {
+    return this.get('/api/messages', filters);
+  }
+
+  async getMessage(id: string): Promise<ApiResponse<Message>> {
+    return this.get(`/api/messages/${id}`);
+  }
+
+  async createMessage(data: any): Promise<ApiResponse<Message>> {
+    return this.post('/api/messages', data);
+  }
+
+  async updateMessage(id: string, data: any): Promise<ApiResponse<Message>> {
+    return this.put(`/api/messages/${id}`, data);
+  }
+
+  async deleteMessage(id: string): Promise<ApiResponse> {
+    return this.delete(`/api/messages/${id}`);
+  }
+
+  async getMessagesByConversation(conversationId: string, filters?: MessageFilters): Promise<ApiResponse<PaginatedResponse<Message>>> {
+    return this.get(`/api/messages/conversation/${conversationId}`, filters);
   }
 
   // ========================================

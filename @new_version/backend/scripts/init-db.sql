@@ -740,9 +740,9 @@ CREATE UNIQUE INDEX idx_assistant_metrics_assistant_id ON assistant_metrics(assi
 
 -- Crear tenant de demostración
 INSERT INTO tenants (slug, name, domain, plan_type, status, settings, limits) VALUES (
-    'demo-tenant',
-    'Demo Organization',
-    'demo.flame.com',
+    'flame',
+    'FLAME Assistant',
+    'flame.com',
     'pro',
     'active',
     '{"timezone": "America/Mexico_City", "language": "es"}',
@@ -751,7 +751,7 @@ INSERT INTO tenants (slug, name, domain, plan_type, status, settings, limits) VA
 
 -- Crear usuario administrador de demostración
 INSERT INTO users (tenant_id, email, password_hash, name, role, is_active) VALUES (
-    (SELECT id FROM tenants WHERE slug = 'demo-tenant'),
+    (SELECT id FROM tenants WHERE slug = 'flame'),
     'admin@demo.flame.com',
     '$2a$10$I0OxCUtctlX2g1KR5kHjF.JXA3ub/BMiq7QVtoyaMV42NOTVai5ZC', -- flame123
     'Administrator Demo',
@@ -761,7 +761,7 @@ INSERT INTO users (tenant_id, email, password_hash, name, role, is_active) VALUE
 
 -- Crear integración de WhatsApp de demostración
 INSERT INTO integrations (tenant_id, type, name, status, config) VALUES (
-    (SELECT id FROM tenants WHERE slug = 'demo-tenant'),
+    (SELECT id FROM tenants WHERE slug = 'flame'),
     'whatsapp',
     'WhatsApp Principal',
     'active',
@@ -770,7 +770,7 @@ INSERT INTO integrations (tenant_id, type, name, status, config) VALUES (
 
 -- Crear asistente de demostración
 INSERT INTO assistants (tenant_id, name, description, prompt, is_active, model, max_tokens, temperature) VALUES (
-    (SELECT id FROM tenants WHERE slug = 'demo-tenant'),
+    (SELECT id FROM tenants WHERE slug = 'flame'),
     'Asistente General',
     'Asistente de WhatsApp para responder consultas generales',
     'Eres un asistente virtual de WhatsApp. Responde de manera amable y profesional a las consultas de los usuarios. Si no sabes algo, admítelo y ofrece ayuda alternativa.',
@@ -782,37 +782,37 @@ INSERT INTO assistants (tenant_id, name, description, prompt, is_active, model, 
 
 -- Crear etiquetas de demostración
 INSERT INTO tags (tenant_id, name, description, color, category, is_active) VALUES 
-    ((SELECT id FROM tenants WHERE slug = 'demo-tenant'), 'Ventas', 'Etiqueta para conversaciones de ventas', '#10B981', 'business', TRUE),
-    ((SELECT id FROM tenants WHERE slug = 'demo-tenant'), 'Soporte', 'Etiqueta para consultas de soporte técnico', '#F59E0B', 'support', TRUE),
-    ((SELECT id FROM tenants WHERE slug = 'demo-tenant'), 'Urgente', 'Etiqueta para asuntos urgentes', '#EF4444', 'priority', TRUE),
-    ((SELECT id FROM tenants WHERE slug = 'demo-tenant'), 'Nuevo Cliente', 'Etiqueta para nuevos clientes', '#8B5CF6', 'customer', TRUE),
-    ((SELECT id FROM tenants WHERE slug = 'demo-tenant'), 'Seguimiento', 'Etiqueta para seguimiento de casos', '#06B6D4', 'followup', TRUE)
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 'Ventas', 'Etiqueta para conversaciones de ventas', '#10B981', 'business', TRUE),
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 'Soporte', 'Etiqueta para consultas de soporte técnico', '#F59E0B', 'support', TRUE),
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 'Urgente', 'Etiqueta para asuntos urgentes', '#EF4444', 'priority', TRUE),
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 'Nuevo Cliente', 'Etiqueta para nuevos clientes', '#8B5CF6', 'customer', TRUE),
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 'Seguimiento', 'Etiqueta para seguimiento de casos', '#06B6D4', 'followup', TRUE)
 ON CONFLICT (tenant_id, name) DO NOTHING;
 
 -- Crear plantillas de demostración
 INSERT INTO response_templates (tenant_id, assistant_id, name, content, trigger_keywords, category, priority, response_delay, is_active) VALUES 
-    ((SELECT id FROM tenants WHERE slug = 'demo-tenant'), 
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 
      (SELECT id FROM assistants WHERE name = 'Asistente General'), 
      'Saludo Inicial', 
      '¡Hola! Gracias por contactarnos. ¿En qué puedo ayudarte hoy?', 
      ARRAY['hola', 'buenos días', 'buenas tardes', 'buenas noches'], 
      'greeting', 1, 2, TRUE),
     
-    ((SELECT id FROM tenants WHERE slug = 'demo-tenant'), 
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 
      (SELECT id FROM assistants WHERE name = 'Asistente General'), 
      'Consulta de Precios', 
      'Te ayudo con información sobre nuestros precios. ¿Te interesa algún producto específico?', 
      ARRAY['precio', 'costo', 'cuanto cuesta', 'valor'], 
      'information', 2, 3, TRUE),
     
-    ((SELECT id FROM tenants WHERE slug = 'demo-tenant'), 
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 
      (SELECT id FROM assistants WHERE name = 'Asistente General'), 
      'Soporte Técnico', 
      'Entiendo que tienes un problema técnico. Voy a conectarte con nuestro equipo de soporte.', 
      ARRAY['problema', 'error', 'no funciona', 'ayuda técnica'], 
      'escalation', 3, 1, TRUE),
     
-    ((SELECT id FROM tenants WHERE slug = 'demo-tenant'), 
+    ((SELECT id FROM tenants WHERE slug = 'flame'), 
      (SELECT id FROM assistants WHERE name = 'Asistente General'), 
      'Despedida', 
      '¡Gracias por contactarnos! Si tienes más preguntas, no dudes en escribirnos. ¡Que tengas un excelente día!', 

@@ -643,46 +643,67 @@ export class WhatsAppService extends EventEmitter {
 
   private async saveMessage(message: WhatsAppMessage, userId: number): Promise<void> {
     try {
-      // Generar chat_hash para el mensaje
-      const chatHash = generateDeterministicHash(`${message.chatId}_${userId}`, 44);
-      
+      // Obtener tenant_id del usuario
+      const user = await database.get(
+        `SELECT tenant_id FROM users WHERE id = $1`,
+        [userId]
+      );
+
+      if (!user) {
+        console.error('User not found for message save');
+        return;
+      }
+
       // Buscar o crear contacto
       let contact = await database.get(
-        `SELECT id, chat_hash FROM contacts WHERE user_id = $1 AND whatsapp_id = $2`,
-        [userId, message.chatId]
+        `SELECT id FROM contacts WHERE tenant_id = $1 AND whatsapp_id = $2`,
+        [user.tenant_id, message.chatId]
       );
 
       if (!contact) {
         const result = await database.run(
-          `INSERT INTO contacts (user_id, whatsapp_id, name, phone_number, is_group, chat_hash) 
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+          `INSERT INTO contacts (tenant_id, whatsapp_id, name, phone_number, is_group) 
+           VALUES ($1, $2, $3, $4, $5)`,
           [
-            userId,
+            user.tenant_id,
             message.chatId,
             message.senderName || message.chatId.split('@')[0],
             message.chatId.includes('@s.whatsapp.net') ? message.chatId.split('@')[0] : null,
-            message.chatId.includes('@g.us'),
-            chatHash
+            message.chatId.includes('@g.us')
           ]
         );
-        contact = { id: result.id, chat_hash: chatHash };
+        contact = { id: result.id };
       }
 
-      // Guardar mensaje con chat_hash
+      // Buscar o crear conversación
+      let conversation = await database.get(
+        `SELECT id FROM conversations WHERE tenant_id = $1 AND contact_id = $2`,
+        [user.tenant_id, contact.id]
+      );
+
+      if (!conversation) {
+        const result = await database.run(
+          `INSERT INTO conversations (tenant_id, contact_id, status, created_at) 
+           VALUES ($1, $2, 'active', CURRENT_TIMESTAMP)`,
+          [user.tenant_id, contact.id]
+        );
+        conversation = { id: result.id };
+      }
+
+      // Guardar mensaje
       await database.run(
         `INSERT INTO messages 
-         (user_id, whatsapp_message_id, chat_id, content, message_type, 
-          is_from_me, timestamp, chat_hash) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+         (tenant_id, conversation_id, whatsapp_message_id, content, message_type, 
+          is_from_me, timestamp, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
         [
-          userId,
+          user.tenant_id,
+          conversation.id,
           message.id,
-          message.chatId,
           message.content,
           message.messageType,
           message.isFromMe,
-          new Date(message.timestamp * 1000).toISOString(),
-          contact.chat_hash || chatHash
+          new Date(message.timestamp * 1000).toISOString()
         ]
       );
     } catch (error) {
@@ -692,29 +713,35 @@ export class WhatsAppService extends EventEmitter {
 
   private async saveContact(contact: WhatsAppContact, userId: number): Promise<void> {
     try {
-      // Generar chat_hash determinístico para el contacto
-      const chatHash = generateDeterministicHash(`${contact.id}_${userId}`, 44);
+      // Obtener tenant_id del usuario
+      const user = await database.get(
+        `SELECT tenant_id FROM users WHERE id = $1`,
+        [userId]
+      );
+
+      if (!user) {
+        console.error('User not found for contact save');
+        return;
+      }
       
       await database.run(
         `INSERT INTO contacts 
-         (user_id, whatsapp_id, name, phone_number, is_group, avatar_url, chat_hash, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-         ON CONFLICT (user_id, whatsapp_id) 
+         (tenant_id, whatsapp_id, name, phone_number, is_group, avatar_url, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT (tenant_id, whatsapp_id) 
          DO UPDATE SET 
            name = EXCLUDED.name,
            phone_number = EXCLUDED.phone_number,
            is_group = EXCLUDED.is_group,
            avatar_url = EXCLUDED.avatar_url,
-           chat_hash = COALESCE(contacts.chat_hash, EXCLUDED.chat_hash),
            updated_at = CURRENT_TIMESTAMP`,
         [
-          userId,
+          user.tenant_id,
           contact.id,
           contact.name,
           contact.phoneNumber,
           contact.isGroup,
-          contact.avatarUrl,
-          chatHash
+          contact.avatarUrl
         ]
       );
     } catch (error) {

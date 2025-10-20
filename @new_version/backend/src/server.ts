@@ -18,18 +18,14 @@ import { logger } from './utils/logger';
 
 // Importar rutas
 import authRoutes from './routes/auth';
-// import whatsappRoutes from './routes/whatsapp';
-import scheduledRoutes from './routes/scheduled';
-// import integrationsRoutes from './routes/integrations';
-import assistantsRoutes from './routes/assistants';
-import configRoutes from './routes/config';
-// import messagesRoutes from './routes/messages';
-import assignmentsRoutes from './routes/assignments';
-// import templatesRoutes from './routes/templates';
-// import tagsRoutes from './routes/tags';
-// import autoResponseRoutes from './routes/auto-response';
-// import mediaRoutes from './routes/media';
 import dashboardRoutes from './routes/dashboard';
+import assistantsRoutes from './routes/assistants';
+import contactsRoutes from './routes/contacts';
+import conversationsRoutes from './routes/conversations';
+import messagesRoutes from './routes/messages';
+import scheduledRoutes from './routes/scheduled';
+import configRoutes from './routes/config';
+import assignmentsRoutes from './routes/assignments';
 
 // Importar servicios
 import { whatsappService } from './services/WhatsAppService';
