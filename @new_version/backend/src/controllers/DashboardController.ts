@@ -77,6 +77,11 @@ export class DashboardController {
           active: 0,
           conversations: 0
         },
+        assignments: {
+          total: 0,
+          autoAssigned: 0,
+          manualAssigned: 0
+        },
         performance: {
           avgResponseTime: stats.avg_resolution_time || 0,
           satisfactionScore: stats.avg_satisfaction_score || 0,

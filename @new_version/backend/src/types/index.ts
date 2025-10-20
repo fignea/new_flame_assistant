@@ -473,6 +473,11 @@ export interface DashboardStatsTransformed {
     active: number;
     conversations: number;
   };
+  assignments: {
+    total: number;
+    autoAssigned: number;
+    manualAssigned: number;
+  };
   performance: {
     avgResponseTime: number;
     satisfactionScore: number;
