@@ -827,6 +827,10 @@ ON CONFLICT DO NOTHING;
 -- Actualizar estadísticas de la base de datos
 ANALYZE;
 
+-- Actualizar vistas materializadas
+REFRESH MATERIALIZED VIEW dashboard_stats;
+REFRESH MATERIALIZED VIEW assistant_metrics;
+
 -- Mensaje de finalización
 DO $$
 BEGIN

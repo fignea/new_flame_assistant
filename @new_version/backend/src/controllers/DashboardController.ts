@@ -1,10 +1,10 @@
 import { Response } from 'express';
 import { database } from '../config/database';
-import { AuthenticatedRequest, ApiResponse, DashboardStats } from '../types';
+import { AuthenticatedRequest, ApiResponse, DashboardStats, DashboardStatsTransformed } from '../types';
 
 
 export class DashboardController {
-  public async getStats(req: AuthenticatedRequest, res: Response<ApiResponse<DashboardStats>>) {
+  public async getStats(req: AuthenticatedRequest, res: Response<ApiResponse<DashboardStatsTransformed>>) {
     try {
       const tenantId = req.user?.tenant_id;
       
@@ -42,9 +42,57 @@ export class DashboardController {
         });
       }
 
+      // Transformar los datos para que coincidan con la estructura esperada por el frontend
+      const transformedStats = {
+        assistants: {
+          total: 0, // Se calculará por separado
+          active: 0,
+          inactive: 0
+        },
+        conversations: {
+          total: parseInt(stats.total_conversations) || 0,
+          today: parseInt(stats.messages_today) || 0,
+          thisWeek: 0, // Se calculará por separado
+          thisMonth: 0 // Se calculará por separado
+        },
+        messages: {
+          total: parseInt(stats.total_messages) || 0,
+          today: parseInt(stats.messages_today) || 0,
+          thisWeek: 0, // Se calculará por separado
+          thisMonth: 0 // Se calculará por separado
+        },
+        contacts: {
+          total: parseInt(stats.total_contacts) || 0,
+          newToday: 0, // Se calculará por separado
+          newThisWeek: 0, // Se calculará por separado
+          newThisMonth: 0 // Se calculará por separado
+        },
+        templates: {
+          total: 0, // Se calculará por separado
+          active: 0,
+          categories: 0
+        },
+        tags: {
+          total: 0, // Se calculará por separado
+          active: 0,
+          conversations: 0
+        },
+        performance: {
+          avgResponseTime: stats.avg_resolution_time || 0,
+          satisfactionScore: stats.avg_satisfaction_score || 0,
+          activeConversations: parseInt(stats.active_conversations) || 0
+        },
+        tenant: {
+          id: stats.tenant_id,
+          name: stats.tenant_name,
+          plan: stats.plan_type,
+          status: stats.tenant_status
+        }
+      };
+
       return res.json({
         success: true,
-        data: stats
+        data: transformedStats
       });
 
     } catch (error) {

@@ -439,6 +439,53 @@ export interface DashboardStats {
   avg_satisfaction_score?: number;
 }
 
+export interface DashboardStatsTransformed {
+  assistants: {
+    total: number;
+    active: number;
+    inactive: number;
+  };
+  conversations: {
+    total: number;
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+  messages: {
+    total: number;
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+  contacts: {
+    total: number;
+    newToday: number;
+    newThisWeek: number;
+    newThisMonth: number;
+  };
+  templates: {
+    total: number;
+    active: number;
+    categories: number;
+  };
+  tags: {
+    total: number;
+    active: number;
+    conversations: number;
+  };
+  performance: {
+    avgResponseTime: number;
+    satisfactionScore: number;
+    activeConversations: number;
+  };
+  tenant: {
+    id: string;
+    name: string;
+    plan: string;
+    status: string;
+  };
+}
+
 export interface AssistantMetrics {
   tenant_id: string;
   assistant_id: string;
