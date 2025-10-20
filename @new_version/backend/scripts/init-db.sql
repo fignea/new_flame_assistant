@@ -701,6 +701,8 @@ SELECT
     COUNT(DISTINCT CASE WHEN conv.status = 'active' THEN conv.id END) as active_conversations,
     COUNT(DISTINCT CASE WHEN conv.created_at >= CURRENT_DATE THEN conv.id END) as conversations_today,
     COUNT(DISTINCT CASE WHEN m.created_at >= CURRENT_DATE THEN m.id END) as messages_today,
+    COUNT(DISTINCT a.id) as total_assistants,
+    COUNT(DISTINCT CASE WHEN a.is_active = TRUE THEN a.id END) as active_assistants,
     AVG(CASE WHEN conv.resolution_time IS NOT NULL THEN conv.resolution_time END) as avg_resolution_time,
     AVG(conv.satisfaction_score) as avg_satisfaction_score
 FROM tenants t
@@ -708,6 +710,7 @@ LEFT JOIN users u ON t.id = u.tenant_id AND u.is_active = TRUE AND u.deleted_at 
 LEFT JOIN contacts c ON t.id = c.tenant_id
 LEFT JOIN conversations conv ON t.id = conv.tenant_id
 LEFT JOIN messages m ON conv.id = m.conversation_id
+LEFT JOIN assistants a ON t.id = a.tenant_id
 WHERE t.deleted_at IS NULL
 GROUP BY t.id, t.name, t.plan_type, t.status;
 
@@ -842,5 +845,7 @@ BEGIN
     RAISE NOTICE 'Tenant demo creado: flame';
     RAISE NOTICE 'Usuario admin: admin@demo.flame.com';
     RAISE NOTICE 'Contraseña: flame123';
+    RAISE NOTICE 'Vista materializada dashboard_stats creada';
+    RAISE NOTICE 'Incluye estadísticas de asistentes';
     RAISE NOTICE '========================================';
 END $$;
