@@ -23,6 +23,7 @@ import {
   Activity,
   CheckCircle,
   XCircle,
+  AlertCircle,
   Save,
   Loader2
 } from 'lucide-react';
