@@ -193,6 +193,8 @@ export const InboxPage: React.FC = () => {
   const [availableTags, setAvailableTags] = useState<any[]>([]);
   const [availableAssistants, setAvailableAssistants] = useState<any[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [conversationMessages, setConversationMessages] = useState<any[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   // Configurar Socket.IO para recibir mensajes en tiempo real
   const { isConnected: wsConnected, joinUserRoom, leaveUserRoom, reconnectWithNewToken } = useSocketIO({
@@ -425,6 +427,19 @@ export const InboxPage: React.FC = () => {
     loadNormalConversations();
   }, [statusFilter, platformFilter, priorityFilter, tagFilter, assistantFilter, unreadOnly, searchQuery]);
 
+  // Cargar mensajes cuando se selecciona una conversación
+  useEffect(() => {
+    if (selectedConversation) {
+      // Verificar si es una conversación normal (no WhatsApp ni web)
+      const selectedConv = allConversations.find(conv => conv.id === selectedConversation);
+      if (selectedConv && !selectedConv.isWhatsApp && !selectedConv.isWeb) {
+        loadConversationMessages(selectedConversation);
+      }
+    } else {
+      setConversationMessages([]);
+    }
+  }, [selectedConversation]);
+
   // Cargar etiquetas y asistentes disponibles
   useEffect(() => {
     const loadFiltersData = async () => {
@@ -557,6 +572,26 @@ export const InboxPage: React.FC = () => {
       console.error('Error loading normal conversations:', error);
     } finally {
       setIsLoadingConversations(false);
+    }
+  };
+
+  // Cargar mensajes de una conversación específica
+  const loadConversationMessages = async (conversationId: string) => {
+    try {
+      setIsLoadingMessages(true);
+      const response = await apiService.get(`/messages/conversation/${conversationId}`);
+      
+      if (response.success && response.data) {
+        setConversationMessages(response.data);
+      } else {
+        console.error('Error loading conversation messages:', response.message);
+        setConversationMessages([]);
+      }
+    } catch (error) {
+      console.error('Error loading conversation messages:', error);
+      setConversationMessages([]);
+    } finally {
+      setIsLoadingMessages(false);
     }
   };
 
@@ -1346,7 +1381,7 @@ export const InboxPage: React.FC = () => {
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-                {(isLoadingWhatsApp || isLoadingWeb) ? (
+                {(isLoadingWhatsApp || isLoadingWeb || isLoadingMessages) ? (
                   <div className="flex items-center justify-center h-32">
                     <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
                     <span className="ml-2 text-gray-500">Cargando mensajes...</span>
@@ -1530,25 +1565,39 @@ export const InboxPage: React.FC = () => {
                     })
                   )
                 ) : (
-                  // Mostrar mensajes normales
-                  Array.isArray(selectedConv.messages) && selectedConv.messages.map((message) => (
+                  // Mostrar mensajes de conversaciones normales
+                  isLoadingMessages ? (
+                    <div className="flex items-center justify-center h-32">
+                      <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
+                      <span className="ml-2 text-gray-500">Cargando mensajes...</span>
+                    </div>
+                  ) : conversationMessages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-32 text-center">
+                      <MessageCircle className="w-8 h-8 text-gray-400 mb-2" />
+                      <p className="text-gray-500">No hay mensajes en esta conversación</p>
+                    </div>
+                  ) : (
+                    Array.isArray(conversationMessages) && conversationMessages.map((message) => (
                     <div
                       key={message.id}
-                      className={`flex ${message.sender === 'user' ? 'justify-start' : 'justify-end'}`}
+                      className={`flex ${message.sender_type === 'contact' ? 'justify-start' : 'justify-end'}`}
                     >
                       <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
-                        message.sender === 'user'
+                        message.sender_type === 'contact'
                           ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
-                          : message.sender === 'assistant'
-                          ? 'bg-purple-500 text-white'
                           : 'bg-blue-500 text-white'
                       }`}>
+                        {message.sender_type === 'contact' && (
+                          <div className="text-xs opacity-75 mb-1">
+                            {message.contact_name || 'Contacto'}
+                          </div>
+                        )}
                         <p className="text-sm">{message.content}</p>
                         <div className="flex items-center justify-between mt-1">
                           <span className="text-xs opacity-70">
-                            {formatTimeForBubble(message.timestamp)}
+                            {formatTimeForBubble(message.created_at)}
                           </span>
-                          {message.sender !== 'user' && (
+                          {message.sender_type === 'agent' && (
                             <div className="flex items-center space-x-1">
                               {message.status === 'sent' && <Clock className="w-3 h-3" />}
                               {message.status === 'delivered' && <CheckCircle className="w-3 h-3" />}
@@ -1560,6 +1609,7 @@ export const InboxPage: React.FC = () => {
                       </div>
                     </div>
                   ))
+                  )
                 )}
               </div>
 
