@@ -429,13 +429,21 @@ export const InboxPage: React.FC = () => {
 
   // Cargar mensajes cuando se selecciona una conversación
   useEffect(() => {
+    console.log('useEffect ejecutándose - selectedConversation:', selectedConversation);
+    
     if (selectedConversation) {
-      // Verificar si es una conversación normal (no WhatsApp ni web)
+      // Verificar si es una conversación normal (no es un chat de WhatsApp real ni web)
       const selectedConv = allConversations.find(conv => conv.id === selectedConversation);
-      if (selectedConv && !selectedConv.isWhatsApp && !selectedConv.isWeb) {
+      console.log('selectedConv encontrada:', selectedConv);
+      
+      if (selectedConv && !selectedConv.whatsappChat && !selectedConv.webConversation) {
+        console.log('Cargando mensajes para conversación normal:', selectedConversation);
         loadConversationMessages(selectedConversation);
+      } else {
+        console.log('No se cargan mensajes - no es conversación normal');
       }
     } else {
+      console.log('No hay conversación seleccionada, limpiando mensajes');
       setConversationMessages([]);
     }
   }, [selectedConversation]);
@@ -579,7 +587,7 @@ export const InboxPage: React.FC = () => {
   const loadConversationMessages = async (conversationId: string) => {
     try {
       setIsLoadingMessages(true);
-      const response = await apiService.get(`/messages/conversation/${conversationId}`);
+      const response = await apiService.getMessagesByConversation(conversationId);
       
       if (response.success && response.data) {
         setConversationMessages(response.data);
