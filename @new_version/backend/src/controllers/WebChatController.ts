@@ -28,16 +28,16 @@ export class WebChatController {
           co.name as contact_name, co.email as contact_email, co.phone as contact_phone
         FROM conversations c
         LEFT JOIN contacts co ON c.contact_id = co.id
-        ${whereClause}
+        WHERE c.tenant_id = $1 AND c.platform = 'web_chat'
         ORDER BY c.last_message_at DESC
-        LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-      `, [...params, Number(limit), offset]);
+        LIMIT $2 OFFSET $3
+      `, [req.tenant?.id, Number(limit), offset]);
 
       const total = await database.get(`
         SELECT COUNT(*) as count
-        FROM conversations
-        ${whereClause}
-      `, params) as any;
+        FROM conversations c
+        WHERE c.tenant_id = $1 AND c.platform = 'web_chat'
+      `, [req.tenant?.id]) as any;
 
       return res.json({
         success: true,
