@@ -434,6 +434,7 @@ export interface DashboardStats {
   total_conversations: number;
   total_messages: number;
   active_conversations: number;
+  conversations_today: number;
   messages_today: number;
   avg_resolution_time?: number;
   avg_satisfaction_score?: number;

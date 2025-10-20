@@ -27,6 +27,7 @@ export class DashboardController {
           total_conversations,
           total_messages,
           active_conversations,
+          conversations_today,
           messages_today,
           avg_resolution_time,
           avg_satisfaction_score
@@ -51,7 +52,7 @@ export class DashboardController {
         },
         conversations: {
           total: parseInt(stats.total_conversations) || 0,
-          today: parseInt(stats.messages_today) || 0,
+          today: parseInt(stats.conversations_today) || 0,
           thisWeek: 0, // Se calculará por separado
           thisMonth: 0 // Se calculará por separado
         },

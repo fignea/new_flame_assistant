@@ -699,6 +699,7 @@ SELECT
     COUNT(DISTINCT conv.id) as total_conversations,
     COUNT(DISTINCT m.id) as total_messages,
     COUNT(DISTINCT CASE WHEN conv.status = 'active' THEN conv.id END) as active_conversations,
+    COUNT(DISTINCT CASE WHEN conv.created_at >= CURRENT_DATE THEN conv.id END) as conversations_today,
     COUNT(DISTINCT CASE WHEN m.created_at >= CURRENT_DATE THEN m.id END) as messages_today,
     AVG(CASE WHEN conv.resolution_time IS NOT NULL THEN conv.resolution_time END) as avg_resolution_time,
     AVG(conv.satisfaction_score) as avg_satisfaction_score
