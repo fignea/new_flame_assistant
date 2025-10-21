@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   MessageSquare, 
@@ -443,10 +443,26 @@ export const InboxPage: React.FC = () => {
       
       if (selectedConv && !selectedConv.whatsappChat && !selectedConv.webConversation) {
         console.log('✅ Cargando mensajes para conversación normal:', selectedConversation);
+        console.log('📋 Detalles de la conversación:', {
+          id: selectedConv.id,
+          platform: selectedConv.platform,
+          isWhatsApp: selectedConv.isWhatsApp,
+          isWeb: selectedConv.isWeb,
+          whatsappChat: selectedConv.whatsappChat,
+          webConversation: selectedConv.webConversation
+        });
         loadConversationMessages(selectedConversation);
       } else {
         console.log('❌ No se cargan mensajes - no es conversación normal');
         console.log('Razón: whatsappChat =', selectedConv?.whatsappChat, ', webConversation =', selectedConv?.webConversation);
+        console.log('📋 Detalles de la conversación:', {
+          id: selectedConv?.id,
+          platform: selectedConv?.platform,
+          isWhatsApp: selectedConv?.isWhatsApp,
+          isWeb: selectedConv?.isWeb,
+          whatsappChat: selectedConv?.whatsappChat,
+          webConversation: selectedConv?.webConversation
+        });
       }
     } else {
       console.log('No hay conversación seleccionada, limpiando mensajes');
@@ -597,7 +613,7 @@ export const InboxPage: React.FC = () => {
   };
 
   // Cargar mensajes de una conversación específica
-  const loadConversationMessages = async (conversationId: string) => {
+  const loadConversationMessages = useCallback(async (conversationId: string) => {
     console.log('🚀 loadConversationMessages llamada con ID:', conversationId);
     try {
       setIsLoadingMessages(true);
@@ -607,7 +623,22 @@ export const InboxPage: React.FC = () => {
       
       if (response.success && response.data) {
         console.log('✅ Mensajes cargados exitosamente:', response.data);
-        setConversationMessages(response.data);
+        
+        // El backend devuelve { success: true, data: [mensajes...], pagination: {...} }
+        // Necesitamos acceder a response.data que ya es el array de mensajes
+        const messagesData = response.data || [];
+        console.log('📊 Número de mensajes:', messagesData.length);
+        console.log('📋 Estructura de datos:', {
+          success: response.success,
+          dataType: Array.isArray(response.data) ? 'array' : typeof response.data,
+          dataLength: Array.isArray(response.data) ? response.data.length : 'N/A',
+          pagination: response.pagination
+        });
+        console.log('📋 Datos de mensajes a procesar:', messagesData);
+        console.log('🔄 Estableciendo conversationMessages con:', messagesData);
+        
+        setConversationMessages(messagesData);
+        console.log('✅ conversationMessages establecido');
       } else {
         console.error('❌ Error loading conversation messages:', response.message);
         setConversationMessages([]);
@@ -618,7 +649,7 @@ export const InboxPage: React.FC = () => {
     } finally {
       setIsLoadingMessages(false);
     }
-  };
+  }, []);
 
   // Cargar mensajes web
   const loadWebMessages = async (conversationId: string) => {
@@ -831,7 +862,9 @@ export const InboxPage: React.FC = () => {
     ...(Array.isArray(conversations) ? conversations.map(conv => ({
       ...conv,
       whatsappChat: null,
-      webConversation: null
+      webConversation: null,
+      isWhatsApp: false,
+      isWeb: false
     })) : []),
     ...(Array.isArray(whatsappChats) ? whatsappChats.map(chat => ({
       id: `whatsapp_${chat.id}`,
@@ -915,6 +948,33 @@ export const InboxPage: React.FC = () => {
     })) : [])
   ];
 
+  // Cargar mensajes cuando se selecciona una conversación
+  useEffect(() => {
+    console.log('=== useEffect de mensajes ejecutándose ===');
+    console.log('selectedConversation:', selectedConversation);
+    console.log('conversationId:', conversationId);
+    console.log('allConversations length:', allConversations.length);
+    console.log('conversationMessages actual:', conversationMessages.length);
+    
+    // Determinar qué conversación cargar
+    const targetConversationId = selectedConversation || conversationId;
+    
+    if (targetConversationId && allConversations.length > 0) {
+      const selectedConv = allConversations.find(conv => conv.id === targetConversationId);
+      console.log('selectedConv encontrada:', selectedConv);
+      
+      if (selectedConv && !selectedConv.whatsappChat && !selectedConv.webConversation) {
+        console.log('✅ Cargando mensajes para conversación normal:', targetConversationId);
+        loadConversationMessages(targetConversationId);
+      } else {
+        console.log('❌ No se cargan mensajes - no es conversación normal');
+        console.log('Razón: whatsappChat =', selectedConv?.whatsappChat, ', webConversation =', selectedConv?.webConversation);
+      }
+    } else if (!targetConversationId) {
+      console.log('No hay conversación seleccionada, limpiando mensajes');
+      setConversationMessages([]);
+    }
+  }, [selectedConversation, conversationId, allConversations.length, loadConversationMessages]);
 
   const filteredConversations = allConversations.filter(conversation => {
     const matchesSearch = conversation.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1626,6 +1686,7 @@ export const InboxPage: React.FC = () => {
                     <div className="flex flex-col items-center justify-center h-32 text-center">
                       <MessageCircle className="w-8 h-8 text-gray-400 mb-2" />
                       <p className="text-gray-500">No hay mensajes en esta conversación</p>
+                      <p className="text-xs text-gray-400 mt-2">conversationMessages.length: {conversationMessages.length}</p>
                     </div>
                   ) : (
                     Array.isArray(conversationMessages) && conversationMessages.map((message) => (
