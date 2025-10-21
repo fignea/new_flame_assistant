@@ -984,12 +984,20 @@ export const InboxPage: React.FC = () => {
     const matchesPlatform = platformFilter === 'all' || conversation.platform === platformFilter;
     const matchesWhatsApp = !showWhatsAppOnly || conversation.isWhatsApp;
     const matchesWeb = webChatEnabled ? (conversation.isWeb || conversation.isWhatsApp) : !conversation.isWeb;
+    
+    // Las conversaciones normales del backend siempre deben mostrarse
+    const isNormalConversation = !conversation.whatsappChat && !conversation.webConversation;
     const matchesTag = tagFilter === 'all' || conversation.tags.includes(tagFilter);
     const matchesAssistant = assistantFilter === 'all' || conversation.assignedAssistant === assistantFilter;
     const matchesUnread = !unreadOnly || conversation.unreadCount > 0;
     
     const matches = matchesSearch && matchesStatus && matchesPriority && matchesPlatform && 
-           matchesWhatsApp && matchesWeb && matchesTag && matchesAssistant && matchesUnread;
+           (matchesWhatsApp && matchesWeb) && matchesTag && matchesAssistant && matchesUnread;
+    
+    // Las conversaciones normales del backend siempre pasan el filtro de WhatsApp/Web
+    const finalMatches = isNormalConversation ? 
+      (matchesSearch && matchesStatus && matchesPriority && matchesPlatform && matchesTag && matchesAssistant && matchesUnread) :
+      matches;
     
     console.log('🔍 Filtro de conversación:', {
       contactName: conversation.contactName,
@@ -1015,7 +1023,7 @@ export const InboxPage: React.FC = () => {
       filters: { statusFilter, platformFilter, priorityFilter, tagFilter, assistantFilter, unreadOnly, searchQuery, showWhatsAppOnly, webChatEnabled }
     });
     
-    return matches;
+    return finalMatches;
   });
 
   const selectedConv = allConversations.find(c => c.id === selectedConversation);
