@@ -561,8 +561,15 @@ export const InboxPage: React.FC = () => {
       });
       
       if (response.success && response.data) {
-        // Convertir las conversaciones del backend al formato esperado por el frontend
-        const formattedConversations = response.data.map((conv: any) => ({
+        console.log('✅ Datos recibidos del backend:', response.data);
+        
+        // El backend devuelve { success: true, data: [conversaciones], pagination: {...} }
+        // Necesitamos acceder a response.data que ya es el array de conversaciones
+        const conversationsData = response.data || [];
+        console.log('📊 Número de conversaciones:', conversationsData.length);
+        console.log('📋 Datos de conversaciones a procesar:', conversationsData);
+        
+        const formattedConversations = conversationsData.map((conv: any) => ({
           id: conv.id,
           contactName: conv.contact_name || 'Sin nombre',
           contactPhone: conv.contact_phone || '',
@@ -921,8 +928,34 @@ export const InboxPage: React.FC = () => {
     const matchesAssistant = assistantFilter === 'all' || conversation.assignedAssistant === assistantFilter;
     const matchesUnread = !unreadOnly || conversation.unreadCount > 0;
     
-    return matchesSearch && matchesStatus && matchesPriority && matchesPlatform && 
+    const matches = matchesSearch && matchesStatus && matchesPriority && matchesPlatform && 
            matchesWhatsApp && matchesWeb && matchesTag && matchesAssistant && matchesUnread;
+    
+    console.log('🔍 Filtro de conversación:', {
+      contactName: conversation.contactName,
+      platform: conversation.platform,
+      status: conversation.status,
+      priority: conversation.priority,
+      isWhatsApp: conversation.isWhatsApp,
+      isWeb: conversation.isWeb,
+      tags: conversation.tags,
+      assignedAssistant: conversation.assignedAssistant,
+      unreadCount: conversation.unreadCount,
+      matches: {
+        search: matchesSearch,
+        status: matchesStatus,
+        priority: matchesPriority,
+        platform: matchesPlatform,
+        whatsapp: matchesWhatsApp,
+        web: matchesWeb,
+        tag: matchesTag,
+        assistant: matchesAssistant,
+        unread: matchesUnread
+      },
+      filters: { statusFilter, platformFilter, priorityFilter, tagFilter, assistantFilter, unreadOnly, searchQuery, showWhatsAppOnly, webChatEnabled }
+    });
+    
+    return matches;
   });
 
   const selectedConv = allConversations.find(c => c.id === selectedConversation);
