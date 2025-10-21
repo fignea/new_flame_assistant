@@ -429,18 +429,24 @@ export const InboxPage: React.FC = () => {
 
   // Cargar mensajes cuando se selecciona una conversación
   useEffect(() => {
-    console.log('useEffect ejecutándose - selectedConversation:', selectedConversation);
+    console.log('=== useEffect de mensajes ejecutándose ===');
+    console.log('selectedConversation:', selectedConversation);
+    console.log('allConversations length:', allConversations.length);
+    console.log('allConversations:', allConversations);
     
     if (selectedConversation) {
       // Verificar si es una conversación normal (no es un chat de WhatsApp real ni web)
       const selectedConv = allConversations.find(conv => conv.id === selectedConversation);
       console.log('selectedConv encontrada:', selectedConv);
+      console.log('selectedConv.whatsappChat:', selectedConv?.whatsappChat);
+      console.log('selectedConv.webConversation:', selectedConv?.webConversation);
       
       if (selectedConv && !selectedConv.whatsappChat && !selectedConv.webConversation) {
-        console.log('Cargando mensajes para conversación normal:', selectedConversation);
+        console.log('✅ Cargando mensajes para conversación normal:', selectedConversation);
         loadConversationMessages(selectedConversation);
       } else {
-        console.log('No se cargan mensajes - no es conversación normal');
+        console.log('❌ No se cargan mensajes - no es conversación normal');
+        console.log('Razón: whatsappChat =', selectedConv?.whatsappChat, ', webConversation =', selectedConv?.webConversation);
       }
     } else {
       console.log('No hay conversación seleccionada, limpiando mensajes');
@@ -585,18 +591,22 @@ export const InboxPage: React.FC = () => {
 
   // Cargar mensajes de una conversación específica
   const loadConversationMessages = async (conversationId: string) => {
+    console.log('🚀 loadConversationMessages llamada con ID:', conversationId);
     try {
       setIsLoadingMessages(true);
+      console.log('📡 Llamando a API getMessagesByConversation...');
       const response = await apiService.getMessagesByConversation(conversationId);
+      console.log('📡 Respuesta de API:', response);
       
       if (response.success && response.data) {
+        console.log('✅ Mensajes cargados exitosamente:', response.data);
         setConversationMessages(response.data);
       } else {
-        console.error('Error loading conversation messages:', response.message);
+        console.error('❌ Error loading conversation messages:', response.message);
         setConversationMessages([]);
       }
     } catch (error) {
-      console.error('Error loading conversation messages:', error);
+      console.error('❌ Error loading conversation messages:', error);
       setConversationMessages([]);
     } finally {
       setIsLoadingMessages(false);
